@@ -45,9 +45,9 @@ using namespace reshade::api;
 using namespace ShaderToggler;
 
 extern "C" __declspec(dllexport) const char *NAME = "Reshade Effect Shader Toggler";
-extern "C" __declspec(dllexport) const char *DESCRIPTION = "Add - on which allows you to define groups of shaders to render Reshade effects on with one key press.";
+extern "C" __declspec(dllexport) const char *DESCRIPTION = "Addon which allows you to define groups of shaders to render Reshade effects on with one key press.";
 
-struct __declspec(uuid("038B03AA-4C75-443B-A695-752D80797037")) CommandListDataContainer {
+struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataContainer {
     uint64_t activePixelShaderPipeline;
     uint64_t activeVertexShaderPipeline;
 	resource_view active_rtv = resource_view{ 0 };
@@ -74,6 +74,7 @@ static atomic_int g_toggleGroupIdKeyBindingEditing = -1;
 static atomic_int g_toggleGroupIdShaderEditing = -1;
 static float g_overlayOpacity = 1.0f;
 static int g_startValueFramecountCollectionPhase = FRAMECOUNT_COLLECTION_PHASE_DEFAULT;
+static std::shared_mutex s_mutex;
 
 
 /// <summary>
@@ -217,23 +218,41 @@ static void onDestroyEffectRuntime(effect_runtime* runtime)
 
 static void onInitResourceView(device* device, resource resource, resource_usage usage_type, const resource_view_desc& desc, resource_view view)
 {
-	DeviceDataContainer& data = device->get_private_data<DeviceDataContainer>();
-
-	const resource_desc texture_desc = device->get_resource_desc(resource);
-
-
-	uint32_t frame_width, frame_height;
-	data.current_runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
-
-	if (texture_desc.texture.samples > 1 ||
-		texture_desc.texture.height != frame_height ||
-		texture_desc.texture.width != frame_width ||
-		texture_desc.type != resource_type::texture_2d)
+	if (device == nullptr)
 	{
 		return;
 	}
 
-	data.allValidRenderTargets.insert(make_pair(view, resource));
+	DeviceDataContainer& data = device->get_private_data<DeviceDataContainer>();
+
+	const resource_desc texture_desc = device->get_resource_desc(resource);
+
+	if (data.current_runtime != nullptr)
+	{
+		uint32_t frame_width, frame_height;
+		data.current_runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
+		format res_format = format_to_typeless(texture_desc.texture.format);
+
+		if (texture_desc.texture.samples > 1 ||
+			texture_desc.texture.height != frame_height ||
+			texture_desc.texture.width != frame_width ||
+			texture_desc.type != resource_type::texture_2d ||
+			data.current_runtime->get_current_back_buffer().handle == resource.handle)
+		{
+			return;
+		}
+
+		// Only consider render targets with formats we can render into
+		if (res_format != format::r8g8b8a8_typeless &&
+			res_format != format::b8g8r8a8_typeless &&
+			res_format != format::r16g16b16a16_typeless &&
+			res_format != format::r32g32b32a32_typeless) {
+			return;
+		}
+
+		std::unique_lock<std::shared_mutex> lock(s_mutex);
+		data.allValidRenderTargets.insert(make_pair(view, resource));
+	}
 }
 
 
@@ -245,6 +264,7 @@ static void onDestroyResourceView(device* device, resource_view view)
 
 	DeviceDataContainer& data = device->get_private_data<DeviceDataContainer>();
 
+	std::unique_lock<std::shared_mutex> lock(s_mutex);
 	(void)std::erase_if(data.allValidRenderTargets, [&view](const auto& item) {
 		auto const& [key, value] = item;
 		return key.handle == view.handle;
@@ -254,13 +274,13 @@ static void onDestroyResourceView(device* device, resource_view view)
 
 static void onDestroyResource(device* device, resource res)
 {
-
 	if (device == nullptr) {
 		return;
 	}
 
 	DeviceDataContainer& data = device->get_private_data<DeviceDataContainer>();
 
+	std::unique_lock<std::shared_mutex> lock(s_mutex);
 	(void)std::erase_if(data.allValidRenderTargets, [&res](const auto& item) {
 		auto const& [key, value] = item;
 		return value.handle == res.handle;
@@ -365,6 +385,61 @@ static void onReshadeOverlay(reshade::api::effect_runtime *runtime)
 }
 
 
+/// <summary>
+/// This function will return true if the command list specified has one or more shader hashes which are currently marked to be hidden. Otherwise false.
+/// </summary>
+/// <param name="commandList"></param>
+/// <returns>true if the draw call has to be blocked</returns>
+bool blockDrawCallForCommandList(command_list* commandList)
+{
+	if (nullptr == commandList)
+	{
+		return false;
+	}
+
+	const CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
+	uint32_t shaderHash = g_pixelShaderManager.getShaderHash(commandListData.activePixelShaderPipeline);
+	bool blockCall = g_pixelShaderManager.isBlockedShader(shaderHash);
+	for (auto& group : g_toggleGroups)
+	{
+		blockCall |= group.isBlockedPixelShader(shaderHash);
+	}
+	shaderHash = g_vertexShaderManager.getShaderHash(commandListData.activeVertexShaderPipeline);
+	blockCall |= g_vertexShaderManager.isBlockedShader(shaderHash);
+	for (auto& group : g_toggleGroups)
+	{
+		blockCall |= group.isBlockedVertexShader(shaderHash);
+	}
+	return blockCall;
+}
+
+
+static void RenderEffects(command_list* cmd_list)
+{
+	if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
+	{
+		return;
+	}
+
+	device* device = cmd_list->get_device();
+	CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+	DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+
+	if (commandListData.rendered_effects || deviceData.current_runtime == nullptr || commandListData.active_rtv == 0) {
+		return;
+	}
+
+	resource res = device->get_resource_from_view(commandListData.active_rtv);
+	resource_usage oldUsage = device->get_resource_desc(res).usage;
+
+	commandListData.rendered_effects = true;
+
+	cmd_list->barrier(res, oldUsage, resource_usage::render_target);
+	deviceData.current_runtime->render_effects(cmd_list, commandListData.active_rtv);
+	cmd_list->barrier(res, resource_usage::render_target, oldUsage);
+}
+
+
 static void onBindPipeline(command_list* commandList, pipeline_stage stages, pipeline pipelineHandle)
 {
 	if(nullptr!=commandList && pipelineHandle.handle!=0)
@@ -425,36 +500,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
 }
 
 
-/// <summary>
-/// This function will return true if the command list specified has one or more shader hashes which are currently marked to be hidden. Otherwise false.
-/// </summary>
-/// <param name="commandList"></param>
-/// <returns>true if the draw call has to be blocked</returns>
-bool blockDrawCallForCommandList(command_list* commandList)
-{
-	if(nullptr==commandList)
-	{
-		return false;
-	}
-
-	const CommandListDataContainer &commandListData = commandList->get_private_data<CommandListDataContainer>();
-	uint32_t shaderHash = g_pixelShaderManager.getShaderHash(commandListData.activePixelShaderPipeline);
-	bool blockCall = g_pixelShaderManager.isBlockedShader(shaderHash);
-	for(auto& group : g_toggleGroups)
-	{
-		blockCall |= group.isBlockedPixelShader(shaderHash);
-	}
-	shaderHash = g_vertexShaderManager.getShaderHash(commandListData.activeVertexShaderPipeline);
-	blockCall |= g_vertexShaderManager.isBlockedShader(shaderHash);
-	for(auto& group : g_toggleGroups)
-	{
-		blockCall |= group.isBlockedVertexShader(shaderHash);
-	}
-	return blockCall;
-}
-
-
-static void RenderEffects(command_list* cmd_list)
+static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t count, const resource_view* rtvs, resource_view dsv)
 {
 	if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
 	{
@@ -465,32 +511,12 @@ static void RenderEffects(command_list* cmd_list)
 	CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
 	DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-	if (commandListData.rendered_effects || deviceData.current_runtime == nullptr || commandListData.active_rtv == 0) {
-		return;
-	}
-
-	if (deviceData.allValidRenderTargets.find(commandListData.active_rtv) == deviceData.allValidRenderTargets.end())
-		return;
-
-	commandListData.rendered_effects = true;
-	deviceData.current_runtime->render_effects(cmd_list, commandListData.active_rtv);
-}
-
-
-static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t count, const resource_view* rtvs, resource_view dsv)
-{
-	device* device = cmd_list->get_device();
-	CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
-	DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
-
 	if (!commandListData.rendered_effects && blockDrawCallForCommandList(cmd_list)) {
 		RenderEffects(cmd_list);
 	}
 
-	if (count == 1) {
-		commandListData.active_rtv = rtvs[0];
-	}
-	else {
+	{
+		std::unique_lock<std::shared_mutex> lock(s_mutex);
 		for (int i = 0; i < count; i++)
 		{
 			if (deviceData.allValidRenderTargets.find(rtvs[i]) != deviceData.allValidRenderTargets.end()) {
