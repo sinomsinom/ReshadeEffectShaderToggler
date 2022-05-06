@@ -52,9 +52,6 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     uint64_t activeVertexShaderPipeline;
 	resource_view active_rtv = resource_view{ 0 };
 	atomic_bool rendered_effects = false;
-	int32_t offset_current_render_pass_count = 0;
-	int32_t offset_target_render_pass_count = 0;
-	bool offset_render_pass_count_started = false;
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
@@ -67,7 +64,6 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
 
 #define FRAMECOUNT_COLLECTION_PHASE_DEFAULT 250;
 #define HASH_FILE_NAME	"ReshadeEffectShaderToggler.ini"
-#define MAX_RENDER_OFFSET 100
 
 static ShaderToggler::ShaderManager g_pixelShaderManager;
 static ShaderToggler::ShaderManager g_vertexShaderManager;
@@ -195,9 +191,6 @@ static void onResetCommandList(command_list *commandList)
 	commandListData.activeVertexShaderPipeline = -1;
 	commandListData.rendered_effects = false;
 	commandListData.active_rtv = { 0 };
-	commandListData.offset_current_render_pass_count = 0;
-	commandListData.offset_target_render_pass_count = 0;
-	commandListData.offset_render_pass_count_started = false;
 }
 
 
@@ -206,9 +199,6 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, c
 	CommandListDataContainer& commandListData = queue->get_private_data<CommandListDataContainer>();
 	commandListData.active_rtv = { 0 };
 	commandListData.rendered_effects = false;
-	commandListData.offset_current_render_pass_count = 0;
-	commandListData.offset_target_render_pass_count = 0;
-	commandListData.offset_render_pass_count_started = false;
 }
 
 
@@ -241,11 +231,8 @@ static void onInitResourceView(device* device, resource resource, resource_usage
 	{
 		uint32_t frame_width, frame_height;
 		data.current_runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
-		format res_format = format_to_typeless(texture_desc.texture.format);
 
-		if (texture_desc.texture.height != frame_height ||
-			texture_desc.texture.width != frame_width
-			)
+		if (texture_desc.texture.height != frame_height || texture_desc.texture.width != frame_width)
 		{
 			return;
 		}
@@ -348,7 +335,6 @@ static void onReshadeOverlay(reshade::api::effect_runtime *runtime)
 			if(group.getId()==g_toggleGroupIdShaderEditing)
 			{
 				editingGroupName = group.getName();
-				current_target_offset = group.getRenderPassOffset();
 				break;
 			}
 		}
@@ -384,10 +370,6 @@ static void onReshadeOverlay(reshade::api::effect_runtime *runtime)
 					displayIsPartOfToggleGroup();
 				}
 			}
-			if (g_vertexShaderManager.isInHuntingMode() || g_pixelShaderManager.isInHuntingMode())
-			{
-				ImGui::Text("Render pass offset: %d", current_target_offset);
-			}
 		}
 		ImGui::End();
 	}
@@ -417,23 +399,6 @@ bool checkDrawCallForCommandList(command_list* commandList)
 	for (auto& group : g_toggleGroups)
 	{
 		blockCall |= group.isBlockedPixelShader(psShaderHash) || group.isBlockedVertexShader(vsShaderHash);
-
-		if (group.isBlockedPixelShader(psShaderHash) || group.isBlockedVertexShader(vsShaderHash)) {
-			if (group.getRenderPassOffset() < minOffset && !commandListData.offset_render_pass_count_started) {
-				minOffset = group.getRenderPassOffset();
-			}
-		}
-
-		if ((g_pixelShaderManager.isInHuntingMode() || g_vertexShaderManager.isInHuntingMode()) &&
-			group.getId() == g_toggleGroupIdShaderEditing) {
-			minOffset = group.getRenderPassOffset();
-			break;
-		}
-	}
-
-	if (!commandListData.offset_render_pass_count_started && blockCall) {
-		commandListData.offset_target_render_pass_count = minOffset;
-		commandListData.offset_render_pass_count_started = true;
 	}
 
 	return blockCall;
@@ -451,9 +416,7 @@ static void RenderEffects(command_list* cmd_list)
 	CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
 	DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-	if (commandListData.rendered_effects || deviceData.current_runtime == nullptr || commandListData.active_rtv == 0 ||
-		commandListData.offset_current_render_pass_count < commandListData.offset_target_render_pass_count ||
-		!commandListData.offset_render_pass_count_started) {
+	if (commandListData.rendered_effects || deviceData.current_runtime == nullptr || commandListData.active_rtv == 0) {
 		return;
 	}
 
@@ -524,6 +487,11 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
 				}
 				break;
 		}
+
+		if(checkDrawCallForCommandList(commandList))
+		{
+			RenderEffects(commandList);
+		}
 	}
 }
 
@@ -539,8 +507,6 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 	CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
 	DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-	(void)checkDrawCallForCommandList(cmd_list);
-
 	resource_view new_view = { 0 };
 
 	{
@@ -554,10 +520,8 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 		}
 	}
 	
-	if(new_view != commandListData.active_rtv && commandListData.offset_render_pass_count_started)
+	if(new_view != commandListData.active_rtv)
 	{
-		RenderEffects(cmd_list);
-		commandListData.offset_current_render_pass_count++;
 		commandListData.active_rtv = new_view;
 	}
 }
@@ -573,8 +537,6 @@ static void onReshadePresent(effect_runtime* runtime)
 		--g_activeCollectorFrameCounter;
 	}
 
-	ToggleGroup* activeGroup = nullptr;
-
 	for(auto& group: g_toggleGroups)
 	{
 		if(group.isToggleKeyPressed(runtime))
@@ -585,13 +547,7 @@ static void onReshadePresent(effect_runtime* runtime)
 			{
 				g_vertexShaderManager.toggleHideMarkedShaders();
 				g_pixelShaderManager.toggleHideMarkedShaders();
-				activeGroup = &group;
 			}
-		}
-
-		if (group.getId() == g_toggleGroupIdShaderEditing)
-		{
-			activeGroup = &group;
 		}
 	}
 
@@ -626,18 +582,6 @@ static void onReshadePresent(effect_runtime* runtime)
 	if(runtime->is_key_pressed(VK_NUMPAD6))
 	{
 		g_vertexShaderManager.toggleMarkOnHuntedShader();
-	}
-	if (runtime->is_key_pressed(VK_NUMPAD7))
-	{
-		if (activeGroup != nullptr && activeGroup->getRenderPassOffset() > 0) {
-			activeGroup->setRenderPassOffset(activeGroup->getRenderPassOffset() - 1);
-		}
-	}
-	if (runtime->is_key_pressed(VK_NUMPAD8))
-	{
-		if (activeGroup != nullptr && activeGroup->getRenderPassOffset() < MAX_RENDER_OFFSET) {
-			activeGroup->setRenderPassOffset(activeGroup->getRenderPassOffset() + 1);
-		}
 	}
 }
 

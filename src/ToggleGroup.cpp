@@ -36,7 +36,7 @@
 
 namespace ShaderToggler
 {
-	ToggleGroup::ToggleGroup(std::string name, int id): _id(id), _isActive(false), _isEditing(false), _renderOffset(0)
+	ToggleGroup::ToggleGroup(std::string name, int id): _id(id), _isActive(false), _isEditing(false)
 	{
 		_name = name.size() > 0 ? name : "Default";
 	}
@@ -136,7 +136,6 @@ namespace ShaderToggler
 		iniFile.SetValue("Name", _name, "", sectionRoot);
 		iniFile.SetUInt("ToggleKey", _keyData.getKeyForIniFile(), "", sectionRoot);
 		iniFile.SetBool("Active", _isActive, "", sectionRoot);
-		iniFile.SetInt("RenderPassOffset", _renderOffset, "", sectionRoot);
 	}
 
 
@@ -207,16 +206,6 @@ namespace ShaderToggler
 		}
 
 		_isActive = iniFile.GetBool("Active", sectionRoot);
-
-		const int32_t renderOffset = iniFile.GetInt("RenderPassOffset", sectionRoot);
-		if (renderOffset == INT_MIN)
-		{
-			_renderOffset = 0;
-		}
-		else
-		{
-			_renderOffset = renderOffset;
-		}
 	}
 
 }
