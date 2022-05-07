@@ -30,6 +30,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /////////////////////////////////////////////////////////////////////////
 
+#include <sstream>
 #include "stdafx.h"
 #include "ToggleGroup.h"
 #include "KeyData.h"
@@ -39,6 +40,12 @@ namespace ShaderToggler
 	ToggleGroup::ToggleGroup(std::string name, int id): _id(id), _isActive(false), _isEditing(false)
 	{
 		_name = name.size() > 0 ? name : "Default";
+	}
+
+
+	ToggleGroup::ToggleGroup(): _name(""), _id(0), _isActive(false), _isEditing(false)
+	{
+
 	}
 
 
@@ -136,6 +143,14 @@ namespace ShaderToggler
 		iniFile.SetValue("Name", _name, "", sectionRoot);
 		iniFile.SetUInt("ToggleKey", _keyData.getKeyForIniFile(), "", sectionRoot);
 		iniFile.SetBool("Active", _isActive, "", sectionRoot);
+
+		std::stringstream ss("");
+		for (int i = 0; i < _preferredTechniques.size(); i++) {
+			ss << _preferredTechniques[i];
+			if (i < _preferredTechniques.size() - 1)
+				ss << ",";
+		}
+		iniFile.SetValue("Techniques", ss.str(), "", sectionRoot);
 	}
 
 
@@ -206,6 +221,18 @@ namespace ShaderToggler
 		}
 
 		_isActive = iniFile.GetBool("Active", sectionRoot);
+
+		std::string techniques = iniFile.GetString("Techniques", sectionRoot);
+		if (techniques.size() > 0) {
+			std::stringstream ss(techniques);
+
+			while (ss.good())
+			{
+				string substr;
+				getline(ss, substr, ',');
+				_preferredTechniques.push_back(substr);
+			}
+		}
 	}
 
 }

@@ -40,6 +40,7 @@
 #include "CDataFile.h"
 #include "ToggleGroup.h"
 #include <vector>
+#include <unordered_map>
 
 using namespace reshade::api;
 using namespace ShaderToggler;
@@ -52,6 +53,8 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     uint64_t activeVertexShaderPipeline;
 	resource_view active_rtv = resource_view{ 0 };
 	atomic_bool rendered_effects = false;
+	std::unordered_set<uintptr_t> techniquesToRender;
+	std::unordered_set<uintptr_t> allRenderedTechniques;
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
@@ -60,21 +63,28 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
 			return lhs.handle < rhs.handle;
 		}) > allValidRenderTargets;
 	effect_runtime* current_runtime = nullptr;
+	std::unordered_map<std::string, uintptr_t> allEnabledTechniques;
 };
 
 #define FRAMECOUNT_COLLECTION_PHASE_DEFAULT 250;
 #define HASH_FILE_NAME	"ReshadeEffectShaderToggler.ini"
+#define CHAR_BUFFER_SIZE 256
+#define MAX_EFFECT_HANDLES 128
 
 static ShaderToggler::ShaderManager g_pixelShaderManager;
 static ShaderToggler::ShaderManager g_vertexShaderManager;
 static KeyData g_keyCollector;
 static atomic_uint32_t g_activeCollectorFrameCounter = 0;
-static std::vector<ToggleGroup> g_toggleGroups;
+static std::unordered_map<int, ToggleGroup> g_toggleGroups;
 static atomic_int g_toggleGroupIdKeyBindingEditing = -1;
 static atomic_int g_toggleGroupIdShaderEditing = -1;
 static float g_overlayOpacity = 1.0f;
 static int g_startValueFramecountCollectionPhase = FRAMECOUNT_COLLECTION_PHASE_DEFAULT;
 static std::shared_mutex s_mutex;
+char* g_charBuffer;
+size_t* g_charBufferSize;
+uintptr_t* render_effect_whitelist_handles;
+size_t* render_effect_whitelist_handles_len;
 
 
 /// <summary>
@@ -101,7 +111,7 @@ void addDefaultGroup()
 {
 	ToggleGroup toAdd("Default", ToggleGroup::getNewGroupId());
 	toAdd.setToggleKey(VK_CAPITAL, false, false, false);
-	g_toggleGroups.push_back(toAdd);
+	g_toggleGroups.emplace(toAdd.getId(), toAdd);
 }
 
 
@@ -130,12 +140,13 @@ void loadShaderTogglerIniFile()
 	{
 		for(int i=0;i<numberOfGroups;i++)
 		{
-			g_toggleGroups.push_back(ToggleGroup("", ToggleGroup::getNewGroupId()));
+			ToggleGroup group("", ToggleGroup::getNewGroupId());
+			g_toggleGroups.emplace(group.getId(), group);
 		}
 	}
 	for(auto& group: g_toggleGroups)
 	{
-		group.loadState(iniFile, groupCounter);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
+		group.second.loadState(iniFile, groupCounter);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
 		groupCounter++;
 	}
 }
@@ -154,7 +165,7 @@ void saveShaderTogglerIniFile()
 	int groupCounter = 0;
 	for(const auto& group: g_toggleGroups)
 	{
-		group.saveState(iniFile, groupCounter);
+		group.second.saveState(iniFile, groupCounter);
 		groupCounter++;
 	}
 	iniFile.SetFileName(HASH_FILE_NAME);
@@ -199,6 +210,22 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, c
 	CommandListDataContainer& commandListData = queue->get_private_data<CommandListDataContainer>();
 	commandListData.active_rtv = { 0 };
 	commandListData.rendered_effects = false;
+
+	DeviceDataContainer& deviceData = queue->get_device()->get_private_data<DeviceDataContainer>();
+	deviceData.allEnabledTechniques.clear();
+	commandListData.techniquesToRender.clear();
+	commandListData.allRenderedTechniques.clear();
+
+	deviceData.current_runtime->enumerate_techniques(nullptr, [&deviceData](effect_runtime* runtime, effect_technique technique) {
+		bool enabled = runtime->get_technique_state(technique);
+
+		if (enabled)
+		{
+			*g_charBufferSize = CHAR_BUFFER_SIZE;
+			runtime->get_technique_name(technique, g_charBuffer, g_charBufferSize);
+			deviceData.allEnabledTechniques.emplace(std::string(g_charBuffer), technique.handle);
+		}
+		});
 }
 
 
@@ -237,7 +264,6 @@ static void onInitResourceView(device* device, resource resource, resource_usage
 			return;
 		}
 
-		std::unique_lock<std::shared_mutex> lock(s_mutex);
 		data.allValidRenderTargets.insert(make_pair(view, resource));
 	}
 }
@@ -329,14 +355,12 @@ static void onReshadeOverlay(reshade::api::effect_runtime *runtime)
 			return;
 		}
 		string editingGroupName = "";
-		int32_t current_target_offset = -1;
-		for(auto& group:g_toggleGroups)
+		std::vector < std::string> techs;
+		const int idx = g_toggleGroupIdShaderEditing;
+		if (g_toggleGroups.find(idx) != g_toggleGroups.end())
 		{
-			if(group.getId()==g_toggleGroupIdShaderEditing)
-			{
-				editingGroupName = group.getName();
-				break;
-			}
+			editingGroupName = g_toggleGroups[idx].getName();
+			techs = g_toggleGroups[idx].preferredTechniques();
 		}
 		
 		ImGui::Text("# of pipelines with vertex shaders: %d. # of different vertex shaders gathered: %d.", g_vertexShaderManager.getPipelineCount(), g_vertexShaderManager.getShaderCount());
@@ -389,19 +413,53 @@ bool checkDrawCallForCommandList(command_list* commandList)
 	}
 
 	CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
+	DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
 
-	int32_t minOffset = INT_MAX;
 	uint32_t psShaderHash = g_pixelShaderManager.getShaderHash(commandListData.activePixelShaderPipeline);
 	uint32_t vsShaderHash = g_vertexShaderManager.getShaderHash(commandListData.activeVertexShaderPipeline);
 
-	bool blockCall = g_pixelShaderManager.isBlockedShader(psShaderHash) || g_vertexShaderManager.isBlockedShader(vsShaderHash);
+	vector<ToggleGroup*> tGroups;
+
+	if ((g_pixelShaderManager.isBlockedShader(psShaderHash) || g_vertexShaderManager.isBlockedShader(vsShaderHash)) &&
+		(g_pixelShaderManager.isInHuntingMode() || g_vertexShaderManager.isInHuntingMode()))
+	{
+		tGroups.push_back(&g_toggleGroups[g_toggleGroupIdShaderEditing]);
+	}
 
 	for (auto& group : g_toggleGroups)
 	{
-		blockCall |= group.isBlockedPixelShader(psShaderHash) || group.isBlockedVertexShader(vsShaderHash);
+		if (group.second.isBlockedPixelShader(psShaderHash) || group.second.isBlockedVertexShader(vsShaderHash))
+		{
+			tGroups.push_back(&group.second);
+		}
 	}
 
-	return blockCall;
+	for (auto& tGroup : tGroups)
+	{
+		if (tGroup->preferredTechniques().size() > 0) {
+			for (auto& techName : tGroup->preferredTechniques())
+			{
+				if (deviceData.allEnabledTechniques.contains(techName))
+				{
+					commandListData.techniquesToRender.insert(deviceData.allEnabledTechniques[techName]);
+				}
+			}
+		}
+		else
+		{
+			for (const auto& tech : deviceData.allEnabledTechniques)
+			{
+				commandListData.techniquesToRender.insert(tech.second);
+			}
+		}
+
+		if (commandListData.techniquesToRender.size() == commandListData.allRenderedTechniques.size())
+		{
+			break;
+		}
+	}
+
+	return commandListData.techniquesToRender.size() > 0;
 }
 
 
@@ -416,7 +474,7 @@ static void RenderEffects(command_list* cmd_list)
 	CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
 	DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-	if (commandListData.rendered_effects || deviceData.current_runtime == nullptr || commandListData.active_rtv == 0) {
+	if (deviceData.current_runtime == nullptr || commandListData.active_rtv == 0) {
 		return;
 	}
 
@@ -424,10 +482,29 @@ static void RenderEffects(command_list* cmd_list)
 	resource_usage oldUsage = device->get_resource_desc(res).usage;
 
 	commandListData.rendered_effects = true;
+	*render_effect_whitelist_handles_len = 0;
 
-	cmd_list->barrier(res, oldUsage, resource_usage::render_target);
-	deviceData.current_runtime->render_effects(cmd_list, commandListData.active_rtv);
-	cmd_list->barrier(res, resource_usage::render_target, oldUsage);
+	for (auto& tech : commandListData.techniquesToRender)
+	{
+		if (commandListData.allRenderedTechniques.find(tech) == commandListData.allRenderedTechniques.end())
+		{
+			render_effect_whitelist_handles[*render_effect_whitelist_handles_len] = tech;
+			(*render_effect_whitelist_handles_len)++;
+		}
+	}
+
+	if (*render_effect_whitelist_handles_len > 0) {
+		cmd_list->barrier(res, oldUsage, resource_usage::render_target);
+		deviceData.current_runtime->render_effects(cmd_list, commandListData.active_rtv, { 0 }, render_effect_whitelist_handles, render_effect_whitelist_handles_len);
+		cmd_list->barrier(res, resource_usage::render_target, oldUsage);
+
+		for (auto& blah : commandListData.techniquesToRender)
+		{
+			commandListData.allRenderedTechniques.insert(blah);
+		}
+
+		commandListData.techniquesToRender.clear();
+	}
 }
 
 
@@ -539,11 +616,11 @@ static void onReshadePresent(effect_runtime* runtime)
 
 	for(auto& group: g_toggleGroups)
 	{
-		if(group.isToggleKeyPressed(runtime))
+		if(group.second.isToggleKeyPressed(runtime))
 		{
-			group.toggleActive();
+			group.second.toggleActive();
 			// if the group's shaders are being edited, it should toggle the ones currently marked.
-			if(group.getId() == g_toggleGroupIdShaderEditing)
+			if(group.second.getId() == g_toggleGroupIdShaderEditing)
 			{
 				g_vertexShaderManager.toggleHideMarkedShaders();
 				g_pixelShaderManager.toggleHideMarkedShaders();
@@ -722,8 +799,10 @@ static void displaySettings(reshade::api::effect_runtime *runtime)
 		ImGui::Separator();
 
 		std::vector<ToggleGroup> toRemove;
-		for(auto& group : g_toggleGroups)
+		for(auto& groupKV : g_toggleGroups)
 		{
+			ToggleGroup& group = groupKV.second;
+
 			ImGui::PushID(group.getId());
 			ImGui::AlignTextToFramePadding();
 			if(ImGui::Button("X"))
@@ -836,7 +915,9 @@ static void displaySettings(reshade::api::effect_runtime *runtime)
 		}
 		for(const auto& group : toRemove)
 		{
-			std::erase(g_toggleGroups, group);
+			std::erase_if(g_toggleGroups, [&group](const auto& item) {
+				return item.first == group.getId();
+				});
 		}
 
 		ImGui::Separator();
@@ -851,6 +932,24 @@ static void displaySettings(reshade::api::effect_runtime *runtime)
 }
 
 
+static void init()
+{
+	render_effect_whitelist_handles = new uintptr_t[MAX_EFFECT_HANDLES];
+	render_effect_whitelist_handles_len = new size_t;
+	g_charBuffer = new char[CHAR_BUFFER_SIZE];
+	g_charBufferSize = new size_t;
+}
+
+
+static void deinit()
+{
+	delete[] render_effect_whitelist_handles;
+	delete render_effect_whitelist_handles_len;
+	delete[] g_charBuffer;
+	delete g_charBufferSize;
+}
+
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 {
 	switch (fdwReason)
@@ -860,6 +959,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		{
 			return FALSE;
 		}
+		init();
 		reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
 		reshade::register_event<reshade::addon_event::init_command_list>(onInitCommandList);
 		reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
@@ -900,6 +1000,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::unregister_event<reshade::addon_event::destroy_resource>(onDestroyResource);
 		reshade::unregister_overlay(nullptr, &displaySettings);
 		reshade::unregister_addon(hModule);
+		deinit();
 		break;
 	}
 

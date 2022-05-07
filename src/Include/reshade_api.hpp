@@ -1,10 +1,11 @@
 /*
  * Copyright (C) 2021 Patrick Mours
- * License: https://github.com/crosire/reshade#license
+ * SPDX-License-Identifier: BSD-3-Clause OR MIT
  */
 
 #pragma once
 
+#include <unordered_set>
 #include "reshade_api_device.hpp"
 
 namespace reshade::api
@@ -54,7 +55,7 @@ namespace reshade::api
 		/// <param name="cmd_list">Command list to add effect rendering commands to.</param>
 		/// <param name="rtv">Render target view to use for passes that write to the back buffer with <c>SRGBWriteEnabled</c> state set to <c>false</c>.</param>
 		/// <param name="rtv_srgb">Render target view to use for passes that write to the back buffer with <c>SRGBWriteEnabled</c> state set to <c>true</c>, or zero in which case the view from <paramref name="rtv"/> is used.</param>
-		virtual void render_effects(command_list *cmd_list, resource_view rtv, resource_view rtv_srgb = { 0 }) = 0;
+		virtual void render_effects(command_list * cmd_list, resource_view rtv, resource_view rtv_srgb, uintptr_t * white_list_effect_handles, size_t * white_list_effect_handles_len) = 0;
 
 		/// <summary>
 		/// Captures a screenshot of the current back buffer resource and returns its image data in 32 bits-per-pixel RGBA format.
