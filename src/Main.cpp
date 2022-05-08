@@ -41,6 +41,7 @@
 #include "ToggleGroup.h"
 #include <vector>
 #include <unordered_map>
+#include <set>
 
 using namespace reshade::api;
 using namespace ShaderToggler;
@@ -53,8 +54,15 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     uint64_t activeVertexShaderPipeline;
 	resource_view active_rtv = resource_view{ 0 };
 	atomic_bool rendered_effects = false;
-	std::unordered_set<uintptr_t> techniquesToRender;
-	std::unordered_set<uintptr_t> allRenderedTechniques;
+	std::set <
+		effect_technique,
+		decltype([](const effect_technique& lhs, const effect_technique& rhs) { return lhs.handle < rhs.handle; })
+	> techniquesToRender;
+	std::unordered_set <
+		effect_technique,
+		decltype([](const effect_technique& t) { return t.handle; }),
+		decltype([](const effect_technique& lhs, const effect_technique& rhs) { return lhs.handle == rhs.handle; })
+	> allRenderedTechniques;
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
@@ -63,7 +71,7 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
 			return lhs.handle < rhs.handle;
 		}) > allValidRenderTargets;
 	effect_runtime* current_runtime = nullptr;
-	std::unordered_map<std::string, uintptr_t> allEnabledTechniques;
+	std::map<std::string, effect_technique> allEnabledTechniques;
 };
 
 #define FRAMECOUNT_COLLECTION_PHASE_DEFAULT 250;
@@ -208,10 +216,11 @@ static void onResetCommandList(command_list *commandList)
 static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, const rect*, uint32_t, const rect*)
 {
 	CommandListDataContainer& commandListData = queue->get_private_data<CommandListDataContainer>();
+	DeviceDataContainer& deviceData = queue->get_device()->get_private_data<DeviceDataContainer>();
+
 	commandListData.active_rtv = { 0 };
 	commandListData.rendered_effects = false;
-
-	DeviceDataContainer& deviceData = queue->get_device()->get_private_data<DeviceDataContainer>();
+	
 	deviceData.allEnabledTechniques.clear();
 	commandListData.techniquesToRender.clear();
 	commandListData.allRenderedTechniques.clear();
@@ -482,25 +491,28 @@ static void RenderEffects(command_list* cmd_list)
 	resource_usage oldUsage = device->get_resource_desc(res).usage;
 
 	commandListData.rendered_effects = true;
-	*render_effect_whitelist_handles_len = 0;
+
+	vector<effect_technique> toRender;
 
 	for (auto& tech : commandListData.techniquesToRender)
 	{
 		if (commandListData.allRenderedTechniques.find(tech) == commandListData.allRenderedTechniques.end())
 		{
-			render_effect_whitelist_handles[*render_effect_whitelist_handles_len] = tech;
-			(*render_effect_whitelist_handles_len)++;
+			toRender.push_back(tech);
 		}
 	}
 
-	if (*render_effect_whitelist_handles_len > 0) {
+	if (toRender.size() > 0) {
 		cmd_list->barrier(res, oldUsage, resource_usage::render_target);
-		deviceData.current_runtime->render_effects(cmd_list, commandListData.active_rtv, { 0 }, render_effect_whitelist_handles, render_effect_whitelist_handles_len);
+		for (auto& tech : toRender)
+		{
+			deviceData.current_runtime->render_technique(tech, cmd_list, commandListData.active_rtv);
+		}
 		cmd_list->barrier(res, resource_usage::render_target, oldUsage);
 
-		for (auto& blah : commandListData.techniquesToRender)
+		for (auto& tech : commandListData.techniquesToRender)
 		{
-			commandListData.allRenderedTechniques.insert(blah);
+			commandListData.allRenderedTechniques.insert(tech);
 		}
 
 		commandListData.techniquesToRender.clear();
@@ -606,9 +618,6 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 
 static void onReshadePresent(effect_runtime* runtime)
 {
-	command_list* cmd_list = runtime->get_command_queue()->get_immediate_command_list();
-	CommandListDataContainer& cmdData = cmd_list->get_private_data<CommandListDataContainer>();
-
 	if(g_activeCollectorFrameCounter>0)
 	{
 		--g_activeCollectorFrameCounter;
