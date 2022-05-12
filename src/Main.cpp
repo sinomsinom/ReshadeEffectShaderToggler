@@ -308,6 +308,11 @@ bool checkDrawCallForCommandList(command_list* commandList)
 	CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
 	DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
 
+	if (deviceData.allEnabledTechniques.size() == commandListData.allRenderedTechniques.size())
+	{
+		return false;
+	}
+
 	uint32_t psShaderHash = g_pixelShaderManager.getShaderHash(commandListData.activePixelShaderPipeline);
 	uint32_t vsShaderHash = g_vertexShaderManager.getShaderHash(commandListData.activeVertexShaderPipeline);
 
@@ -344,11 +349,6 @@ bool checkDrawCallForCommandList(command_list* commandList)
 			{
 				commandListData.techniquesToRender.insert(tech.second);
 			}
-		}
-
-		if (commandListData.techniquesToRender.size() == commandListData.allRenderedTechniques.size())
-		{
-			break;
 		}
 	}
 
@@ -390,7 +390,17 @@ static void RenderEffects(command_list* cmd_list)
 		// dummy render call to prevent reshade from rendering effects on top if we're rendering too
 		if (!commandListData.rendered_effects)
 		{
-			deviceData.current_runtime->render_effects(cmd_list, { 0 });
+			for (auto& tech : deviceData.allEnabledTechniques)
+			{
+				deviceData.current_runtime->set_technique_state(tech.second, false);
+			}
+
+			deviceData.current_runtime->render_effects(cmd_list, commandListData.active_rtv);
+
+			for (auto& tech : deviceData.allEnabledTechniques)
+			{
+				deviceData.current_runtime->set_technique_state(tech.second, true);
+			}
 
 			commandListData.rendered_effects = true;
 		}
