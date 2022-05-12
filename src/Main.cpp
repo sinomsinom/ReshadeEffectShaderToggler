@@ -84,10 +84,8 @@ static ShaderToggler::ShaderManager g_vertexShaderManager;
 static atomic_uint32_t g_activeCollectorFrameCounter = 0;
 static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, &g_activeCollectorFrameCounter);
 static std::shared_mutex s_mutex;
-char* g_charBuffer;
-size_t* g_charBufferSize;
-uintptr_t* render_effect_whitelist_handles;
-size_t* render_effect_whitelist_handles_len;
+static char g_charBuffer[CHAR_BUFFER_SIZE];
+static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
 
 
 /// <summary>
@@ -147,21 +145,50 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, c
 
 	commandListData.active_rtv = { 0 };
 	commandListData.rendered_effects = false;
-	
-	deviceData.allEnabledTechniques.clear();
 	commandListData.techniquesToRender.clear();
 	commandListData.allRenderedTechniques.clear();
+}
 
-	deviceData.current_runtime->enumerate_techniques(nullptr, [&deviceData](effect_runtime* runtime, effect_technique technique) {
+
+static void onReshadeReloadedEffects(effect_runtime* runtime)
+{
+	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
+	data.allEnabledTechniques.clear();
+	data.current_runtime->enumerate_techniques(nullptr, [&data](effect_runtime* runtime, effect_technique technique) {
 		bool enabled = runtime->get_technique_state(technique);
-
+	
 		if (enabled)
 		{
-			*g_charBufferSize = CHAR_BUFFER_SIZE;
-			runtime->get_technique_name(technique, g_charBuffer, g_charBufferSize);
-			deviceData.allEnabledTechniques.emplace(std::string(g_charBuffer), technique.handle);
+			g_charBufferSize = CHAR_BUFFER_SIZE;
+			runtime->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
+			data.allEnabledTechniques.emplace(std::string(g_charBuffer), technique.handle);
 		}
 		});
+}
+
+
+static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique technique, bool enabled)
+{
+	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
+	if (!enabled)
+	{
+		(void)std::erase_if(data.allEnabledTechniques, [&data, &technique](const auto& tech) {
+			auto const& [key, value] = tech;
+			return value.handle == technique.handle;
+			});
+	}
+	else
+	{
+		g_charBufferSize = CHAR_BUFFER_SIZE;
+		runtime->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
+		string techName(g_charBuffer);
+		if (data.allEnabledTechniques.find(techName) == data.allEnabledTechniques.end())
+		{
+			data.allEnabledTechniques.emplace(techName, technique);
+		}
+	}
+
+	return false;
 }
 
 
@@ -347,8 +374,6 @@ static void RenderEffects(command_list* cmd_list)
 	resource res = device->get_resource_from_view(commandListData.active_rtv);
 	resource_usage oldUsage = device->get_resource_desc(res).usage;
 
-	commandListData.rendered_effects = true;
-
 	vector<effect_technique> toRender;
 
 	for (auto& tech : commandListData.techniquesToRender)
@@ -361,10 +386,20 @@ static void RenderEffects(command_list* cmd_list)
 
 	if (toRender.size() > 0) {
 		cmd_list->barrier(res, oldUsage, resource_usage::render_target);
+
+		// dummy render call to prevent reshade from rendering effects on top if we're rendering too
+		if (!commandListData.rendered_effects)
+		{
+			deviceData.current_runtime->render_effects(cmd_list, { 0 });
+
+			commandListData.rendered_effects = true;
+		}
+
 		for (auto& tech : toRender)
 		{
 			deviceData.current_runtime->render_technique(tech, cmd_list, commandListData.active_rtv);
 		}
+
 		cmd_list->barrier(res, resource_usage::render_target, oldUsage);
 
 		for (auto& tech : commandListData.techniquesToRender)
@@ -491,24 +526,6 @@ static void displaySettings(effect_runtime* runtime)
 }
 
 
-static void init()
-{
-	render_effect_whitelist_handles = new uintptr_t[MAX_EFFECT_HANDLES];
-	render_effect_whitelist_handles_len = new size_t;
-	g_charBuffer = new char[CHAR_BUFFER_SIZE];
-	g_charBufferSize = new size_t;
-}
-
-
-static void deinit()
-{
-	delete[] render_effect_whitelist_handles;
-	delete render_effect_whitelist_handles_len;
-	delete[] g_charBuffer;
-	delete g_charBufferSize;
-}
-
-
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 {
 	switch (fdwReason)
@@ -518,7 +535,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		{
 			return FALSE;
 		}
-		init();
 		reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
 		reshade::register_event<reshade::addon_event::init_command_list>(onInitCommandList);
 		reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
@@ -526,6 +542,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
 		reshade::register_event<reshade::addon_event::reshade_overlay>(onReshadeOverlay);
 		reshade::register_event<reshade::addon_event::reshade_present>(onReshadePresent);
+		reshade::register_event<reshade::addon_event::reshade_reloaded_effects>(onReshadeReloadedEffects);
+		reshade::register_event<reshade::addon_event::reshade_set_technique_state>(onReshadeSetTechniqueState);
 		reshade::register_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
 		reshade::register_event<reshade::addon_event::init_device>(onInitDevice);
 		reshade::register_event<reshade::addon_event::destroy_device>(onDestroyDevice);
@@ -544,6 +562,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::unregister_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
 		reshade::unregister_event<reshade::addon_event::init_pipeline>(onInitPipeline);
 		reshade::unregister_event<reshade::addon_event::reshade_overlay>(onReshadeOverlay);
+		reshade::unregister_event<reshade::addon_event::reshade_reloaded_effects>(onReshadeReloadedEffects);
+		reshade::unregister_event<reshade::addon_event::reshade_set_technique_state>(onReshadeSetTechniqueState);
 		reshade::unregister_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
 		reshade::unregister_event<reshade::addon_event::init_command_list>(onInitCommandList);
 		reshade::unregister_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
@@ -559,7 +579,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::unregister_event<reshade::addon_event::destroy_resource>(onDestroyResource);
 		reshade::unregister_overlay(nullptr, &displaySettings);
 		reshade::unregister_addon(hModule);
-		deinit();
 		break;
 	}
 
