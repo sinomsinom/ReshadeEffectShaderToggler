@@ -68,10 +68,6 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
-	std::map < resource_view, resource, decltype([](const resource_view& lhs, const resource_view& rhs)
-		{
-			return lhs.handle < rhs.handle;
-		}) > allValidRenderTargets;
 	effect_runtime* current_runtime = nullptr;
 	std::map<std::string, effect_technique> allEnabledTechniques;
 };
@@ -203,64 +199,6 @@ static void onDestroyEffectRuntime(effect_runtime* runtime)
 {
 	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 	data.current_runtime = nullptr;
-}
-
-
-static void onInitResourceView(device* device, resource resource, resource_usage usage_type, const resource_view_desc& desc, resource_view view)
-{
-	if (device == nullptr)
-	{
-		return;
-	}
-
-	DeviceDataContainer& data = device->get_private_data<DeviceDataContainer>();
-
-	const resource_desc texture_desc = device->get_resource_desc(resource);
-
-	if (data.current_runtime != nullptr)
-	{
-		uint32_t frame_width, frame_height;
-		data.current_runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
-
-		if (texture_desc.texture.height != frame_height || texture_desc.texture.width != frame_width)
-		{
-			return;
-		}
-
-		data.allValidRenderTargets.insert(make_pair(view, resource));
-	}
-}
-
-
-static void onDestroyResourceView(device* device, resource_view view)
-{
-	if (device == nullptr) {
-		return;
-	}
-
-	DeviceDataContainer& data = device->get_private_data<DeviceDataContainer>();
-
-	std::unique_lock<std::shared_mutex> lock(s_mutex);
-	(void)std::erase_if(data.allValidRenderTargets, [&view](const auto& item) {
-		auto const& [key, value] = item;
-		return key.handle == view.handle;
-		});
-}
-
-
-static void onDestroyResource(device* device, resource res)
-{
-	if (device == nullptr) {
-		return;
-	}
-
-	DeviceDataContainer& data = device->get_private_data<DeviceDataContainer>();
-
-	std::unique_lock<std::shared_mutex> lock(s_mutex);
-	(void)std::erase_if(data.allValidRenderTargets, [&res](const auto& item) {
-		auto const& [key, value] = item;
-		return value.handle == res.handle;
-		});
 }
 
 
@@ -500,18 +438,24 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 
 	resource_view new_view = { 0 };
 
+	if (count == 1)
 	{
-		std::unique_lock<std::shared_mutex> lock(s_mutex);
-		for (int i = 0; i < count; i++)
+		resource rs = device->get_resource_from_view(rtvs[0]);
+		const resource_desc texture_desc = device->get_resource_desc(rs);
+
+		if (deviceData.current_runtime != nullptr)
 		{
-			if (deviceData.allValidRenderTargets.find(rtvs[i]) != deviceData.allValidRenderTargets.end()) {
-				new_view = rtvs[i];
-				break;
+			uint32_t frame_width, frame_height;
+			deviceData.current_runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
+
+			if (texture_desc.texture.height == frame_height && texture_desc.texture.width == frame_width)
+			{
+				new_view = rtvs[0];
 			}
 		}
 	}
 	
-	if(new_view != commandListData.active_rtv)
+	if (new_view != commandListData.active_rtv)
 	{
 		commandListData.active_rtv = new_view;
 	}
@@ -561,9 +505,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
 		reshade::register_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
 		reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
-		reshade::register_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
-		reshade::register_event<reshade::addon_event::init_resource_view>(onInitResourceView);
-		reshade::register_event<reshade::addon_event::destroy_resource>(onDestroyResource);
 		reshade::register_overlay(nullptr, &displaySettings);
 		g_addonUIData.LoadShaderTogglerIniFile();
 		break;
@@ -584,9 +525,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
 		reshade::unregister_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
 		reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
-		reshade::unregister_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
-		reshade::unregister_event<reshade::addon_event::init_resource_view>(onInitResourceView);
-		reshade::unregister_event<reshade::addon_event::destroy_resource>(onDestroyResource);
 		reshade::unregister_overlay(nullptr, &displaySettings);
 		reshade::unregister_addon(hModule);
 		break;
