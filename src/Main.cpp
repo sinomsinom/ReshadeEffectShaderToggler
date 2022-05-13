@@ -438,16 +438,16 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 
 	resource_view new_view = { 0 };
 
-	if (count == 1)
+	if (count == 1 && rtvs[0] != 0)
 	{
-		resource rs = device->get_resource_from_view(rtvs[0]);
-		const resource_desc texture_desc = device->get_resource_desc(rs);
-
 		if (deviceData.current_runtime != nullptr)
 		{
+			resource rs = device->get_resource_from_view(rtvs[0]);
+			const resource_desc texture_desc = device->get_resource_desc(rs);
+
 			uint32_t frame_width, frame_height;
 			deviceData.current_runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
-
+			
 			if (texture_desc.texture.height == frame_height && texture_desc.texture.width == frame_width)
 			{
 				new_view = rtvs[0];
