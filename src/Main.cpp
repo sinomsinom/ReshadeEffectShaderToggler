@@ -34,15 +34,16 @@
 
 #include <imgui.h>
 #include <reshade.hpp>
+#include <vector>
+#include <unordered_map>
+#include <set>
+#include <functional>
 #include "crc32_hash.hpp"
 #include "ShaderManager.h"
 #include "CDataFile.h"
 #include "ToggleGroup.h"
 #include "AddonUIData.h"
 #include "AddonUIDisplay.h"
-#include <vector>
-#include <unordered_map>
-#include <set>
 
 using namespace reshade::api;
 using namespace ShaderToggler;
@@ -56,20 +57,12 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     uint64_t activeVertexShaderPipeline;
 	resource_view active_rtv = resource_view{ 0 };
 	atomic_bool rendered_effects = false;
-	std::set <
-		effect_technique,
-		decltype([](const effect_technique& lhs, const effect_technique& rhs) { return lhs.handle < rhs.handle; })
-	> techniquesToRender;
-	std::unordered_set <
-		effect_technique,
-		decltype([](const effect_technique& t) { return t.handle; }),
-		decltype([](const effect_technique& lhs, const effect_technique& rhs) { return lhs.handle == rhs.handle; })
-	> allRenderedTechniques;
+	unordered_set<string> techniquesToRender;
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
 	effect_runtime* current_runtime = nullptr;
-	std::map<std::string, effect_technique> allEnabledTechniques;
+	unordered_map<string, bool> allEnabledTechniques;
 };
 
 #define CHAR_BUFFER_SIZE 256
@@ -101,6 +94,17 @@ static uint32_t calculateShaderHash(void* shaderData)
 }
 
 
+static void enumerateTechniques(effect_runtime* runtime, std::function<void(effect_runtime*, effect_technique, string&)> func)
+{
+	runtime->enumerate_techniques(nullptr, [func](effect_runtime* rt, effect_technique technique) {
+		g_charBufferSize = CHAR_BUFFER_SIZE;
+		rt->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
+		string name(g_charBuffer);
+		func(rt, technique, name);
+		});
+}
+
+
 static void onInitDevice(device* device)
 {
 	device->create_private_data<DeviceDataContainer>();
@@ -127,10 +131,16 @@ static void onDestroyCommandList(command_list *commandList)
 static void onResetCommandList(command_list *commandList)
 {
 	CommandListDataContainer &commandListData = commandList->get_private_data<CommandListDataContainer>();
+	DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
+
 	commandListData.activePixelShaderPipeline = -1;
 	commandListData.activeVertexShaderPipeline = -1;
 	commandListData.rendered_effects = false;
 	commandListData.active_rtv = { 0 };
+
+	std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [](auto& el) {
+		el.second = false;
+		});
 }
 
 
@@ -142,7 +152,10 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, c
 	commandListData.active_rtv = { 0 };
 	commandListData.rendered_effects = false;
 	commandListData.techniquesToRender.clear();
-	commandListData.allRenderedTechniques.clear();
+
+	std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [](auto& el) {
+		el.second = false;
+		});
 }
 
 
@@ -150,14 +163,13 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
 {
 	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 	data.allEnabledTechniques.clear();
-	data.current_runtime->enumerate_techniques(nullptr, [&data](effect_runtime* runtime, effect_technique technique) {
+
+	enumerateTechniques(data.current_runtime, [&data](effect_runtime* runtime, effect_technique technique, string& name) {
 		bool enabled = runtime->get_technique_state(technique);
 	
 		if (enabled)
 		{
-			g_charBufferSize = CHAR_BUFFER_SIZE;
-			runtime->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
-			data.allEnabledTechniques.emplace(std::string(g_charBuffer), technique.handle);
+			data.allEnabledTechniques.emplace(name, false);
 		}
 		});
 }
@@ -166,21 +178,22 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
 static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique technique, bool enabled)
 {
 	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
+	g_charBufferSize = CHAR_BUFFER_SIZE;
+	runtime->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
+	string techName(g_charBuffer);
+
 	if (!enabled)
 	{
-		(void)std::erase_if(data.allEnabledTechniques, [&data, &technique](const auto& tech) {
-			auto const& [key, value] = tech;
-			return value.handle == technique.handle;
-			});
+		if (data.allEnabledTechniques.contains(techName))
+		{
+			data.allEnabledTechniques.erase(techName);
+		}
 	}
 	else
 	{
-		g_charBufferSize = CHAR_BUFFER_SIZE;
-		runtime->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
-		string techName(g_charBuffer);
 		if (data.allEnabledTechniques.find(techName) == data.allEnabledTechniques.end())
 		{
-			data.allEnabledTechniques.emplace(techName, technique);
+			data.allEnabledTechniques.emplace(techName, false);
 		}
 	}
 
@@ -246,8 +259,12 @@ bool checkDrawCallForCommandList(command_list* commandList)
 	CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
 	DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
 
-	if (deviceData.allEnabledTechniques.size() == commandListData.allRenderedTechniques.size())
-	{
+	bool all_rendered = true;
+	std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [&all_rendered](const auto& el) {
+		all_rendered &= el.second;
+		});
+
+	if (all_rendered) {
 		return false;
 	}
 
@@ -275,9 +292,9 @@ bool checkDrawCallForCommandList(command_list* commandList)
 		if (tGroup->preferredTechniques().size() > 0) {
 			for (auto& techName : tGroup->preferredTechniques())
 			{
-				if (deviceData.allEnabledTechniques.contains(techName))
+				if (deviceData.allEnabledTechniques.contains(techName) && !deviceData.allEnabledTechniques[techName])
 				{
-					commandListData.techniquesToRender.insert(deviceData.allEnabledTechniques[techName]);
+					commandListData.techniquesToRender.insert(techName);
 				}
 			}
 		}
@@ -285,7 +302,10 @@ bool checkDrawCallForCommandList(command_list* commandList)
 		{
 			for (const auto& tech : deviceData.allEnabledTechniques)
 			{
-				commandListData.techniquesToRender.insert(tech.second);
+				if (!tech.second)
+				{
+					commandListData.techniquesToRender.insert(tech.first);
+				}
 			}
 		}
 	}
@@ -312,47 +332,48 @@ static void RenderEffects(command_list* cmd_list)
 	resource res = device->get_resource_from_view(commandListData.active_rtv);
 	resource_usage oldUsage = device->get_resource_desc(res).usage;
 
-	vector<effect_technique> toRender;
-
-	for (auto& tech : commandListData.techniquesToRender)
-	{
-		if (commandListData.allRenderedTechniques.find(tech) == commandListData.allRenderedTechniques.end())
-		{
-			toRender.push_back(tech);
-		}
-	}
-
-	if (toRender.size() > 0) {
+	if (commandListData.techniquesToRender.size() > 0) {
 		cmd_list->barrier(res, oldUsage, resource_usage::render_target);
 
 		// dummy render call to prevent reshade from rendering effects on top if we're rendering too
 		if (!commandListData.rendered_effects)
 		{
-			for (auto& tech : deviceData.allEnabledTechniques)
+			vector<effect_technique> enabledTechniques;
+
+			enumerateTechniques(deviceData.current_runtime, [&deviceData, &enabledTechniques](effect_runtime* runtime, effect_technique technique, string& name) {
+				if (deviceData.allEnabledTechniques.contains(name))
+				{
+					enabledTechniques.push_back(technique);
+				}
+				});
+
+			for (auto& tech : enabledTechniques)
 			{
-				deviceData.current_runtime->set_technique_state(tech.second, false);
+				deviceData.current_runtime->set_technique_state(tech, false);
 			}
 
 			deviceData.current_runtime->render_effects(cmd_list, commandListData.active_rtv);
 
-			for (auto& tech : deviceData.allEnabledTechniques)
+			for (auto& tech : enabledTechniques)
 			{
-				deviceData.current_runtime->set_technique_state(tech.second, true);
+				deviceData.current_runtime->set_technique_state(tech, true);
 			}
 
 			commandListData.rendered_effects = true;
 		}
 
-		for (auto& tech : toRender)
-		{
-			deviceData.current_runtime->render_technique(tech, cmd_list, commandListData.active_rtv);
-		}
+		enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData](effect_runtime* runtime, effect_technique technique, string& name) {
+			if (commandListData.techniquesToRender.contains(name) && !deviceData.allEnabledTechniques[name])
+			{
+				runtime->render_technique(technique, runtime->get_command_queue()->get_immediate_command_list(), commandListData.active_rtv);
+			}
+			});
 
 		cmd_list->barrier(res, resource_usage::render_target, oldUsage);
 
 		for (auto& tech : commandListData.techniquesToRender)
 		{
-			commandListData.allRenderedTechniques.insert(tech);
+			deviceData.allEnabledTechniques[tech] = true;
 		}
 
 		commandListData.techniquesToRender.clear();
