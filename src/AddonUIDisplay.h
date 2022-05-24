@@ -41,8 +41,82 @@ static void DisplayIsPartOfToggleGroup()
 }
 
 
+static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleGroup* group)
+{
+	if (group == nullptr)
+	{
+		return;
+	}
+
+	const uint32_t columns = 2;
+	const vector<string>* techniques = instance.GetAllTechniques();
+	unordered_set<string> curTechniques = group->preferredTechniques();
+	unordered_set<string> newTechniques;
+	static char searchBuf[256] = "\0";
+
+	ImGui::SetNextWindowSize({ 500, 300 }, ImGuiCond_Once);
+	if (ImGui::Begin("Technique selection", nullptr))
+	{
+		if (ImGui::BeginChild("Technique selection##child", { 0, 0 }, true, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			if (ImGui::Button("Disable all"))
+			{
+				curTechniques.clear();
+			}
+
+			ImGui::SameLine();
+			ImGui::Text("Search: ");
+			ImGui::SameLine();
+			ImGui::InputText("", searchBuf, 256, ImGuiInputTextFlags_None);
+
+			ImGui::Separator();
+
+			if (ImGui::BeginTable("Technique selection##table", columns, ImGuiTableFlags_Resizable))
+			{
+				string prefix(searchBuf);
+
+				for (int i = 0; i < techniques->size(); i++)
+				{
+					ImGui::TableNextColumn();
+
+					bool enabled = curTechniques.find(techniques->at(i)) != curTechniques.end();
+
+					if (techniques->at(i).rfind(prefix, 0) == 0)
+					{
+						ImGui::Checkbox(techniques->at(i).c_str(), &enabled);
+					}
+
+					if (enabled)
+					{
+						newTechniques.insert(techniques->at(i));
+					}
+				}
+			}
+			ImGui::EndTable();
+		}
+		ImGui::EndChild();
+
+		group->setPreferredTechniques(newTechniques);
+	}
+
+	ImGui::End();
+}
+
+
 static void DisplayOverlay(AddonImGui::AddonUIData& instance)
 {
+	if (instance.GetToggleGroupIdEffectEditing() >= 0)
+	{
+		ToggleGroup* tGroup = nullptr;
+		const int idx = instance.GetToggleGroupIdEffectEditing();
+		if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
+		{
+			tGroup = &instance.GetToggleGroups()[idx];
+		}
+
+		DisplayTechniqueSelection(instance, tGroup);
+	}
+
 	if (instance.GetToggleGroupIdShaderEditing() >= 0)
 	{
 		ImGui::SetNextWindowBgAlpha(*instance.OverlayOpacity());
@@ -54,12 +128,10 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance)
 			return;
 		}
 		string editingGroupName = "";
-		std::vector < std::string> techs;
 		const int idx = instance.GetToggleGroupIdShaderEditing();
 		if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
 		{
 			editingGroupName = instance.GetToggleGroups()[idx].getName();
-			techs = instance.GetToggleGroups()[idx].preferredTechniques();
 		}
 
 		ImGui::Text("# of pipelines with vertex shaders: %d. # of different vertex shaders gathered: %d.", instance.GetVertexShaderManager()->getPipelineCount(), instance.GetVertexShaderManager()->getShaderCount());
@@ -258,6 +330,32 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 					instance.StartShaderEditing(group);
 				}
 			}
+
+			ImGui::SameLine();
+			if (instance.GetToggleGroupIdEffectEditing() >= 0)
+			{
+				if (instance.GetToggleGroupIdEffectEditing() == group.getId())
+				{
+					if (ImGui::Button("  Done  "))
+					{
+						instance.EndEffectEditing();
+					}
+				}
+				else
+				{
+					ImGui::BeginDisabled(true);
+					ImGui::Button("        ");
+					ImGui::EndDisabled();
+				}
+			}
+			else
+			{
+				if (ImGui::Button("Change effects"))
+				{
+					instance.StartEffectEditing(group);
+				}
+			}
+
 			ImGui::SameLine();
 			ImGui::Text(" %s (%s%s)", group.getName().c_str(), group.getToggleKeyAsString().c_str(), group.isActive() ? ", is active" : "");
 			if (group.isEditing())
@@ -284,7 +382,6 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 				ImGui::Text("Key shortcut");
 				ImGui::SameLine(ImGui::GetWindowWidth() * 0.2f);
 				string textBoxContents = (instance.GetToggleGroupIdKeyBindingEditing() == group.getId()) ? instance.GetKeyCollector().getKeyAsString() : group.getToggleKeyAsString();	// The 'press a key' is inside keycollector
-				string toggleKeyName = group.getToggleKeyAsString();
 				ImGui::InputText("##Key shortcut", (char*)textBoxContents.c_str(), textBoxContents.size(), ImGuiInputTextFlags_ReadOnly);
 				if (ImGui::IsItemClicked())
 				{

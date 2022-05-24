@@ -77,7 +77,8 @@ namespace ShaderToggler
 		bool isEditing() { return _isEditing;}
 		bool isEmpty() const { return _vertexShaderHashes.size() <=0 && _pixelShaderHashes.size() <=0;}
 		int getId() const { return _id; }
-		std::vector<std::string > preferredTechniques() const { return _preferredTechniques; }
+		std::unordered_set<std::string > preferredTechniques() const { return _preferredTechniques; }
+		void setPreferredTechniques(std::unordered_set<std::string> techniques) { _preferredTechniques = techniques; }
 		std::unordered_set<uint32_t> getPixelShaderHashes() const { return _pixelShaderHashes;}
 		std::unordered_set<uint32_t> getVertexShaderHashes() const { return _vertexShaderHashes;}
 		bool isToggleKeyPressed(const reshade::api::effect_runtime* runtime) { return _keyData.isKeyPressed(runtime);}
@@ -95,6 +96,6 @@ namespace ShaderToggler
 		std::unordered_set<uint32_t> _pixelShaderHashes;
 		bool _isActive;			// true means the group is actively toggled (so the hashes have to be hidden.
 		bool _isEditing;		// true means the group is actively edited (name, key)
-		std::vector<std::string> _preferredTechniques;
+		std::unordered_set<std::string> _preferredTechniques;
 	};
 }

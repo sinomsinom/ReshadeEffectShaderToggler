@@ -145,10 +145,17 @@ namespace ShaderToggler
 		iniFile.SetBool("Active", _isActive, "", sectionRoot);
 
 		std::stringstream ss("");
-		for (int i = 0; i < _preferredTechniques.size(); i++) {
-			ss << _preferredTechniques[i];
-			if (i < _preferredTechniques.size() - 1)
+		bool firstElement = true;
+		for (const auto& el : _preferredTechniques)
+		{
+			if (!firstElement)
+			{
 				ss << ",";
+			}
+
+			ss << el;
+
+			firstElement = false;
 		}
 		iniFile.SetValue("Techniques", ss.str(), "", sectionRoot);
 	}
@@ -230,7 +237,7 @@ namespace ShaderToggler
 			{
 				string substr;
 				getline(ss, substr, ',');
-				_preferredTechniques.push_back(substr);
+				_preferredTechniques.insert(substr);
 			}
 		}
 	}

@@ -34,8 +34,10 @@
 
 using namespace AddonImGui;
 
-AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, atomic_uint32_t* activeCollectorFrameCounter) :
-	_pixelShaderManager(pixelShaderManager), _vertexShaderManager(vertexShaderManager), _activeCollectorFrameCounter(activeCollectorFrameCounter)
+AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, atomic_uint32_t* activeCollectorFrameCounter,
+	vector<string>* techniques) :
+	_pixelShaderManager(pixelShaderManager), _vertexShaderManager(vertexShaderManager), _activeCollectorFrameCounter(activeCollectorFrameCounter),
+	_allTechniques(techniques)
 {
 	_toggleGroupIdShaderEditing = -1;
 	_toggleGroupIdKeyBindingEditing = -1;
@@ -48,8 +50,14 @@ std::unordered_map<int, ToggleGroup>& AddonUIData::GetToggleGroups()
 	return _toggleGroups;
 }
 
+const vector<string>* AddonUIData::GetAllTechniques() const
+{
+	return _allTechniques;
+}
 
-const atomic_int& AddonUIData::GetToggleGroupIdShaderEditing() const {
+
+const atomic_int& AddonUIData::GetToggleGroupIdShaderEditing() const
+{
 	return _toggleGroupIdShaderEditing;
 }
 
@@ -201,4 +209,23 @@ void AddonUIData::StartShaderEditing(ToggleGroup& groupEditing)
 
 	// after copying them to the managers, we can now clear the group's shader.
 	groupEditing.clearHashes();
+}
+
+
+/// <summary>
+/// Mark the given shader group for editing of it's effect whitelist
+/// </summary>
+/// <param name="groupEditing"></param>
+void AddonUIData::StartEffectEditing(ToggleGroup& groupEditing)
+{
+	_toggleGroupIdEffectEditing = groupEditing.getId();
+}
+
+/// <summary>
+/// End editing of the current shader group's effect whitelist
+/// </summary>
+/// <param name="groupEditing"></param>
+void AddonUIData::EndEffectEditing()
+{
+	_toggleGroupIdEffectEditing = -1;
 }

@@ -71,7 +71,8 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
 static ShaderToggler::ShaderManager g_pixelShaderManager;
 static ShaderToggler::ShaderManager g_vertexShaderManager;
 static atomic_uint32_t g_activeCollectorFrameCounter = 0;
-static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, &g_activeCollectorFrameCounter);
+static vector<string> allTechniques;
+static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, &g_activeCollectorFrameCounter, &allTechniques);
 static std::shared_mutex s_mutex;
 static char g_charBuffer[CHAR_BUFFER_SIZE];
 static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
@@ -163,8 +164,10 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
 {
 	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 	data.allEnabledTechniques.clear();
+	allTechniques.clear();
 
 	enumerateTechniques(data.current_runtime, [&data](effect_runtime* runtime, effect_technique technique, string& name) {
+		allTechniques.push_back(name);
 		bool enabled = runtime->get_technique_state(technique);
 	
 		if (enabled)

@@ -51,19 +51,24 @@ namespace AddonImGui
 		ShaderManager* _pixelShaderManager;
 		ShaderManager* _vertexShaderManager;
 		atomic_uint32_t* _activeCollectorFrameCounter;
+		vector<string>* _allTechniques;
 		KeyData _keyCollector;
 		atomic_int _toggleGroupIdShaderEditing = -1;
+		atomic_int _toggleGroupIdEffectEditing = -1;
 		atomic_int _toggleGroupIdKeyBindingEditing = -1;
 		std::unordered_map<int, ToggleGroup> _toggleGroups;
 		int _startValueFramecountCollectionPhase = FRAMECOUNT_COLLECTION_PHASE_DEFAULT;
 		float _overlayOpacity = 1.0f;
 	public:
-		AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, atomic_uint32_t* activeCollectorFrameCounter);
+		AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, atomic_uint32_t* activeCollectorFrameCounter,
+			vector<string>* techniques);
 		std::unordered_map<int, ToggleGroup>& GetToggleGroups();
 		void AddDefaultGroup();
 		const atomic_int& GetToggleGroupIdShaderEditing() const;
 		void EndShaderEditing(bool acceptCollectedShaderHashes, ToggleGroup& groupEditing);
 		void StartShaderEditing(ToggleGroup& groupEditing);
+		void StartEffectEditing(ToggleGroup& groupEditing);
+		void EndEffectEditing();
 		void EndKeyBindingEditing(bool acceptCollectedBinding, ToggleGroup& groupEditing);
 		void StartKeyBindingEditing(ToggleGroup& groupEditing);
 		void StopHuntingMode();
@@ -71,7 +76,9 @@ namespace AddonImGui
 		void LoadShaderTogglerIniFile();
 		atomic_int& GetToggleGroupIdKeyBindingEditing() { return _toggleGroupIdKeyBindingEditing; }
 		atomic_int& GetToggleGroupIdShaderEditing() { return _toggleGroupIdShaderEditing; }
+		atomic_int& GetToggleGroupIdEffectEditing() { return _toggleGroupIdEffectEditing; }
 		KeyData& GetKeyCollector() { return _keyCollector; }
+		const vector<string>* GetAllTechniques() const;
 		int* StartValueFramecountCollectionPhase() { return &_startValueFramecountCollectionPhase; }
 		float* OverlayOpacity() { return &_overlayOpacity; }
 		atomic_uint32_t* ActiveCollectorFrameCounter() { return _activeCollectorFrameCounter; }
