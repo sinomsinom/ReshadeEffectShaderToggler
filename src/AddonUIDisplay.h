@@ -77,12 +77,11 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 
 				for (int i = 0; i < techniques->size(); i++)
 				{
-					ImGui::TableNextColumn();
-
 					bool enabled = curTechniques.find(techniques->at(i)) != curTechniques.end();
 
 					if (techniques->at(i).rfind(prefix, 0) == 0)
 					{
+						ImGui::TableNextColumn();
 						ImGui::Checkbox(techniques->at(i).c_str(), &enabled);
 					}
 
