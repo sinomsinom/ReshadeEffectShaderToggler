@@ -1,4 +1,4 @@
-# Reditribution Licenses
+# Redistribution Licenses
 
 ## Reshade
 
