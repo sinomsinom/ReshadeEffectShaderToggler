@@ -163,6 +163,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AddonUIData.h" />
+    <ClInclude Include="AddonUIDisplay.h" />
     <ClInclude Include="CDataFile.h" />
     <ClInclude Include="crc32_hash.hpp" />
     <ClInclude Include="KeyData.h" />
@@ -172,6 +174,7 @@
     <ClInclude Include="ToggleGroup.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AddonUIData.cpp" />
     <ClCompile Include="CDataFile.cpp" />
     <ClCompile Include="KeyData.cpp" />
     <ClCompile Include="Main.cpp" />
