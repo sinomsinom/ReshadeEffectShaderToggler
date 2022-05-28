@@ -50,7 +50,7 @@ using namespace ShaderToggler;
 using namespace AddonImGui;
 
 extern "C" __declspec(dllexport) const char *NAME = "Reshade Effect Shader Toggler";
-extern "C" __declspec(dllexport) const char *DESCRIPTION = "Addon which allows you to define groups of shaders to render Reshade effects on with one key press.";
+extern "C" __declspec(dllexport) const char *DESCRIPTION = "Addon which allows you to define groups of shaders to render Reshade effects on.";
 
 struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataContainer {
     uint64_t activePixelShaderPipeline;
