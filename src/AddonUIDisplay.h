@@ -55,7 +55,8 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 	static char searchBuf[256] = "\0";
 
 	ImGui::SetNextWindowSize({ 500, 300 }, ImGuiCond_Once);
-	if (ImGui::Begin("Technique selection", nullptr))
+	bool wndOpen = true;
+	if (ImGui::Begin("Technique selection", &wndOpen))
 	{
 		if (ImGui::BeginChild("Technique selection##child", { 0, 0 }, true, ImGuiWindowFlags_AlwaysAutoResize))
 		{
@@ -97,8 +98,12 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 
 		group->setPreferredTechniques(newTechniques);
 	}
-
 	ImGui::End();
+
+	if (!wndOpen)
+	{
+		instance.EndEffectEditing();
+	}
 }
 
 
