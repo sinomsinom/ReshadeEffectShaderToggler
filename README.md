@@ -32,6 +32,7 @@ effect shader file and double check.
 Shader group effect rendering is based on the following principles:
 * A single shader group that has no effects assigned, if active, will render all effects enabled in Reshade that have not yet been rendered by previous shader groups
 * If an effect is assigned to multiple shader groups, it will only be rendered by the first shader group encountered.
+* Only effects enabled in the global Reshade effect list will be rendered, no matter what is assigned to the shader groups.
 
 To finish editing either press the window's `x` button on the top right or press the `Done` button in the
 shader group.
