@@ -66,10 +66,7 @@ namespace ShaderToggler
 
 	void ToggleGroup::setToggleKey(KeyData newData)
 	{
-		if(newData.isValid())
-		{
-			_keyData = newData;
-		}
+		_keyData = newData;
 	}
 
 

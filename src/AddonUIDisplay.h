@@ -303,6 +303,15 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 			}
 			ImGui::SameLine();
 			ImGui::Text(" %d ", group.getId());
+
+			ImGui::SameLine();
+			bool groupActive = group.isActive();
+			ImGui::Checkbox("Active", &groupActive);
+			if (groupActive != group.isActive())
+			{
+				group.toggleActive();
+			}
+
 			ImGui::SameLine();
 			if (ImGui::Button("Edit"))
 			{
@@ -361,7 +370,15 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 			}
 
 			ImGui::SameLine();
-			ImGui::Text(" %s (%s%s)", group.getName().c_str(), group.getToggleKeyAsString().c_str(), group.isActive() ? ", is active" : "");
+			if (group.getToggleKey() > 0)
+			{
+				ImGui::Text(" %s (%s)", group.getName().c_str(), group.getToggleKeyAsString().c_str());
+			}
+			else
+			{
+				ImGui::Text(" %s", group.getName().c_str());
+			}
+
 			if (group.isEditing())
 			{
 				ImGui::Separator();
@@ -404,6 +421,13 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 					{
 						instance.EndKeyBindingEditing(false, group);
 					}
+					ImGui::SameLine();
+					ImGui::PushID("ResetBindings");
+					if (ImGui::Button("X"))
+					{
+						instance.ResetKeyBinding(group);
+					}
+					ImGui::PopID();
 				}
 				ImGui::PopItemWidth();
 
@@ -425,6 +449,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 		{
 			// switch off keybinding editing or shader editing, if in progress
 			instance.GetToggleGroupIdKeyBindingEditing() = -1;
+			instance.GetToggleGroupIdEffectEditing() = -1;
 			instance.GetKeyCollector().clear();
 			instance.GetToggleGroupIdShaderEditing() = -1;
 			instance.StopHuntingMode();

@@ -74,7 +74,7 @@ void AddonUIData::StopHuntingMode()
 void AddonUIData::AddDefaultGroup()
 {
 	ToggleGroup toAdd("Default", ToggleGroup::getNewGroupId());
-	toAdd.setToggleKey(VK_CAPITAL, false, false, false);
+	toAdd.setToggleKey(0, false, false, false);
 	_toggleGroups.emplace(toAdd.getId(), toAdd);
 }
 
@@ -144,12 +144,24 @@ void AddonUIData::SaveShaderTogglerIniFile()
 /// <param name="groupEditing"></param>
 void AddonUIData::EndKeyBindingEditing(bool acceptCollectedBinding, ToggleGroup& groupEditing)
 {
-	if (acceptCollectedBinding && _toggleGroupIdKeyBindingEditing == groupEditing.getId() && _keyCollector.isValid())
+	if (acceptCollectedBinding && _toggleGroupIdKeyBindingEditing == groupEditing.getId())
 	{
 		groupEditing.setToggleKey(_keyCollector);
 	}
 	_toggleGroupIdKeyBindingEditing = -1;
 	_keyCollector.clear();
+}
+
+/// <summary>
+/// Resets toggle key binding of the specified shader group
+/// </summary>
+/// <param name="groupEditing">Shader toggle group currently being edited</param>
+void AddonUIData::ResetKeyBinding(ToggleGroup& groupEditing)
+{
+	if (_toggleGroupIdKeyBindingEditing == groupEditing.getId())
+	{
+		_keyCollector.resetKey();
+	}
 }
 
 
@@ -168,6 +180,7 @@ void AddonUIData::StartKeyBindingEditing(ToggleGroup& groupEditing)
 		EndKeyBindingEditing(false, groupEditing);
 	}
 	_toggleGroupIdKeyBindingEditing = groupEditing.getId();
+	_keyCollector.clear();
 }
 
 

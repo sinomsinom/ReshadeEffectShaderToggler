@@ -74,6 +74,7 @@ namespace AddonImGui
 		void StopHuntingMode();
 		void SaveShaderTogglerIniFile();
 		void LoadShaderTogglerIniFile();
+		void ResetKeyBinding(ToggleGroup& groupgroupEditing);
 		atomic_int& GetToggleGroupIdKeyBindingEditing() { return _toggleGroupIdKeyBindingEditing; }
 		atomic_int& GetToggleGroupIdShaderEditing() { return _toggleGroupIdShaderEditing; }
 		atomic_int& GetToggleGroupIdEffectEditing() { return _toggleGroupIdEffectEditing; }
