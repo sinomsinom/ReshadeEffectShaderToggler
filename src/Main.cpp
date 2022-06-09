@@ -462,11 +462,11 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 
 	resource_view new_view = { 0 };
 
-	if (count == 1 && rtvs[0] != 0)
+	for (int i = 0; i < count; i++)
 	{
-		if (deviceData.current_runtime != nullptr)
+		if (deviceData.current_runtime != nullptr && rtvs[i] != 0)
 		{
-			resource rs = device->get_resource_from_view(rtvs[0]);
+			resource rs = device->get_resource_from_view(rtvs[i]);
 			const resource_desc texture_desc = device->get_resource_desc(rs);
 
 			uint32_t frame_width, frame_height;
@@ -474,7 +474,8 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 			
 			if (texture_desc.texture.height == frame_height && texture_desc.texture.width == frame_width)
 			{
-				new_view = rtvs[0];
+				new_view = rtvs[i];
+				break;
 			}
 		}
 	}
