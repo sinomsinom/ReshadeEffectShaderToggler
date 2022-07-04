@@ -37,13 +37,15 @@
 
 namespace ShaderToggler
 {
-	ToggleGroup::ToggleGroup(std::string name, int id): _id(id), _isActive(false), _isEditing(false)
+	ToggleGroup::ToggleGroup(std::string name, int id): _id(id), _isActive(false), _isEditing(false), _allowAllTechniques(false),
+		_isProvidingTextureBinding(false), _textureBindingName("")
 	{
 		_name = name.size() > 0 ? name : "Default";
 	}
 
 
-	ToggleGroup::ToggleGroup(): _name(""), _id(0), _isActive(false), _isEditing(false)
+	ToggleGroup::ToggleGroup(): _name(""), _id(0), _isActive(false), _isEditing(false), _allowAllTechniques(false),
+		_isProvidingTextureBinding(false), _textureBindingName("")
 	{
 
 	}
@@ -155,6 +157,12 @@ namespace ShaderToggler
 			firstElement = false;
 		}
 		iniFile.SetValue("Techniques", ss.str(), "", sectionRoot);
+		iniFile.SetBool("AllowAllTechniques", _allowAllTechniques, "", sectionRoot);
+
+		iniFile.SetInt("HistoryIndex", _historyIndex, "", sectionRoot);
+
+		iniFile.SetBool("ProvideTextureBinding", _isProvidingTextureBinding, "", sectionRoot);
+		iniFile.SetValue("TextureBindingName", _textureBindingName, "", sectionRoot);
 	}
 
 
@@ -237,6 +245,21 @@ namespace ShaderToggler
 				_preferredTechniques.insert(substr);
 			}
 		}
+
+		_allowAllTechniques = iniFile.GetBool("AllowAllTechniques", sectionRoot);
+
+		const int32_t historyIndex = iniFile.GetInt("HistoryIndex", sectionRoot);
+		if(historyIndex > INT_MIN)
+		{
+			_historyIndex = historyIndex;
+		}
+		else
+		{
+			_historyIndex = 0;
+		}
+
+		_isProvidingTextureBinding = iniFile.GetBool("ProvideTextureBinding", sectionRoot);
+		_textureBindingName = iniFile.GetString("TextureBindingName", sectionRoot);
 	}
 
 }

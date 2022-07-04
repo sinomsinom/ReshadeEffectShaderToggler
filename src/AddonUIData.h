@@ -53,6 +53,7 @@ namespace AddonImGui
 		atomic_uint32_t* _activeCollectorFrameCounter;
 		vector<string>* _allTechniques;
 		KeyData _keyCollector;
+		atomic_int _historyIndexSelection = 0;
 		atomic_int _toggleGroupIdShaderEditing = -1;
 		atomic_int _toggleGroupIdEffectEditing = -1;
 		atomic_int _toggleGroupIdKeyBindingEditing = -1;
@@ -78,6 +79,7 @@ namespace AddonImGui
 		atomic_int& GetToggleGroupIdKeyBindingEditing() { return _toggleGroupIdKeyBindingEditing; }
 		atomic_int& GetToggleGroupIdShaderEditing() { return _toggleGroupIdShaderEditing; }
 		atomic_int& GetToggleGroupIdEffectEditing() { return _toggleGroupIdEffectEditing; }
+		atomic_int& GetHistoryIndex() { return _historyIndexSelection; }
 		KeyData& GetKeyCollector() { return _keyCollector; }
 		const vector<string>* GetAllTechniques() const;
 		int* StartValueFramecountCollectionPhase() { return &_startValueFramecountCollectionPhase; }
@@ -85,5 +87,6 @@ namespace AddonImGui
 		atomic_uint32_t* ActiveCollectorFrameCounter() { return _activeCollectorFrameCounter; }
 		ShaderManager* GetPixelShaderManager() { return _pixelShaderManager; }
 		ShaderManager* GetVertexShaderManager() { return _vertexShaderManager; }
+		reshade::api::format cFormat;
 	};
 }

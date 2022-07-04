@@ -167,6 +167,7 @@
     <ClInclude Include="AddonUIDisplay.h" />
     <ClInclude Include="CDataFile.h" />
     <ClInclude Include="crc32_hash.hpp" />
+    <ClInclude Include="Include\ExternalVariablesPipe.h" />
     <ClInclude Include="KeyData.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="ShaderManager.h" />
@@ -176,6 +177,7 @@
   <ItemGroup>
     <ClCompile Include="AddonUIData.cpp" />
     <ClCompile Include="CDataFile.cpp" />
+    <ClCompile Include="ExternalVariablesPipe.cpp" />
     <ClCompile Include="KeyData.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="ShaderManager.cpp" />

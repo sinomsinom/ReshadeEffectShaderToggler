@@ -32,6 +32,8 @@
 
 #pragma once
 
+#define MAX_RT_HISTORY 10
+
 static void DisplayIsPartOfToggleGroup()
 {
 	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
@@ -133,9 +135,11 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance)
 		}
 		string editingGroupName = "";
 		const int idx = instance.GetToggleGroupIdShaderEditing();
+		ToggleGroup* tGroup = nullptr;
 		if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
 		{
 			editingGroupName = instance.GetToggleGroups()[idx].getName();
+			tGroup = &instance.GetToggleGroups()[idx];
 		}
 
 		ImGui::Text("# of pipelines with vertex shaders: %d. # of different vertex shaders gathered: %d.", instance.GetVertexShaderManager()->getPipelineCount(), instance.GetVertexShaderManager()->getShaderCount());
@@ -150,6 +154,11 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance)
 			if (instance.GetVertexShaderManager()->isInHuntingMode() || instance.GetPixelShaderManager()->isInHuntingMode())
 			{
 				ImGui::Text("Editing the shaders for group: %s", editingGroupName.c_str());
+				if (tGroup != nullptr)
+				{
+					ImGui::Text("Render target history index: %d", tGroup->getHistoryIndex());
+					ImGui::Text("Render target format ^%d: ", (uint32_t)instance.cFormat);
+				}
 			}
 			if (instance.GetVertexShaderManager()->isInHuntingMode())
 			{
@@ -181,8 +190,16 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
 		--(*instance.ActiveCollectorFrameCounter());
 	}
 
+	ToggleGroup* editGroup = nullptr;
+
 	for (auto& group : instance.GetToggleGroups())
 	{
+		if (group.second.getId() == instance.GetToggleGroupIdShaderEditing())
+		{
+			editGroup = &group.second;
+			break;
+		}
+
 		if (group.second.isToggleKeyPressed(runtime))
 		{
 			group.second.toggleActive();
@@ -226,6 +243,28 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
 	if (runtime->is_key_pressed(VK_NUMPAD6))
 	{
 		instance.GetVertexShaderManager()->toggleMarkOnHuntedShader();
+	}
+	if (runtime->is_key_pressed(VK_NUMPAD7))
+	{
+		if (instance.GetHistoryIndex() > -MAX_RT_HISTORY)
+		{
+			instance.GetHistoryIndex()--;
+			if(editGroup != nullptr)
+			{ 
+				editGroup->setHistoryIndex(instance.GetHistoryIndex());
+			}
+		}
+	}
+	if (runtime->is_key_pressed(VK_NUMPAD8))
+	{
+		if (instance.GetHistoryIndex() < MAX_RT_HISTORY)
+		{
+			instance.GetHistoryIndex()++;
+			if (editGroup != nullptr)
+			{
+				editGroup->setHistoryIndex(instance.GetHistoryIndex());
+			}
+		}
 	}
 }
 
@@ -366,6 +405,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 				if (ImGui::Button("Change effects"))
 				{
 					instance.StartEffectEditing(group);
+					instance.GetHistoryIndex() = group.getHistoryIndex();
 				}
 			}
 
