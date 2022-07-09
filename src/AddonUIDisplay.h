@@ -157,7 +157,7 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance)
 				if (tGroup != nullptr)
 				{
 					ImGui::Text("Render target history index: %d", tGroup->getHistoryIndex());
-					ImGui::Text("Render target format ^%d: ", (uint32_t)instance.cFormat);
+					ImGui::Text("Render target format %d: ", (uint32_t)instance.cFormat);
 				}
 			}
 			if (instance.GetVertexShaderManager()->isInHuntingMode())
