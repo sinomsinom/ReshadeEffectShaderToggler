@@ -169,7 +169,6 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, c
 
 static void onReshadeReloadedEffects(effect_runtime* runtime)
 {
-	std::unique_lock lock(device_data_mutex);
 	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 	data.allEnabledTechniques.clear();
 	allTechniques.clear();
@@ -188,7 +187,6 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
 
 static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique technique, bool enabled)
 {
-	std::unique_lock lock(device_data_mutex);
 	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 	g_charBufferSize = CHAR_BUFFER_SIZE;
 	runtime->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
@@ -408,7 +406,7 @@ bool checkDrawCallForCommandList(command_list* commandList)
 
 	for (auto& group : g_addonUIData.GetToggleGroups())
 	{
-		if (group.second.isBlockedPixelShader(psShaderHash) || group.second.isBlockedVertexShader(vsShaderHash))
+		if ((group.second.isBlockedPixelShader(psShaderHash) || group.second.isBlockedVertexShader(vsShaderHash)) && group.second.isActive())
 		{
 			tGroups.push_back(&group.second);
 		}
@@ -763,7 +761,7 @@ static void onReshadeBeginEffects(effect_runtime* runtime, command_list* cmd_lis
 	DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
 	enumerateTechniques(deviceData.current_runtime, [&deviceData](effect_runtime* runtime, effect_technique technique, string& name) {
-		if (deviceData.allEnabledTechniques.contains(name))
+		if (deviceData.allEnabledTechniques.contains(name) && deviceData.techniquesToRender.size() > 0)
 		{
 			deviceData.current_runtime->set_technique_state(technique, false);
 		}
@@ -776,7 +774,7 @@ static void onReshadeFinishEffects(effect_runtime* runtime, command_list* cmd_li
 	DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
 	enumerateTechniques(deviceData.current_runtime, [&deviceData](effect_runtime* runtime, effect_technique technique, string& name) {
-		if (deviceData.allEnabledTechniques.contains(name))
+		if (deviceData.allEnabledTechniques.contains(name) && deviceData.techniquesToRender.size() > 0)
 		{
 			deviceData.current_runtime->set_technique_state(technique, true);
 		}
