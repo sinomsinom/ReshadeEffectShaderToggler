@@ -124,7 +124,7 @@ void AddonUIData::SaveShaderTogglerIniFile()
 	// format: first section with # of groups, then per group a section with pixel and vertex shaders, as well as their name and key value.
 	// groups are stored with "Group" + group counter, starting with 0.
 	CDataFile iniFile;
-	iniFile.SetInt("AmountGroups", _toggleGroups.size(), "", "General");
+	iniFile.SetInt("AmountGroups", static_cast<int>(_toggleGroups.size()), "", "General");
 
 	int groupCounter = 0;
 	for (const auto& group : _toggleGroups)

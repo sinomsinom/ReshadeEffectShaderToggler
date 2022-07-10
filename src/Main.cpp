@@ -728,7 +728,7 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 
 	resource_view new_view = { 0 };
 
-	for (int i = 0; i < count; i++)
+	for (uint32_t i = 0; i < count; i++)
 	{
 		if (deviceData.current_runtime != nullptr && rtvs[i] != 0)
 		{
@@ -763,7 +763,10 @@ static void onReshadeBeginEffects(effect_runtime* runtime, command_list* cmd_lis
 	DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
 	enumerateTechniques(deviceData.current_runtime, [&deviceData](effect_runtime* runtime, effect_technique technique, string& name) {
-		deviceData.current_runtime->set_technique_state(technique, false);
+		if (deviceData.allEnabledTechniques.contains(name))
+		{
+			deviceData.current_runtime->set_technique_state(technique, false);
+		}
 		});
 }
 
