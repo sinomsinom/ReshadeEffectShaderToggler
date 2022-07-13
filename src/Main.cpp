@@ -169,6 +169,7 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, c
 
 static void onReshadeReloadedEffects(effect_runtime* runtime)
 {
+	std::unique_lock lock(device_data_mutex);
 	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 	data.allEnabledTechniques.clear();
 	allTechniques.clear();
@@ -808,7 +809,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		{
 			return FALSE;
 		}
-		//init();
 		reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
 		reshade::register_event<reshade::addon_event::init_command_list>(onInitCommandList);
 		reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
