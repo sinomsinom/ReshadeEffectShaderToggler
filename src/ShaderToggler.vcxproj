@@ -163,9 +163,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AddonUIConstants.h" />
     <ClInclude Include="AddonUIData.h" />
     <ClInclude Include="AddonUIDisplay.h" />
     <ClInclude Include="CDataFile.h" />
+    <ClInclude Include="ConstantHandler.h" />
     <ClInclude Include="crc32_hash.hpp" />
     <ClInclude Include="Include\ExternalVariablesPipe.h" />
     <ClInclude Include="KeyData.h" />
@@ -177,6 +179,7 @@
   <ItemGroup>
     <ClCompile Include="AddonUIData.cpp" />
     <ClCompile Include="CDataFile.cpp" />
+    <ClCompile Include="ConstantHandler.cpp" />
     <ClCompile Include="ExternalVariablesPipe.cpp" />
     <ClCompile Include="KeyData.cpp" />
     <ClCompile Include="Main.cpp" />

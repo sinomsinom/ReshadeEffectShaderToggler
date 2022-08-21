@@ -36,12 +36,14 @@
 #include "ShaderManager.h"
 #include "CDataFile.h"
 #include "ToggleGroup.h"
+#include "ConstantHandler.h"
 
 #define FRAMECOUNT_COLLECTION_PHASE_DEFAULT 250;
 #define HASH_FILE_NAME	"ReshadeEffectShaderToggler.ini"
 
 using namespace reshade::api;
 using namespace ShaderToggler;
+using namespace ConstantFeedback;
 
 namespace AddonImGui
 {
@@ -50,19 +52,22 @@ namespace AddonImGui
 	private:
 		ShaderManager* _pixelShaderManager;
 		ShaderManager* _vertexShaderManager;
+		ConstantHandler* _constantHandler;
 		atomic_uint32_t* _activeCollectorFrameCounter;
 		vector<string>* _allTechniques;
+		unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* _constants;
 		KeyData _keyCollector;
 		atomic_int _historyIndexSelection = 0;
 		atomic_int _toggleGroupIdShaderEditing = -1;
 		atomic_int _toggleGroupIdEffectEditing = -1;
 		atomic_int _toggleGroupIdKeyBindingEditing = -1;
+		atomic_int _toggleGroupIdConstantEditing = -1;
 		std::unordered_map<int, ToggleGroup> _toggleGroups;
 		int _startValueFramecountCollectionPhase = FRAMECOUNT_COLLECTION_PHASE_DEFAULT;
 		float _overlayOpacity = 1.0f;
 	public:
-		AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, atomic_uint32_t* activeCollectorFrameCounter,
-			vector<string>* techniques);
+		AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandler* constants, atomic_uint32_t* activeCollectorFrameCounter,
+			vector<string>* techniques, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>*);
 		std::unordered_map<int, ToggleGroup>& GetToggleGroups();
 		void AddDefaultGroup();
 		const atomic_int& GetToggleGroupIdShaderEditing() const;
@@ -70,6 +75,8 @@ namespace AddonImGui
 		void StartShaderEditing(ToggleGroup& groupEditing);
 		void StartEffectEditing(ToggleGroup& groupEditing);
 		void EndEffectEditing();
+		void StartConstantEditing(ToggleGroup& groupEditing);
+		void EndConstantEditing();
 		void EndKeyBindingEditing(bool acceptCollectedBinding, ToggleGroup& groupEditing);
 		void StartKeyBindingEditing(ToggleGroup& groupEditing);
 		void StopHuntingMode();
@@ -79,6 +86,7 @@ namespace AddonImGui
 		atomic_int& GetToggleGroupIdKeyBindingEditing() { return _toggleGroupIdKeyBindingEditing; }
 		atomic_int& GetToggleGroupIdShaderEditing() { return _toggleGroupIdShaderEditing; }
 		atomic_int& GetToggleGroupIdEffectEditing() { return _toggleGroupIdEffectEditing; }
+		atomic_int& GetToggleGroupIdConstantEditing() { return _toggleGroupIdConstantEditing; }
 		atomic_int& GetHistoryIndex() { return _historyIndexSelection; }
 		KeyData& GetKeyCollector() { return _keyCollector; }
 		const vector<string>* GetAllTechniques() const;
@@ -87,6 +95,8 @@ namespace AddonImGui
 		atomic_uint32_t* ActiveCollectorFrameCounter() { return _activeCollectorFrameCounter; }
 		ShaderManager* GetPixelShaderManager() { return _pixelShaderManager; }
 		ShaderManager* GetVertexShaderManager() { return _vertexShaderManager; }
+		ConstantHandler* GetConstantHandler() { return _constantHandler; }
+		const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables() { return _constants; };
 		reshade::api::format cFormat;
 	};
 }

@@ -117,11 +117,28 @@ namespace ShaderToggler
 	}
 
 
+	bool ToggleGroup::SetVarMapping(uintptr_t offset, string& variable)
+	{
+		_varOffsetMapping.emplace(variable, offset);
+
+		return true; // do some sanity checking?
+	}
+
+
+	bool ToggleGroup::RemoveVarMapping(string& variable)
+	{
+		_varOffsetMapping.erase(variable);
+
+		return true; // do some sanity checking?
+	}
+
+
 	void ToggleGroup::saveState(CDataFile& iniFile, int groupCounter) const
 	{
 		const std::string sectionRoot = "Group" + std::to_string(groupCounter);
 		const std::string vertexHashesCategory = sectionRoot + "_VertexShaders";
 		const std::string pixelHashesCategory = sectionRoot + "_PixelShaders";
+		const std::string constantsCategory = sectionRoot + "_Constants";
 
 		int counter = 0;
 		for(const auto hash: _vertexShaderHashes)
@@ -138,6 +155,15 @@ namespace ShaderToggler
 			counter++;
 		}
 		iniFile.SetUInt("AmountHashes", counter, "", pixelHashesCategory);
+
+		counter = 0;
+		for (const auto var : _varOffsetMapping)
+		{
+			iniFile.SetUInt("Offset" + std::to_string(counter), var.second, "", constantsCategory);
+			iniFile.SetValue("Variable" + std::to_string(counter), var.first, "", constantsCategory);
+			counter++;
+		}
+		iniFile.SetUInt("AmountConstants", counter, "", constantsCategory);
 
 		iniFile.SetValue("Name", _name, "", sectionRoot);
 		iniFile.SetUInt("ToggleKey", _keyData.getKeyForIniFile(), "", sectionRoot);
@@ -163,6 +189,8 @@ namespace ShaderToggler
 
 		iniFile.SetBool("ProvideTextureBinding", _isProvidingTextureBinding, "", sectionRoot);
 		iniFile.SetValue("TextureBindingName", _textureBindingName, "", sectionRoot);
+
+		iniFile.SetBool("ExtractConstants", _extractConstants, "", sectionRoot);
 	}
 
 
@@ -196,6 +224,7 @@ namespace ShaderToggler
 		const std::string sectionRoot = "Group" + std::to_string(groupCounter);
 		const std::string vertexHashesCategory = sectionRoot + "_VertexShaders";
 		const std::string pixelHashesCategory = sectionRoot + "_PixelShaders";
+		const std::string constantsCategory = sectionRoot + "_Constants";
 
 		int amountShaders = iniFile.GetInt("AmountHashes", vertexHashesCategory);
 		for(int i = 0;i< amountShaders;i++)
@@ -214,6 +243,17 @@ namespace ShaderToggler
 			if(hash!=UINT_MAX)
 			{
 				_pixelShaderHashes.emplace(hash);
+			}
+		}
+
+		int amountConstants = iniFile.GetInt("AmountConstants", constantsCategory);
+		for (int i = 0; i < amountConstants; i++)
+		{
+			uint32_t offset = iniFile.GetUInt("Offset" + std::to_string(i), constantsCategory);
+			string varName = iniFile.GetString("Variable" + std::to_string(i), constantsCategory);
+			if (offset != UINT_MAX && varName.size() > 0)
+			{
+				_varOffsetMapping.emplace(varName, offset);
 			}
 		}
 
@@ -260,6 +300,8 @@ namespace ShaderToggler
 
 		_isProvidingTextureBinding = iniFile.GetBool("ProvideTextureBinding", sectionRoot);
 		_textureBindingName = iniFile.GetString("TextureBindingName", sectionRoot);
+
+		_extractConstants = iniFile.GetBool("ExtractConstants", sectionRoot);
 	}
 
 }

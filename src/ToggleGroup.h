@@ -91,6 +91,11 @@ namespace ShaderToggler
 		void setTextureBindingName(std::string textureBindingName) { _textureBindingName = textureBindingName; }
 		bool getAllowAllTechniques() const { return _allowAllTechniques; }
 		void setAllowAllTechniques(bool allowAllTechniques) { _allowAllTechniques = allowAllTechniques; }
+		bool getExtractConstants() const { return _extractConstants; }
+		void setExtractConstant(bool extract) { _extractConstants = extract; }
+		const std::unordered_map<string, uintptr_t>& GetVarOffsetMapping() const { return _varOffsetMapping; }
+		bool SetVarMapping(uintptr_t, string&);
+		bool RemoveVarMapping(string&);
 		
 		bool operator==(const ToggleGroup& rhs)
 		{
@@ -108,7 +113,9 @@ namespace ShaderToggler
 		bool _isEditing;			// true means the group is actively edited (name, key)
 		bool _allowAllTechniques;	// true means all techniques are allowed, regardless of preferred techniques.
 		bool _isProvidingTextureBinding;
+		bool _extractConstants;
 		std::string _textureBindingName;
 		std::unordered_set<std::string> _preferredTechniques;
+		std::unordered_map<string, uintptr_t> _varOffsetMapping;
 	};
 }

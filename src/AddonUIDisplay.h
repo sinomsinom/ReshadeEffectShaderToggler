@@ -32,6 +32,8 @@
 
 #pragma once
 
+#include "AddonUIConstants.h"
+
 #define MAX_RT_HISTORY 10
 
 static void DisplayIsPartOfToggleGroup()
@@ -109,8 +111,20 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 }
 
 
-static void DisplayOverlay(AddonImGui::AddonUIData& instance)
+static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
 {
+	if (instance.GetToggleGroupIdConstantEditing() >= 0)
+	{
+		ToggleGroup* tGroup = nullptr;
+		const int idx = instance.GetToggleGroupIdConstantEditing();
+		if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
+		{
+			tGroup = &instance.GetToggleGroups()[idx];
+		}
+
+		DisplayConstantViewer(instance, tGroup, runtime->get_device(), runtime->get_command_queue());
+	}
+
 	if (instance.GetToggleGroupIdEffectEditing() >= 0)
 	{
 		ToggleGroup* tGroup = nullptr;
@@ -349,6 +363,11 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 			if (groupActive != group.isActive())
 			{
 				group.toggleActive();
+
+				if (!groupActive)
+				{
+					instance.GetConstantHandler()->RemoveGroup(&group, runtime->get_device(), runtime->get_command_queue());
+				}
 			}
 
 			ImGui::SameLine();
@@ -406,6 +425,31 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 				{
 					instance.StartEffectEditing(group);
 					instance.GetHistoryIndex() = group.getHistoryIndex();
+				}
+			}
+
+			ImGui::SameLine();
+			if (instance.GetToggleGroupIdConstantEditing() >= 0)
+			{
+				if (instance.GetToggleGroupIdConstantEditing() == group.getId())
+				{
+					if (ImGui::Button("Done"))
+					{
+						instance.EndConstantEditing();
+					}
+				}
+				else
+				{
+					ImGui::BeginDisabled(true);
+					ImGui::Button("    ");
+					ImGui::EndDisabled();
+				}
+			}
+			else
+			{
+				if (ImGui::Button("Constants"))
+				{
+					instance.StartConstantEditing(group);
 				}
 			}
 
@@ -492,6 +536,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 			instance.GetToggleGroupIdEffectEditing() = -1;
 			instance.GetKeyCollector().clear();
 			instance.GetToggleGroupIdShaderEditing() = -1;
+			instance.GetToggleGroupIdConstantEditing() = -1;
 			instance.StopHuntingMode();
 		}
 		for (const auto& group : toRemove)

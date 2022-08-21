@@ -46,11 +46,12 @@
 #include "ToggleGroup.h"
 #include "AddonUIData.h"
 #include "AddonUIDisplay.h"
-#include "ExternalVariablesPipe.h"
+#include "ConstantHandler.h"
 
 using namespace reshade::api;
 using namespace ShaderToggler;
 using namespace AddonImGui;
+using namespace ConstantFeedback;
 
 extern "C" __declspec(dllexport) const char *NAME = "Reshade Effect Shader Toggler";
 extern "C" __declspec(dllexport) const char *DESCRIPTION = "Addon which allows you to define groups of shaders to render Reshade effects on.";
@@ -73,23 +74,29 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
 	unordered_map<string, bool> allEnabledTechniques;
 	unordered_map<string, int32_t> techniquesToRender;
 	unordered_map<string, int32_t> bindingsToUpdate;
+	unordered_map<string, constant_type> rest_variables;
 	unordered_map<string, tuple<resource, reshade::api::format, resource_view, resource_view>> bindingMap;
 	unordered_set<string> bindingsUpdated;
+	unordered_set<const ToggleGroup*> constantsUpdated;
 };
 
 #define CHAR_BUFFER_SIZE 256
 #define MAX_EFFECT_HANDLES 128
+#define REST_VAR_ANNOTATION "source"
 
 static ShaderToggler::ShaderManager g_pixelShaderManager;
 static ShaderToggler::ShaderManager g_vertexShaderManager;
+static ConstantHandler constantHandler;
 static atomic_uint32_t g_activeCollectorFrameCounter = 0;
 static vector<string> allTechniques;
-static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, &g_activeCollectorFrameCounter, &allTechniques);
+static unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>> g_restVariables;
+static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, &constantHandler, &g_activeCollectorFrameCounter, &allTechniques, &g_restVariables);
 static std::shared_mutex device_data_mutex;
+static std::shared_mutex resource_mutex;
 static char g_charBuffer[CHAR_BUFFER_SIZE];
 static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
 static const float clearColor[] = { 0, 0, 0, 0 };
-//static ExternalVariablesPipe variablePipe;
+static unordered_set<uintptr_t> s_resources;
 
 /// <summary>
 /// Calculates a crc32 hash from the passed in shader bytecode. The hash is used to identity the shader in future runs.
@@ -115,6 +122,92 @@ static void enumerateTechniques(effect_runtime* runtime, std::function<void(effe
 		rt->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
 		string name(g_charBuffer);
 		func(rt, technique, name);
+		});
+}
+
+
+static void enumerateRESTUniformVariables(effect_runtime* runtime, std::function<void(effect_runtime*, effect_uniform_variable, constant_type&, string&)> func)
+{
+	runtime->enumerate_uniform_variables(nullptr, [func](effect_runtime* rt, effect_uniform_variable variable) {
+		g_charBufferSize = CHAR_BUFFER_SIZE;
+		if (!rt->get_annotation_string_from_uniform_variable(variable, REST_VAR_ANNOTATION, g_charBuffer))
+		{
+			return;
+		}
+
+		string id(g_charBuffer);
+
+		reshade::api::format format;
+		uint32_t rows;
+		uint32_t columns;
+		uint32_t array_length;
+
+		rt->get_uniform_variable_type(variable, &format, &rows, &columns, &array_length);
+		constant_type type = constant_type::type_unknown;
+		switch (format)
+		{
+		case reshade::api::format::r32_float:
+			if (array_length > 0)
+				type = constant_type::type_unknown;
+			else
+			{
+				if (rows == 4 && columns == 4)
+					type = constant_type::type_float4x4;
+				else if (rows == 3 && columns == 3)
+					type = constant_type::type_float3x3;
+				else if (rows == 3 && columns == 1)
+					type = constant_type::type_float3;
+				else if (rows == 2 && columns == 1)
+					type = constant_type::type_float2;
+				else if (rows == 1 && columns == 1)
+					type = constant_type::type_float;
+				else
+					type = constant_type::type_unknown;
+			}
+			break;
+		case reshade::api::format::r32_sint:
+			if (array_length > 0 || rows > 1 || columns > 1)
+				type = constant_type::type_unknown;
+			else
+				type = constant_type::type_int;
+			break;
+		case reshade::api::format::r32_uint:
+			if (array_length > 0 || rows > 1 || columns > 1)
+				type = constant_type::type_unknown;
+			else
+				type = constant_type::type_uint;
+			break;
+		}
+
+		if (type == constant_type::type_unknown)
+		{
+			return;
+		}
+
+		func(rt, variable, type, id);
+		});
+}
+
+static void reloadConstantVariables(effect_runtime* runtime)
+{
+	g_restVariables.clear();
+
+	enumerateRESTUniformVariables(runtime, [](effect_runtime* runtime, effect_uniform_variable variable, constant_type& type, string& name) {
+		if (!g_restVariables.contains(name))
+		{
+			g_restVariables.emplace(name, make_tuple(type, vector<effect_uniform_variable>()));
+		}
+
+		if (type == std::get<0>(g_restVariables[name]))
+		{
+			std::get<1>(g_restVariables[name]).push_back(variable);
+		}
+		else
+		{
+			//stringstream msg;
+			//msg << std::format("Type mismatch on variable {}. assuming type {}", name, std::get<0>(g_restVariables[name]));
+			//reshade::log_message(ERROR, msg.str().c_str());
+		}
 		});
 }
 
@@ -152,9 +245,28 @@ static void onResetCommandList(command_list *commandList)
 }
 
 
+static void onInitResource(device* device, const resource_desc& desc, const subresource_data*, resource_usage usage, reshade::api::resource handle)
+{
+	std::unique_lock<shared_mutex> lock(resource_mutex);
+
+	if (static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
+	{
+		s_resources.emplace(handle.handle);
+	}
+}
+
+
+static void onDestroyResource(device* device, resource res)
+{
+	std::unique_lock<shared_mutex> lock(resource_mutex);
+
+	s_resources.erase(res.handle);
+}
+
+
 static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, const rect*, uint32_t, const rect*)
 {
-	std::unique_lock lock(device_data_mutex);
+	std::unique_lock<shared_mutex> lock(device_data_mutex);
 	CommandListDataContainer& commandListData = queue->get_private_data<CommandListDataContainer>();
 	DeviceDataContainer& deviceData = queue->get_device()->get_private_data<DeviceDataContainer>();
 
@@ -163,13 +275,14 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, c
 	std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [](auto& el) {
 		el.second = false;
 		});
+
 	deviceData.bindingsUpdated.clear();
 }
 
 
 static void onReshadeReloadedEffects(effect_runtime* runtime)
 {
-	std::unique_lock lock(device_data_mutex);
+	std::unique_lock<shared_mutex> lock(device_data_mutex);
 	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 	data.allEnabledTechniques.clear();
 	allTechniques.clear();
@@ -469,6 +582,46 @@ bool checkDrawCallForCommandList(command_list* commandList)
 }
 
 
+static const ToggleGroup* checkDescriptors(command_list* commandList)
+{
+	if (nullptr == commandList)
+	{
+		return nullptr;
+	}
+
+	CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
+
+	uint32_t psShaderHash = g_pixelShaderManager.getShaderHash(commandListData.activePixelShaderPipeline);
+	uint32_t vsShaderHash = g_vertexShaderManager.getShaderHash(commandListData.activeVertexShaderPipeline);
+
+	vector<const ToggleGroup*> tGroups;
+
+	if ((g_pixelShaderManager.isBlockedShader(psShaderHash) || g_vertexShaderManager.isBlockedShader(vsShaderHash)) &&
+		(g_pixelShaderManager.isInHuntingMode() || g_vertexShaderManager.isInHuntingMode()))
+	{
+		tGroups.push_back(&g_addonUIData.GetToggleGroups()[g_addonUIData.GetToggleGroupIdShaderEditing()]);
+	}
+
+	for (auto& group : g_addonUIData.GetToggleGroups())
+	{
+		if ((group.second.isBlockedPixelShader(psShaderHash) || group.second.isBlockedVertexShader(vsShaderHash)) && group.second.isActive())
+		{
+			tGroups.push_back(&group.second);
+		}
+	}
+
+	for (auto tGroup : tGroups)
+	{
+		if (tGroup->getExtractConstants())
+		{
+			return tGroup;
+		}
+	}
+
+	return nullptr;
+}
+
+
 static resource_view GetCurrentResourceView(const pair<string, int32_t>& matchObject, CommandListDataContainer& commandListData)
 {
 	resource_view active_rtv = { 0 };
@@ -573,21 +726,6 @@ static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
 }
 
 
-static void UpdateEffectVariables(effect_runtime* runtime, string& effect)
-{
-	//const auto variables = variablePipe.GetVariableValues();
-	//
-	//for (const auto& kV : variables)
-	//{
-	//	effect_uniform_variable var = runtime->find_uniform_variable(effect.c_str(), kV.first.c_str());
-	//	if (var != 0)
-	//	{
-	//		runtime->set_uniform_value_float(var, &kV.second, 1, 0);
-	//	}
-	//}
-}
-
-
 static void RenderEffects(command_list* cmd_list, bool inc = false)
 {
 	if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
@@ -624,7 +762,7 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 		return;
 	}
 
-	enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list](effect_runtime* runtime, effect_technique technique, string& name) {
+	enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device](effect_runtime* runtime, effect_technique technique, string& name) {
 		auto historic_rtv = commandListData.immediateActionSet.find(pair<string, int32_t>(name, 0));
 
 		if (historic_rtv != commandListData.immediateActionSet.end() && historic_rtv->second <= 0 && !deviceData.allEnabledTechniques[name])
@@ -642,8 +780,6 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 			g_addonUIData.cFormat = resDesc.texture.format;
 
 			deviceData.current_runtime->render_effects(cmd_list, active_rtv);
-
-			UpdateEffectVariables(runtime, name);
 			
 			runtime->render_technique(technique, cmd_list, active_rtv);
 			deviceData.allEnabledTechniques[name] = true;
@@ -700,7 +836,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
 			commandListData.activeVertexShaderPipeline = pipelineHandle.handle;
 		}
 
-		std::unique_lock lock(device_data_mutex);
+		std::unique_lock<shared_mutex> lock(device_data_mutex);
 		(void)checkDrawCallForCommandList(commandList);
 
 		UpdateTextureBindings(commandList);
@@ -716,7 +852,7 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 		return;
 	}
 
-	std::unique_lock lock(device_data_mutex);
+	std::unique_lock<std::shared_mutex> lock(device_data_mutex);
 	UpdateTextureBindings(cmd_list, true);
 	RenderEffects(cmd_list, true);
 	lock.unlock();
@@ -783,14 +919,47 @@ static void onReshadeFinishEffects(effect_runtime* runtime, command_list* cmd_li
 }
 
 
+static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
+{
+	const ToggleGroup* group = nullptr;
+	if (update.type == descriptor_type::constant_buffer && static_cast<uint32_t>(stages & shader_stage::pixel) && (group = checkDescriptors(cmd_list)) != nullptr)
+	{
+		DeviceDataContainer& deviceData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
+	
+		if (deviceData.constantsUpdated.contains(group))
+		{
+			return;
+		}
+	
+		const buffer_range* buffer = static_cast<const reshade::api::buffer_range*>(update.descriptors);
+	
+		for (uint32_t i = update.array_offset; i < update.count; ++i)
+		{
+			if (!s_resources.contains(buffer[i].buffer.handle))
+				continue;
+
+			constantHandler.SetBufferRange(group, buffer[i],
+				cmd_list->get_device(), cmd_list, deviceData.current_runtime->get_command_queue());
+	
+			constantHandler.ApplyConstantValues(deviceData.current_runtime, group, g_restVariables);
+			deviceData.constantsUpdated.insert(group);
+			break;
+		}
+	}
+}
+
+
 static void onReshadeOverlay(effect_runtime* runtime)
 {
-	DisplayOverlay(g_addonUIData);
+	DisplayOverlay(g_addonUIData, runtime);
 }
 
 
 static void onReshadePresent(effect_runtime* runtime)
 {
+	DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
+	deviceData.constantsUpdated.clear();
+	reloadConstantVariables(runtime);
 	CheckHotkeys(g_addonUIData, runtime);
 }
 
@@ -809,6 +978,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		{
 			return FALSE;
 		}
+		g_addonUIData.LoadShaderTogglerIniFile();
+		reshade::register_event<reshade::addon_event::init_resource>(onInitResource);
+		reshade::register_event<reshade::addon_event::destroy_resource>(onDestroyResource);
 		reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
 		reshade::register_event<reshade::addon_event::init_command_list>(onInitCommandList);
 		reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
@@ -827,8 +999,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
 		reshade::register_event<reshade::addon_event::reshade_begin_effects>(onReshadeBeginEffects);
 		reshade::register_event<reshade::addon_event::reshade_finish_effects>(onReshadeFinishEffects);
+		reshade::register_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
 		reshade::register_overlay(nullptr, &displaySettings);
-		g_addonUIData.LoadShaderTogglerIniFile();
 		break;
 	case DLL_PROCESS_DETACH:
 		reshade::unregister_event<reshade::addon_event::reshade_present>(onReshadePresent);
@@ -849,6 +1021,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
 		reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(onReshadeBeginEffects);
 		reshade::unregister_event<reshade::addon_event::reshade_finish_effects>(onReshadeFinishEffects);
+		reshade::unregister_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
+		reshade::unregister_event<reshade::addon_event::init_resource>(onInitResource);
+		reshade::unregister_event<reshade::addon_event::destroy_resource>(onDestroyResource);
 		reshade::unregister_overlay(nullptr, &displaySettings);
 		reshade::unregister_addon(hModule);
 		break;

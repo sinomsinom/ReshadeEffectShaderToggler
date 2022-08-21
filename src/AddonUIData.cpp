@@ -34,10 +34,10 @@
 
 using namespace AddonImGui;
 
-AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, atomic_uint32_t* activeCollectorFrameCounter,
-	vector<string>* techniques) :
+AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandler* cHandler, atomic_uint32_t* activeCollectorFrameCounter,
+	vector<string>* techniques, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* constants) :
 	_pixelShaderManager(pixelShaderManager), _vertexShaderManager(vertexShaderManager), _activeCollectorFrameCounter(activeCollectorFrameCounter),
-	_allTechniques(techniques)
+	_allTechniques(techniques), _constantHandler(cHandler), _constants(constants)
 {
 	_toggleGroupIdShaderEditing = -1;
 	_toggleGroupIdKeyBindingEditing = -1;
@@ -241,4 +241,22 @@ void AddonUIData::StartEffectEditing(ToggleGroup& groupEditing)
 void AddonUIData::EndEffectEditing()
 {
 	_toggleGroupIdEffectEditing = -1;
+}
+
+/// <summary>
+/// Mark the given shader group for editing of it's constants
+/// </summary>
+/// <param name="groupEditing"></param>
+void AddonUIData::StartConstantEditing(ToggleGroup& groupEditing)
+{
+	_toggleGroupIdConstantEditing = groupEditing.getId();
+}
+
+/// <summary>
+/// End editing of the current shader group's constants
+/// </summary>
+/// <param name="groupEditing"></param>
+void AddonUIData::EndConstantEditing()
+{
+	_toggleGroupIdConstantEditing = -1;
 }
