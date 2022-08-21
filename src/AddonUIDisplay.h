@@ -64,6 +64,10 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 	{
 		if (ImGui::BeginChild("Technique selection##child", { 0, 0 }, true, ImGuiWindowFlags_AlwaysAutoResize))
 		{
+			bool allowAll = group->getAllowAllTechniques();
+			ImGui::Checkbox("Allow all techniques", &allowAll);
+			group->setAllowAllTechniques(allowAll);
+
 			if (ImGui::Button("Disable all"))
 			{
 				curTechniques.clear();
@@ -76,23 +80,26 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 
 			ImGui::Separator();
 
-			if (ImGui::BeginTable("Technique selection##table", columns, ImGuiTableFlags_Resizable))
+			if (ImGui::BeginTable("Technique selection##table", columns, ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
 			{
-				string prefix(searchBuf);
-
-				for (int i = 0; i < techniques->size(); i++)
+				if (!allowAll)
 				{
-					bool enabled = curTechniques.find(techniques->at(i)) != curTechniques.end();
+					string prefix(searchBuf);
 
-					if (techniques->at(i).rfind(prefix, 0) == 0)
+					for (int i = 0; i < techniques->size(); i++)
 					{
-						ImGui::TableNextColumn();
-						ImGui::Checkbox(techniques->at(i).c_str(), &enabled);
-					}
+						bool enabled = curTechniques.find(techniques->at(i)) != curTechniques.end();
 
-					if (enabled)
-					{
-						newTechniques.insert(techniques->at(i));
+						if (techniques->at(i).rfind(prefix, 0) == 0)
+						{
+							ImGui::TableNextColumn();
+							ImGui::Checkbox(techniques->at(i).c_str(), &enabled);
+						}
+
+						if (enabled)
+						{
+							newTechniques.insert(techniques->at(i));
+						}
 					}
 				}
 			}
