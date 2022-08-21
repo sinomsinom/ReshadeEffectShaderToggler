@@ -176,7 +176,7 @@ void ConstantHandler::ApplyConstantValues(effect_runtime* runtime, const ToggleG
 		constant_type type = std::get<0>(constants[var]);
 		uint32_t typeIndex = static_cast<uint32_t>(type);
 
-		if (offset + type_size[typeIndex] * type_length[typeIndex] >= groupBufferSize[group] || offset < 0)
+		if (offset + type_size[typeIndex] * type_length[typeIndex] >= groupBufferSize[group])
 		{
 			continue;
 		}

@@ -162,8 +162,10 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
 					{
 						return kV.first;
 					});
-				auto filteredVars = varNames | views::filter([](const string& s) { return !varExclusionSet.contains(s); });
-				static string varSelectedItem = varNames[0];
+				vector<string> filteredVars; 
+				std::copy_if(varNames.begin(), varNames.end(), std::back_inserter(filteredVars), [](const string& s) { return !varExclusionSet.contains(s); });
+
+				static string varSelectedItem = filteredVars.size() > 0 ? filteredVars[0] : "";
 
 				if (ImGui::BeginCombo("Variable", varSelectedItem.c_str(), ImGuiComboFlags_None))
 				{
@@ -189,7 +191,10 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
 				ImGui::SetCursorPosX(ImGui::GetWindowWidth() / 2 - 120 - ImGui::GetStyle().ItemSpacing.x / 2 - ImGui::GetStyle().FramePadding.x / 2);
 				if (ImGui::Button("OK", ImVec2(120, 0)))
 				{
-					group->SetVarMapping(std::stoul(string(offsetInputBuf), nullptr, 16), varSelectedItem);
+					if (varSelectedItem.size() > 0)
+					{
+						group->SetVarMapping(std::stoul(string(offsetInputBuf), nullptr, 16), varSelectedItem);
+					}
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::SetItemDefaultFocus();
