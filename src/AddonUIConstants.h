@@ -47,7 +47,6 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
 	auto& varMap = group->GetVarOffsetMapping();
 	const size_t offsetInputBufSize = 32;
 	static char offsetInputBuf[offsetInputBufSize] = { "000"};
-	//strcpy_s(offsetInputBuf, std::format("{:03x}", 0).c_str());
 
 	ImGui::SetNextWindowSize({ 500, 800 }, ImGuiCond_Once);
 	bool wndOpen = true;

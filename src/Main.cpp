@@ -202,12 +202,6 @@ static void reloadConstantVariables(effect_runtime* runtime)
 		{
 			std::get<1>(g_restVariables[name]).push_back(variable);
 		}
-		else
-		{
-			//stringstream msg;
-			//msg << std::format("Type mismatch on variable {}. assuming type {}", name, std::get<0>(g_restVariables[name]));
-			//reshade::log_message(ERROR, msg.str().c_str());
-		}
 		});
 }
 

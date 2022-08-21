@@ -72,11 +72,6 @@ namespace ConstantFeedback {
 
 		void SetBufferRange(const ToggleGroup* group, buffer_range range, device* dev, command_list* cmd_list, command_queue* queue);
 		void RemoveGroup(const ToggleGroup*, device* dev, command_queue* queue);
-		//void LoadTypeMapping(const ToggleGroup*, unordered_map<uintptr_t, constant_type>& typeMap);
-		//bool SetTypeMapping(const ToggleGroup*, uintptr_t, constant_type);
-		//constant_type GetTypeMapping()
-		bool SetVarMapping(const ToggleGroup*, uintptr_t, string&);
-		const unordered_map<const ToggleGroup*, unordered_map<string, uintptr_t>>& GetVarMapping();
 		const uint8_t* GetConstantBuffer(const ToggleGroup* group);
 		size_t GetConstantBufferSize(const ToggleGroup* group);
 		void ApplyConstantValues(effect_runtime* runtime, const ToggleGroup*, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants);
@@ -84,13 +79,8 @@ namespace ConstantFeedback {
 		unordered_map<const ToggleGroup*, vector<uint8_t>> groupBufferContent;
 		unordered_map<const ToggleGroup*, resource> groupBufferResourceScratchpad;
 		unordered_map<const ToggleGroup*, buffer_range> groupBufferRanges;
-		//unordered_map<const ToggleGroup*, unordered_map<uintptr_t, constant_type>> groupTypeMapping;
 		unordered_map<const ToggleGroup*, unordered_map<string, uintptr_t>> groupVarMapping;
 		unordered_map<const ToggleGroup*, size_t> groupBufferSize;
-
-		//float floatBuffer[16] = { 0 };
-		//int32_t intBuffer[16] = { 0 };
-		//uint32_t uintBuffer[16] = { 0 };
 
 		void DestroyScratchpad(const ToggleGroup* group, device* dev, command_queue* queue);
 		bool CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& target);
