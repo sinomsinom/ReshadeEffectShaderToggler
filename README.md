@@ -34,11 +34,11 @@ Shader group effect rendering is based on the following principles:
 * If an effect is assigned to multiple shader groups, it will only be rendered by the first shader group encountered.
 * Only effects enabled in the global Reshade effect list will be rendered, no matter what is assigned to the shader groups.
 
-To finish editing either press the window's `x` button on the top right or press the `Done` button in the
-shader group.
+    To finish editing either press the window's `x` button on the top right or press the `Done` button in the
+    shader group.
 
-Note that this may lead to discrepancies between what is enabled in Reshade and what is actually rendered. If at least one shader group is enabled, 
-it will render only effects applicable to those shader groups, i.e., potentially not all globally enabled effects will be rendered.
+    Note that this may lead to discrepancies between what is enabled in Reshade and what is actually rendered. If at least one shader group is enabled, 
+    it will render only effects applicable to those shader groups, i.e., potentially not all globally enabled effects will be rendered.
 
 ## Marking Shaders
 To successfully be able to mark a set of shaders to toggle, be sure the elements you want to toggle, so the elements
@@ -76,6 +76,6 @@ located in the same folder as `ReshadeEffectShaderToggler.addon`.
 
 ## Credits
 * [Frans Bouma](https://github.com/FransBouma)<br/>
-  Original ShaderToggler
+    Original ShaderToggler
 * [crosire](https://github.com/crosire)<br/>
-  Reshade and example code of effect rendering
+    Reshade and example code of effect rendering
