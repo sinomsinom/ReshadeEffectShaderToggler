@@ -79,3 +79,7 @@ located in the same folder as `ReshadeEffectShaderToggler.addon`.
     Original ShaderToggler
 * [crosire](https://github.com/crosire)<br/>
     Reshade and example code of effect rendering
+* [Marty McFly](https://github.com/martymcmodding)<br/>
+    Constant buffer extraction idea
+* [darkarchan](https://github.com/darkarchan)<br/>
+    Testing, contribution
