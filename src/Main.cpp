@@ -71,6 +71,7 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
 	effect_runtime* current_runtime = nullptr;
+	atomic_bool rendered_effects = false;
 	unordered_map<string, bool> allEnabledTechniques;
 	unordered_map<string, int32_t> techniquesToRender;
 	unordered_map<string, int32_t> bindingsToUpdate;
@@ -97,6 +98,9 @@ static char g_charBuffer[CHAR_BUFFER_SIZE];
 static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
 static const float clearColor[] = { 0, 0, 0, 0 };
 static unordered_set<uintptr_t> s_resources;
+
+static resource s_currentBackbuffer = { 0 };
+static resource_view s_backBufferView = { 0 };
 
 /// <summary>
 /// Calculates a crc32 hash from the passed in shader bytecode. The hash is used to identity the shader in future runs.
@@ -206,6 +210,70 @@ static void reloadConstantVariables(effect_runtime* runtime)
 }
 
 
+static void initBackbuffer(effect_runtime* runtime)
+{
+	// Create backbuffer resource view
+	if (s_currentBackbuffer == 0 || s_currentBackbuffer.handle != runtime->get_current_back_buffer().handle)
+	{
+		device* dev = runtime->get_device();
+		s_currentBackbuffer = runtime->get_current_back_buffer();
+
+		resource_desc desc = dev->get_resource_desc(s_currentBackbuffer);
+
+		if (s_backBufferView != 0) {
+			runtime->get_command_queue()->wait_idle();
+			runtime->get_device()->destroy_resource_view(s_backBufferView);
+			s_backBufferView = { 0 };
+		}
+
+		dev->create_resource_view(s_currentBackbuffer, resource_usage::render_target,
+			resource_view_desc(desc.texture.format), &s_backBufferView);
+
+	}
+}
+
+
+static void RenderRemainingEffects(effect_runtime* runtime)
+{
+	if (runtime == nullptr || runtime->get_device() == nullptr)
+	{
+		return;
+	}
+
+	command_list* cmd_list = runtime->get_command_queue()->get_immediate_command_list();
+	device* device = runtime->get_device();
+	CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+	DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+
+	if (deviceData.current_runtime == nullptr) {
+		return;
+	}
+
+	initBackbuffer(deviceData.current_runtime);
+
+	enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device](effect_runtime* runtime, effect_technique technique, string& name) {
+		if (deviceData.allEnabledTechniques.contains(name) && !deviceData.allEnabledTechniques[name])
+		{
+			resource_view active_rtv = s_backBufferView;
+
+			if (active_rtv == 0 || !deviceData.rendered_effects) // Nothing rendered yet by the addon in the end, let reshade do it's thing
+			{
+				return;
+			}
+
+			resource res = runtime->get_device()->get_resource_from_view(active_rtv);
+			resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
+
+			g_addonUIData.cFormat = resDesc.texture.format;
+
+			runtime->render_technique(technique, cmd_list, active_rtv);
+
+			deviceData.allEnabledTechniques[name] = true;
+		}
+		});
+}
+
+
 static void onInitDevice(device* device)
 {
 	device->create_private_data<DeviceDataContainer>();
@@ -260,17 +328,25 @@ static void onDestroyResource(device* device, resource res)
 
 static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, const rect*, uint32_t, const rect*)
 {
-	std::unique_lock<shared_mutex> lock(device_data_mutex);
 	CommandListDataContainer& commandListData = queue->get_private_data<CommandListDataContainer>();
 	DeviceDataContainer& deviceData = queue->get_device()->get_private_data<DeviceDataContainer>();
 
-	deviceData.techniquesToRender.clear();
+	// does this make sense? need to make sure to reset when presenting the reshade command queue, but before reshade_present
+	if (queue == deviceData.current_runtime->get_command_queue())
+	{
+		std::unique_lock<shared_mutex> lock(device_data_mutex);
+		RenderRemainingEffects(deviceData.current_runtime);
 
-	std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [](auto& el) {
-		el.second = false;
-		});
+		deviceData.techniquesToRender.clear();
+		deviceData.rendered_effects = false;
 
-	deviceData.bindingsUpdated.clear();
+		std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [](auto& el) {
+			el.second = false;
+			});
+
+		deviceData.bindingsUpdated.clear();
+		deviceData.constantsUpdated.clear();
+	}
 }
 
 
@@ -454,6 +530,7 @@ static void onDestroyEffectRuntime(effect_runtime* runtime)
 		DestroyTextureBinding(runtime, binding.first);
 	}
 	data.bindingMap.clear();
+	g_restVariables.clear();
 }
 
 
@@ -539,6 +616,11 @@ bool checkDrawCallForCommandList(command_list* commandList)
 		{
 			for (const auto& tech : deviceData.allEnabledTechniques)
 			{
+				if (tGroup->getHasTechniqueExceptions() && tGroup->preferredTechniques().contains(tech.first))
+				{
+					continue;
+				}
+
 				if (!tech.second)
 				{
 					if (deviceData.techniquesToRender.contains(tech.first))
@@ -776,7 +858,9 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 			deviceData.current_runtime->render_effects(cmd_list, active_rtv);
 			
 			runtime->render_technique(technique, cmd_list, active_rtv);
+
 			deviceData.allEnabledTechniques[name] = true;
+			deviceData.rendered_effects = true;
 		}
 		});
 
@@ -951,8 +1035,6 @@ static void onReshadeOverlay(effect_runtime* runtime)
 
 static void onReshadePresent(effect_runtime* runtime)
 {
-	DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
-	deviceData.constantsUpdated.clear();
 	reloadConstantVariables(runtime);
 	CheckHotkeys(g_addonUIData, runtime);
 }

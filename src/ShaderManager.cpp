@@ -301,4 +301,36 @@ namespace ShaderToggler
 		}
 		return _handleToShaderHash.at(handle);
 	}
+
+	//vector<uint32_t> ShaderManager::getHuntedShaders()
+	//{
+	//	vector<uint32_t> vector;
+	//	vector.reserve(_collectedActiveShaderHashes.size());
+	//	vector.insert(vector.end(), _collectedActiveShaderHashes.begin(), _collectedActiveShaderHashes.end());
+	//
+	//	return vector;
+	//}
+	//
+	//void ShaderManager::markHuntedShader(uint32_t shader)
+	//{
+	//	std::unique_lock lock(_markedShaderHashMutex);
+	//	_markedShaderHashes.emplace(shader);
+	//}
+	//
+	//void ShaderManager::unmarkHuntedShader(uint32_t shader)
+	//{
+	//	std::unique_lock lock(_markedShaderHashMutex);
+	//	_markedShaderHashes.erase(shader);
+	//}
+	//
+	//bool ShaderManager::isMarkedShader(uint32_t shader)
+	//{
+	//	return _markedShaderHashes.contains(shader);
+	//}
+	//
+	//void ShaderManager::setActiveHuntedShader(uint32_t shader)
+	//{
+	//	if(_collectedActiveShaderHashes.contains(shader))
+	//		_activeHuntedShaderHash = shader;
+	//}
 }

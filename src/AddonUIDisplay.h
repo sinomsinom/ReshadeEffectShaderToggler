@@ -32,9 +32,50 @@
 
 #pragma once
 
+#include <format>
 #include "AddonUIConstants.h"
+#include "KeyData.h"
 
 #define MAX_RT_HISTORY 10
+
+// From Reshade, see https://github.com/crosire/reshade/blob/main/source/imgui_widgets.cpp
+static bool key_input_box(const char* name, uint32_t* keys, const effect_runtime* runtime)
+{
+	char buf[48]; buf[0] = '\0';
+	if (*keys)
+		buf[reshade_key_name(*keys).copy(buf, sizeof(buf) - 1)] = '\0';
+
+	ImGui::InputTextWithHint(name, "Click to set keyboard shortcut", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo | ImGuiInputTextFlags_NoHorizontalScroll);
+
+	if (ImGui::IsItemActive())
+	{
+		const uint32_t last_key_pressed = reshade_last_key_pressed(runtime);
+		if (last_key_pressed != 0)
+		{
+			if (last_key_pressed == static_cast<uint32_t>(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
+			{
+				*keys = 0;
+
+			}
+			else if (last_key_pressed < 0x10 || last_key_pressed > 0x12) // Exclude modifier keys
+			{
+				*keys = last_key_pressed;
+				*keys |= static_cast<uint32_t>(runtime->is_key_down(0x11)) << 8;
+				*keys |= static_cast<uint32_t>(runtime->is_key_down(0x10)) << 16;
+				*keys |= static_cast<uint32_t>(runtime->is_key_down(0x12)) << 24;
+			}
+
+			return true;
+		}
+	}
+	else if (ImGui::IsItemHovered())
+	{
+		ImGui::SetTooltip("Click in the field and press any key to change the shortcut to that key.");
+	}
+
+	return false;
+}
+
 
 static void DisplayIsPartOfToggleGroup()
 {
@@ -65,10 +106,18 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 		if (ImGui::BeginChild("Technique selection##child", { 0, 0 }, true, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			bool allowAll = group->getAllowAllTechniques();
-			ImGui::Checkbox("Allow all techniques", &allowAll);
+			ImGui::Checkbox("Catch all techniques", &allowAll);
 			group->setAllowAllTechniques(allowAll);
 
-			if (ImGui::Button("Disable all"))
+			bool exceptions = group->getHasTechniqueExceptions();
+			if (allowAll)
+			{
+				ImGui::SameLine();
+				ImGui::Checkbox("Except for selected techniques", &exceptions);
+				group->setHasTechniqueExceptions(exceptions);
+			}
+
+			if (ImGui::Button("Untick all"))
 			{
 				curTechniques.clear();
 			}
@@ -80,30 +129,36 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 
 			ImGui::Separator();
 
+			if (allowAll && !exceptions)
+			{
+				ImGui::BeginDisabled();
+			}
 			if (ImGui::BeginTable("Technique selection##table", columns, ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
 			{
-				if (!allowAll)
+				string prefix(searchBuf);
+
+				for (int i = 0; i < techniques->size(); i++)
 				{
-					string prefix(searchBuf);
+					bool enabled = curTechniques.find(techniques->at(i)) != curTechniques.end();
 
-					for (int i = 0; i < techniques->size(); i++)
+					if (techniques->at(i).rfind(prefix, 0) == 0)
 					{
-						bool enabled = curTechniques.find(techniques->at(i)) != curTechniques.end();
+						ImGui::TableNextColumn();
+						ImGui::Checkbox(techniques->at(i).c_str(), &enabled);
+					}
 
-						if (techniques->at(i).rfind(prefix, 0) == 0)
-						{
-							ImGui::TableNextColumn();
-							ImGui::Checkbox(techniques->at(i).c_str(), &enabled);
-						}
-
-						if (enabled)
-						{
-							newTechniques.insert(techniques->at(i));
-						}
+					if (enabled)
+					{
+						newTechniques.insert(techniques->at(i));
 					}
 				}
 			}
 			ImGui::EndTable();
+
+			if (allowAll && !exceptions)
+			{
+				ImGui::EndDisabled();
+			}
 		}
 		ImGui::EndChild();
 
@@ -116,6 +171,70 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 		instance.EndEffectEditing();
 	}
 }
+
+
+//static void DisplayShaderSelection(AddonImGui::AddonUIData& instance, effect_runtime* runtime, ToggleGroup* group)
+//{
+//	if (*instance.ActiveCollectorFrameCounter() > 0)
+//	{
+//		const uint32_t counterValue = *instance.ActiveCollectorFrameCounter();
+//		ImGui::Text("Collecting active shaders... frames to go: %d", counterValue);
+//	}
+//	else
+//	{
+//		float height = ImGui::GetWindowHeight();
+//
+//		ShaderManager* shaderManagers[] = { instance.GetPixelShaderManager(), instance.GetVertexShaderManager() };
+//		const char* shaderManagerIds[] = { "Pixel Shader", "Vertex Shader" };
+//
+//		for (uint32_t i = 0; i < IM_ARRAYSIZE(shaderManagers); i++)
+//		{
+//			if(!shaderManagers[i]->isInHuntingMode())
+//			{
+//				continue;
+//			}
+//
+//			ImGui::SameLine();
+//
+//			if (!ImGui::BeginTable(std::format("{}##table", shaderManagerIds[i]).c_str(), 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+//			{
+//				ImGui::EndTable();
+//				continue;
+//			}
+//
+//			vector<uint32_t> pShader = shaderManagers[i]->getHuntedShaders();
+//			bool noneSelected = true;
+//			for (int i = 0; i < pShader.size(); i++)
+//			{
+//				ImGui::TableNextColumn();
+//				ImGui::TableHeader(std::format("{:#02d}", i).c_str());
+//
+//				bool enabled = shaderManagers[i]->isMarkedShader(pShader[i]);
+//				ImGui::TableNextColumn();
+//				ImGui::Checkbox(std::format("{}", pShader[i]).c_str(), &enabled);
+//				if (ImGui::IsItemHovered())
+//				{
+//					noneSelected = false;
+//					shaderManagers[i]->setActiveHuntedShader(pShader[i]);
+//				}
+//
+//				if (enabled)
+//					shaderManagers[i]->markHuntedShader(pShader[i]);
+//				else
+//					shaderManagers[i]->unmarkHuntedShader(pShader[i]);
+//			}
+//
+//			if (noneSelected)
+//			{
+//				shaderManagers[i]->setActiveHuntedShader(0);
+//			}
+//
+//			ImGui::EndTable();
+//		}
+//
+//		ImGui::EndChild();
+//	}
+//}
 
 
 static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
@@ -146,14 +265,6 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* ru
 
 	if (instance.GetToggleGroupIdShaderEditing() >= 0)
 	{
-		ImGui::SetNextWindowBgAlpha(*instance.OverlayOpacity());
-		ImGui::SetNextWindowPos(ImVec2(10, 10));
-		if (!ImGui::Begin("ReshadeEffectShaderTogglerInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize |
-			ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings))
-		{
-			ImGui::End();
-			return;
-		}
 		string editingGroupName = "";
 		const int idx = instance.GetToggleGroupIdShaderEditing();
 		ToggleGroup* tGroup = nullptr;
@@ -161,6 +272,16 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* ru
 		{
 			editingGroupName = instance.GetToggleGroups()[idx].getName();
 			tGroup = &instance.GetToggleGroups()[idx];
+		}
+
+		bool wndOpen = true;
+		ImGui::SetNextWindowBgAlpha(*instance.OverlayOpacity());
+		ImGui::SetNextWindowPos(ImVec2(10, 10));
+		if (!ImGui::Begin(std::format("Edit group {}", editingGroupName).c_str(), nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings))
+		{
+			ImGui::End();
+			return;
 		}
 
 		ImGui::Text("# of pipelines with vertex shaders: %d. # of different vertex shaders gathered: %d.", instance.GetVertexShaderManager()->getPipelineCount(), instance.GetVertexShaderManager()->getShaderCount());
@@ -221,7 +342,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
 			break;
 		}
 
-		if (group.second.isToggleKeyPressed(runtime))
+		if (group.second.getToggleKey() > 0 && areKeysPressed(group.second.getToggleKey(), runtime))
 		{
 			group.second.toggleActive();
 			// if the group's shaders are being edited, it should toggle the ones currently marked.
@@ -233,39 +354,47 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
 		}
 	}
 
-	// hardcoded hunting keys.
-	// If Ctrl is pressed too, it'll step to the next marked shader (if any)
-	// Numpad 1: previous pixel shader
-	// Numpad 2: next pixel shader
-	// Numpad 3: mark current pixel shader as part of the toggle group
-	// Numpad 4: previous vertex shader
-	// Numpad 5: next vertex shader
-	// Numpad 6: mark current vertex shader as part of the toggle group
-	if (runtime->is_key_pressed(VK_NUMPAD1))
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_DOWN), runtime))
 	{
-		instance.GetPixelShaderManager()->huntPreviousShader(runtime->is_key_down(VK_CONTROL));
+		instance.GetPixelShaderManager()->huntPreviousShader(false);
 	}
-	if (runtime->is_key_pressed(VK_NUMPAD2))
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_UP), runtime))
 	{
-		instance.GetPixelShaderManager()->huntNextShader(runtime->is_key_down(VK_CONTROL));
+		instance.GetPixelShaderManager()->huntNextShader(false);
 	}
-	if (runtime->is_key_pressed(VK_NUMPAD3))
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_DOWN), runtime))
+	{
+		instance.GetPixelShaderManager()->huntPreviousShader(true);
+	}
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_UP), runtime))
+	{
+		instance.GetPixelShaderManager()->huntNextShader(true);
+	}
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARK), runtime))
 	{
 		instance.GetPixelShaderManager()->toggleMarkOnHuntedShader();
 	}
-	if (runtime->is_key_pressed(VK_NUMPAD4))
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_DOWN), runtime))
 	{
-		instance.GetVertexShaderManager()->huntPreviousShader(runtime->is_key_down(VK_CONTROL));
+		instance.GetVertexShaderManager()->huntPreviousShader(false);
 	}
-	if (runtime->is_key_pressed(VK_NUMPAD5))
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_UP), runtime))
 	{
-		instance.GetVertexShaderManager()->huntNextShader(runtime->is_key_down(VK_CONTROL));
+		instance.GetVertexShaderManager()->huntNextShader(false);
 	}
-	if (runtime->is_key_pressed(VK_NUMPAD6))
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_DOWN), runtime))
+	{
+		instance.GetVertexShaderManager()->huntPreviousShader(true);
+	}
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_UP), runtime))
+	{
+		instance.GetVertexShaderManager()->huntNextShader(true);
+	}
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARK), runtime))
 	{
 		instance.GetVertexShaderManager()->toggleMarkOnHuntedShader();
 	}
-	if (runtime->is_key_pressed(VK_NUMPAD7))
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::HISTORY_DOWN), runtime))
 	{
 		if (instance.GetHistoryIndex() > -MAX_RT_HISTORY)
 		{
@@ -276,7 +405,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
 			}
 		}
 	}
-	if (runtime->is_key_pressed(VK_NUMPAD8))
+	if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::HISTORY_UP), runtime))
 	{
 		if (instance.GetHistoryIndex() < MAX_RT_HISTORY)
 		{
@@ -306,12 +435,6 @@ static void ShowHelpMarker(const char* desc)
 
 static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
 {
-	if (instance.GetToggleGroupIdKeyBindingEditing() >= 0)
-	{
-		// a keybinding is being edited. Read current pressed keys into the collector, cumulatively;
-		instance.GetKeyCollector().collectKeysPressed(runtime);
-	}
-
 	if (ImGui::CollapsingHeader("General info and help"))
 	{
 		ImGui::PushTextWrapPos();
@@ -341,6 +464,20 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 		ImGui::PopItemWidth();
 	}
 	ImGui::Separator();
+
+	if (ImGui::CollapsingHeader("Keybindings", ImGuiTreeNodeFlags_None))
+	{
+		for (uint32_t i = 0; i< IM_ARRAYSIZE(AddonImGui::KeybindNames); i++)
+		{
+			uint32_t keys = instance.GetKeybinding(static_cast<AddonImGui::Keybind>(i));
+			ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.35f);
+			if (key_input_box(AddonImGui::KeybindNames[i], &keys, runtime))
+			{
+				instance.SetKeybinding(static_cast<AddonImGui::Keybind>(i), keys);
+			}
+			ImGui::PopItemWidth();
+		}
+	}
 
 	if (ImGui::CollapsingHeader("List of Toggle Groups", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -463,7 +600,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 			ImGui::SameLine();
 			if (group.getToggleKey() > 0)
 			{
-				ImGui::Text(" %s (%s)", group.getName().c_str(), group.getToggleKeyAsString().c_str());
+				ImGui::Text(" %s (%s)", group.getName().c_str(), reshade_key_name(group.getToggleKey()).c_str());
 			}
 			else
 			{
@@ -488,48 +625,21 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 				ImGui::PopItemWidth();
 
 				// Key binding of group
-				bool isKeyEditing = false;
-				ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
+				ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.7f);
 				ImGui::AlignTextToFramePadding();
 				ImGui::Text("Key shortcut");
 				ImGui::SameLine(ImGui::GetWindowWidth() * 0.2f);
-				string textBoxContents = (instance.GetToggleGroupIdKeyBindingEditing() == group.getId()) ? instance.GetKeyCollector().getKeyAsString() : group.getToggleKeyAsString();	// The 'press a key' is inside keycollector
-				ImGui::InputText("##Key shortcut", (char*)textBoxContents.c_str(), textBoxContents.size(), ImGuiInputTextFlags_ReadOnly);
-				if (ImGui::IsItemClicked())
+
+				uint32_t keys = group.getToggleKey();
+				if (key_input_box(reshade_key_name(keys).c_str(), &keys, runtime))
 				{
-					instance.StartKeyBindingEditing(group);
-				}
-				if (instance.GetToggleGroupIdKeyBindingEditing() == group.getId())
-				{
-					isKeyEditing = true;
-					ImGui::SameLine();
-					if (ImGui::Button("OK"))
-					{
-						instance.EndKeyBindingEditing(true, group);
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Cancel"))
-					{
-						instance.EndKeyBindingEditing(false, group);
-					}
-					ImGui::SameLine();
-					ImGui::PushID("ResetBindings");
-					if (ImGui::Button("X"))
-					{
-						instance.ResetKeyBinding(group);
-					}
-					ImGui::PopID();
+					group.setToggleKey(keys);
 				}
 				ImGui::PopItemWidth();
 
-				if (!isKeyEditing)
+				if (ImGui::Button("OK"))
 				{
-					if (ImGui::Button("OK"))
-					{
-						group.setEditing(false);
-						instance.GetToggleGroupIdKeyBindingEditing() = -1;
-						instance.GetKeyCollector().clear();
-					}
+					group.setEditing(false);
 				}
 				ImGui::Separator();
 			}
@@ -539,9 +649,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 		if (toRemove.size() > 0)
 		{
 			// switch off keybinding editing or shader editing, if in progress
-			instance.GetToggleGroupIdKeyBindingEditing() = -1;
 			instance.GetToggleGroupIdEffectEditing() = -1;
-			instance.GetKeyCollector().clear();
 			instance.GetToggleGroupIdShaderEditing() = -1;
 			instance.GetToggleGroupIdConstantEditing() = -1;
 			instance.StopHuntingMode();

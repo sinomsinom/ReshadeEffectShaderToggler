@@ -40,8 +40,20 @@ AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* verte
 	_allTechniques(techniques), _constantHandler(cHandler), _constants(constants)
 {
 	_toggleGroupIdShaderEditing = -1;
-	_toggleGroupIdKeyBindingEditing = -1;
 	_overlayOpacity = 0.2f;
+
+	_keyBindings[Keybind::PIXEL_SHADER_DOWN] = VK_NUMPAD1;
+	_keyBindings[Keybind::PIXEL_SHADER_UP] = VK_NUMPAD2;
+	_keyBindings[Keybind::PIXEL_SHADER_MARK] = VK_NUMPAD3;
+	_keyBindings[Keybind::PIXEL_SHADER_MARKED_DOWN] = VK_NUMPAD1 | (VK_CONTROL << 8);
+	_keyBindings[Keybind::PIXEL_SHADER_MARKED_UP] = VK_NUMPAD2 | (VK_CONTROL << 8);
+	_keyBindings[Keybind::VERTEX_SHADER_DOWN] = VK_NUMPAD4;
+	_keyBindings[Keybind::VERTEX_SHADER_UP] = VK_NUMPAD5;
+	_keyBindings[Keybind::VERTEX_SHADER_MARK] = VK_NUMPAD6;
+	_keyBindings[Keybind::VERTEX_SHADER_MARKED_DOWN] = VK_NUMPAD4 | (VK_CONTROL << 8);
+	_keyBindings[Keybind::VERTEX_SHADER_MARKED_UP] = VK_NUMPAD5 | (VK_CONTROL << 8);
+	_keyBindings[Keybind::HISTORY_DOWN] = VK_NUMPAD7;
+	_keyBindings[Keybind::HISTORY_UP] = VK_NUMPAD8;
 }
 
 
@@ -74,7 +86,7 @@ void AddonUIData::StopHuntingMode()
 void AddonUIData::AddDefaultGroup()
 {
 	ToggleGroup toAdd("Default", ToggleGroup::getNewGroupId());
-	toAdd.setToggleKey(0, false, false, false);
+	toAdd.setToggleKey(0);
 	_toggleGroups.emplace(toAdd.getId(), toAdd);
 }
 
@@ -92,6 +104,16 @@ void AddonUIData::LoadShaderTogglerIniFile()
 		// not there
 		return;
 	}
+
+	for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
+	{
+		uint32_t keybinding = iniFile.GetUInt(KeybindNames[i], "Keybindings");
+		if (keybinding != UINT_MAX)
+		{
+			_keyBindings[i] = keybinding;
+		}
+	}
+
 	int groupCounter = 0;
 	const int numberOfGroups = iniFile.GetInt("AmountGroups", "General");
 	if (numberOfGroups == INT_MIN)
@@ -124,6 +146,12 @@ void AddonUIData::SaveShaderTogglerIniFile()
 	// format: first section with # of groups, then per group a section with pixel and vertex shaders, as well as their name and key value.
 	// groups are stored with "Group" + group counter, starting with 0.
 	CDataFile iniFile;
+
+	for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
+	{
+		uint32_t keybinding = iniFile.SetUInt(KeybindNames[i], _keyBindings[i], "", "Keybindings");
+	}
+
 	iniFile.SetInt("AmountGroups", static_cast<int>(_toggleGroups.size()), "", "General");
 
 	int groupCounter = 0;
@@ -134,53 +162,6 @@ void AddonUIData::SaveShaderTogglerIniFile()
 	}
 	iniFile.SetFileName(HASH_FILE_NAME);
 	iniFile.Save();
-}
-
-
-/// <summary>
-/// Function which marks the end of a keybinding editing cycle
-/// </summary>
-/// <param name="acceptCollectedBinding"></param>
-/// <param name="groupEditing"></param>
-void AddonUIData::EndKeyBindingEditing(bool acceptCollectedBinding, ToggleGroup& groupEditing)
-{
-	if (acceptCollectedBinding && _toggleGroupIdKeyBindingEditing == groupEditing.getId())
-	{
-		groupEditing.setToggleKey(_keyCollector);
-	}
-	_toggleGroupIdKeyBindingEditing = -1;
-	_keyCollector.clear();
-}
-
-/// <summary>
-/// Resets toggle key binding of the specified shader group
-/// </summary>
-/// <param name="groupEditing">Shader toggle group currently being edited</param>
-void AddonUIData::ResetKeyBinding(ToggleGroup& groupEditing)
-{
-	if (_toggleGroupIdKeyBindingEditing == groupEditing.getId())
-	{
-		_keyCollector.resetKey();
-	}
-}
-
-
-/// <summary>
-/// Function which marks the start of a keybinding editing cycle for the passed in toggle group
-/// </summary>
-/// <param name="groupEditing"></param>
-void AddonUIData::StartKeyBindingEditing(ToggleGroup& groupEditing)
-{
-	if (_toggleGroupIdKeyBindingEditing == groupEditing.getId())
-	{
-		return;
-	}
-	if (_toggleGroupIdKeyBindingEditing >= 0)
-	{
-		EndKeyBindingEditing(false, groupEditing);
-	}
-	_toggleGroupIdKeyBindingEditing = groupEditing.getId();
-	_keyCollector.clear();
 }
 
 
@@ -259,4 +240,14 @@ void AddonUIData::StartConstantEditing(ToggleGroup& groupEditing)
 void AddonUIData::EndConstantEditing()
 {
 	_toggleGroupIdConstantEditing = -1;
+}
+
+uint32_t AddonUIData::GetKeybinding(Keybind keybind)
+{
+	return _keyBindings[keybind];
+}
+
+void AddonUIData::SetKeybinding(Keybind keybind, uint32_t keys)
+{
+	_keyBindings[keybind] = keys;
 }

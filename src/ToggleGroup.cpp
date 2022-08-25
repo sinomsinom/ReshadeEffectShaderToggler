@@ -33,19 +33,18 @@
 #include <sstream>
 #include "stdafx.h"
 #include "ToggleGroup.h"
-#include "KeyData.h"
 
 namespace ShaderToggler
 {
 	ToggleGroup::ToggleGroup(std::string name, int id): _id(id), _isActive(false), _isEditing(false), _allowAllTechniques(true),
-		_isProvidingTextureBinding(false), _textureBindingName("")
+		_isProvidingTextureBinding(false), _textureBindingName(""), _hasTechniqueExceptions(false)
 	{
 		_name = name.size() > 0 ? name : "Default";
 	}
 
 
 	ToggleGroup::ToggleGroup(): _name(""), _id(0), _isActive(false), _isEditing(false), _allowAllTechniques(true),
-		_isProvidingTextureBinding(false), _textureBindingName("")
+		_isProvidingTextureBinding(false), _textureBindingName(""), _hasTechniqueExceptions(false)
 	{
 
 	}
@@ -57,18 +56,6 @@ namespace ShaderToggler
 
 		++s_groupId;
 		return s_groupId;
-	}
-
-
-	void ToggleGroup::setToggleKey(uint8_t newKeyValue, bool shiftRequired, bool altRequired, bool ctrlRequired)
-	{
-		_keyData.setKey(newKeyValue, shiftRequired, altRequired, ctrlRequired);
-	}
-
-
-	void ToggleGroup::setToggleKey(KeyData newData)
-	{
-		_keyData = newData;
 	}
 
 
@@ -166,7 +153,8 @@ namespace ShaderToggler
 		iniFile.SetUInt("AmountConstants", counter, "", constantsCategory);
 
 		iniFile.SetValue("Name", _name, "", sectionRoot);
-		iniFile.SetUInt("ToggleKey", _keyData.getKeyForIniFile(), "", sectionRoot);
+		//iniFile.SetUInt("ToggleKey", _keyData.getKeyForIniFile(), "", sectionRoot);
+		iniFile.SetUInt("ToggleKey", _keybind, "", sectionRoot);
 		iniFile.SetBool("Active", _isActive, "", sectionRoot);
 
 		std::stringstream ss("");
@@ -184,6 +172,7 @@ namespace ShaderToggler
 		}
 		iniFile.SetValue("Techniques", ss.str(), "", sectionRoot);
 		iniFile.SetBool("AllowAllTechniques", _allowAllTechniques, "", sectionRoot);
+		iniFile.SetBool("TechniqueExceptions", _hasTechniqueExceptions, "", sectionRoot);
 
 		iniFile.SetInt("HistoryIndex", _historyIndex, "", sectionRoot);
 
@@ -265,11 +254,11 @@ namespace ShaderToggler
 		const uint32_t toggleKeyValue = iniFile.GetUInt("ToggleKey", sectionRoot);
 		if(toggleKeyValue == UINT_MAX)
 		{
-			_keyData.setKey(VK_CAPITAL, false, false, false);
+			_keybind = VK_CAPITAL;
 		}
 		else
 		{
-			_keyData.setKeyFromIniFile(toggleKeyValue);
+			_keybind = toggleKeyValue;
 		}
 
 		_isActive = iniFile.GetBool("Active", sectionRoot);
@@ -287,6 +276,7 @@ namespace ShaderToggler
 		}
 
 		_allowAllTechniques = iniFile.GetBool("AllowAllTechniques", sectionRoot);
+		_hasTechniqueExceptions = iniFile.GetBool("TechniqueExceptions", sectionRoot);
 
 		const int32_t historyIndex = iniFile.GetInt("HistoryIndex", sectionRoot);
 		if(historyIndex > INT_MIN)

@@ -98,6 +98,12 @@ namespace ShaderToggler
 		int getActiveHuntedShaderIndex() { return _activeHuntedShaderIndex; }
 		void toggleHideMarkedShaders() { _hideMarkedShaders=!_hideMarkedShaders;}
 
+		//vector<uint32_t> getHuntedShaders();
+		//void markHuntedShader(uint32_t shader);
+		//void unmarkHuntedShader(uint32_t shader);
+		//bool isMarkedShader(uint32_t shader);
+		//void setActiveHuntedShader(uint32_t shader);
+
 		bool isHuntedShaderMarked()
 		{
 			std::shared_lock lock(_markedShaderHashMutex);

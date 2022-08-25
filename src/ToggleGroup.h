@@ -36,7 +36,6 @@
 #include <unordered_map>
 
 #include "CDataFile.h"
-#include "KeyData.h"
 
 namespace ShaderToggler
 {
@@ -48,8 +47,9 @@ namespace ShaderToggler
 
 		static int getNewGroupId();
 
-		void setToggleKey(uint8_t newKeyValue, bool shiftRequired, bool altRequired, bool ctrlRequired);
-		void setToggleKey(KeyData newData);
+		//void setToggleKey(uint8_t newKeyValue, bool shiftRequired, bool altRequired, bool ctrlRequired);
+		//void setToggleKey(KeyData newData);
+		void setToggleKey(uint32_t keybind) { _keybind = keybind; }
 		void setName(std::string newName);
 		/// <summary>
 		/// Writes the shader hashes, name and toggle key to the ini file specified, using a Group + groupCounter section.
@@ -71,8 +71,7 @@ namespace ShaderToggler
 		void toggleActive() { _isActive = !_isActive;}
 		void setEditing(bool isEditing) { _isEditing = isEditing;}
 
-		std::string getToggleKeyAsString() { return _keyData.getKeyAsString();}
-		uint8_t getToggleKey() { return _keyData.getKeyCode();}
+		uint32_t getToggleKey() { return _keybind; }
 		std::string getName() { return _name;}
 		bool isActive() { return _isActive;}
 		bool isEditing() { return _isEditing;}
@@ -82,7 +81,6 @@ namespace ShaderToggler
 		void setPreferredTechniques(std::unordered_set<std::string> techniques) { _preferredTechniques = techniques; }
 		std::unordered_set<uint32_t> getPixelShaderHashes() const { return _pixelShaderHashes;}
 		std::unordered_set<uint32_t> getVertexShaderHashes() const { return _vertexShaderHashes;}
-		bool isToggleKeyPressed(const reshade::api::effect_runtime* runtime) { return _keyData.isKeyPressed(runtime);}
 		void setHistoryIndex(int32_t index) { _historyIndex = index; }
 		int32_t getHistoryIndex() const { return _historyIndex; }
 		bool isProvidingTextureBinding() const { return _isProvidingTextureBinding; }
@@ -93,6 +91,8 @@ namespace ShaderToggler
 		void setAllowAllTechniques(bool allowAllTechniques) { _allowAllTechniques = allowAllTechniques; }
 		bool getExtractConstants() const { return _extractConstants; }
 		void setExtractConstant(bool extract) { _extractConstants = extract; }
+		bool getHasTechniqueExceptions() const { return _hasTechniqueExceptions; }
+		void setHasTechniqueExceptions(bool exceptions) { _hasTechniqueExceptions = exceptions; }
 		const std::unordered_map<string, uintptr_t>& GetVarOffsetMapping() const { return _varOffsetMapping; }
 		bool SetVarMapping(uintptr_t, string&);
 		bool RemoveVarMapping(string&);
@@ -105,7 +105,7 @@ namespace ShaderToggler
 	private:
 		int _id;
 		std::string	_name;
-		KeyData _keyData;
+		uint32_t _keybind;
 		std::unordered_set<uint32_t> _vertexShaderHashes;
 		std::unordered_set<uint32_t> _pixelShaderHashes;
 		int32_t _historyIndex;
@@ -114,6 +114,7 @@ namespace ShaderToggler
 		bool _allowAllTechniques;	// true means all techniques are allowed, regardless of preferred techniques.
 		bool _isProvidingTextureBinding;
 		bool _extractConstants;
+		bool _hasTechniqueExceptions; // _preferredTechniques are handled as exception to _allowAllTechniques
 		std::string _textureBindingName;
 		std::unordered_set<std::string> _preferredTechniques;
 		std::unordered_map<string, uintptr_t> _varOffsetMapping;
