@@ -97,7 +97,9 @@ static std::shared_mutex resource_mutex;
 static char g_charBuffer[CHAR_BUFFER_SIZE];
 static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
 static const float clearColor[] = { 0, 0, 0, 0 };
+static unordered_set<uintptr_t> s_constantBuffers;
 static unordered_set<uintptr_t> s_resources;
+static unordered_set<uintptr_t> s_resourceViews;
 
 static resource s_currentBackbuffer = { 0 };
 static resource_view s_backBufferView = { 0 };
@@ -157,6 +159,8 @@ static void enumerateRESTUniformVariables(effect_runtime* runtime, std::function
 			{
 				if (rows == 4 && columns == 4)
 					type = constant_type::type_float4x4;
+				else if (rows == 3 && columns == 4)
+					type = constant_type::type_float4x3;
 				else if (rows == 3 && columns == 3)
 					type = constant_type::type_float3x3;
 				else if (rows == 3 && columns == 1)
@@ -311,9 +315,10 @@ static void onInitResource(device* device, const resource_desc& desc, const subr
 {
 	std::unique_lock<shared_mutex> lock(resource_mutex);
 
+	s_resources.emplace(handle.handle);
 	if (static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
 	{
-		s_resources.emplace(handle.handle);
+		s_constantBuffers.emplace(handle.handle);
 	}
 }
 
@@ -321,8 +326,21 @@ static void onInitResource(device* device, const resource_desc& desc, const subr
 static void onDestroyResource(device* device, resource res)
 {
 	std::unique_lock<shared_mutex> lock(resource_mutex);
-
+	s_constantBuffers.erase(res.handle);
 	s_resources.erase(res.handle);
+}
+
+
+static void onInitResourceView(device* device, resource resource, resource_usage usage_type, const resource_view_desc& desc, resource_view view)
+{
+	std::unique_lock<shared_mutex> lock(resource_mutex);
+	s_resourceViews.emplace(view.handle);
+}
+
+static void onDestroyResourceView(device* device, resource_view view)
+{
+	std::unique_lock<shared_mutex> lock(resource_mutex);
+	s_resourceViews.erase(view.handle);
 }
 
 
@@ -397,8 +415,6 @@ static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique
 
 static bool CreateTextureBinding(effect_runtime* runtime, resource* res, resource_view* srv, resource_view* rtv, reshade::api::format format)
 {
-	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
-
 	uint32_t frame_width, frame_height;
 	runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
 
@@ -437,26 +453,30 @@ static void DestroyTextureBinding(effect_runtime* runtime, std::string binding)
 		resource res = { 0 };
 		resource_view srv = { 0 };
 		resource_view rtv = { 0 };
+		reshade::api::format rformat = std::get<1>(data.bindingMap[binding]);
 
 		runtime->get_command_queue()->wait_idle();
 
 		res = std::get<0>(data.bindingMap[binding]);
-		if (res != 0)
+		if (res != 0 && s_resources.contains(res.handle))
 		{
 			runtime->get_device()->destroy_resource(res);
 		}
 
 		srv = std::get<2>(data.bindingMap[binding]);
-		if (srv != 0)
+		if (srv != 0 && s_resourceViews.contains(srv.handle))
 		{
 			runtime->get_device()->destroy_resource_view(srv);
 		}
 
 		rtv = std::get<3>(data.bindingMap[binding]);
-		if (rtv != 0)
+		if (rtv != 0 && s_resourceViews.contains(rtv.handle))
 		{
 			runtime->get_device()->destroy_resource_view(rtv);
 		}
+
+		runtime->update_texture_bindings(binding.c_str(), resource_view{ 0 }, resource_view{ 0 });
+		data.bindingMap[binding] = std::make_tuple(resource{ 0 }, rformat, resource_view{ 0 }, resource_view{ 0 });
 	}
 }
 
@@ -512,7 +532,7 @@ static void onInitEffectRuntime(effect_runtime* runtime)
 			
 			if (CreateTextureBinding(runtime, &res, &srv, &rtv, format::r8g8b8a8_unorm))
 			{
-				data.bindingMap.emplace(group.second.getTextureBindingName(), std::make_tuple(res, format::r8g8b8a8_unorm, srv, rtv));
+				data.bindingMap[group.second.getTextureBindingName()] = std::make_tuple(res, format::r8g8b8a8_unorm, srv, rtv);
 				runtime->update_texture_bindings(group.second.getTextureBindingName().c_str(), srv);
 			}
 		}
@@ -522,13 +542,13 @@ static void onInitEffectRuntime(effect_runtime* runtime)
 
 static void onDestroyEffectRuntime(effect_runtime* runtime)
 {
+	std::unique_lock<shared_mutex> lock(device_data_mutex);
 	DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 	data.current_runtime = nullptr;
-
-	for (const auto& binding : data.bindingMap)
-	{
-		DestroyTextureBinding(runtime, binding.first);
-	}
+	//for (const auto& binding : data.bindingMap)
+	//{
+	//	DestroyTextureBinding(runtime, binding.first);
+	//}
 	data.bindingMap.clear();
 	g_restVariables.clear();
 }
@@ -765,7 +785,7 @@ static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
 
 		resource_view active_rtv = GetCurrentResourceView(binding, commandListData);
 
-		if (active_rtv == 0)
+		if (active_rtv == 0 || !s_resourceViews.contains(active_rtv.handle))
 		{
 			continue;
 		}
@@ -774,11 +794,18 @@ static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
 		if (deviceData.bindingMap.contains(bindingName))
 		{
 			resource res = runtime->get_device()->get_resource_from_view(active_rtv);
+			resource target_res = std::get<0>(deviceData.bindingMap[bindingName]);
+
+			if(res == 0 || !s_resources.contains(res.handle))
+			{
+				continue;
+			}
+
 			resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
 			if (UpdateTextureBinding(runtime, bindingName, resDesc.texture.format))
 			{
 				g_addonUIData.cFormat = resDesc.texture.format;
-				cmd_list->copy_resource(res, std::get<0>(deviceData.bindingMap[bindingName]));
+				cmd_list->copy_resource(res, target_res);
 				deviceData.bindingsUpdated.emplace(bindingName);
 			}
 		}
@@ -845,7 +872,7 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 		{
 			resource_view active_rtv = GetCurrentResourceView(*historic_rtv, commandListData);
 
-			if (active_rtv == 0)
+			if (active_rtv == 0 /* || !s_resourceViews.contains(active_rtv.handle)*/)
 			{
 				return;
 			}
@@ -917,8 +944,8 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
 		std::unique_lock<shared_mutex> lock(device_data_mutex);
 		(void)checkDrawCallForCommandList(commandList);
 
-		UpdateTextureBindings(commandList);
-		RenderEffects(commandList);
+		UpdateTextureBindings(commandList, false);
+		RenderEffects(commandList, false);
 	}
 }
 
@@ -1000,7 +1027,7 @@ static void onReshadeFinishEffects(effect_runtime* runtime, command_list* cmd_li
 static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
 {
 	const ToggleGroup* group = nullptr;
-	if (update.type == descriptor_type::constant_buffer && static_cast<uint32_t>(stages & shader_stage::pixel) && (group = checkDescriptors(cmd_list)) != nullptr)
+	if (update.type == descriptor_type::constant_buffer && (static_cast<uint32_t>(stages & shader_stage::pixel) || static_cast<uint32_t>(stages & shader_stage::vertex)) && (group = checkDescriptors(cmd_list)) != nullptr)
 	{
 		DeviceDataContainer& deviceData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
 	
@@ -1013,7 +1040,7 @@ static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipel
 	
 		for (uint32_t i = update.array_offset; i < update.count; ++i)
 		{
-			if (!s_resources.contains(buffer[i].buffer.handle))
+			if (!s_constantBuffers.contains(buffer[i].buffer.handle))
 				continue;
 
 			constantHandler.SetBufferRange(group, buffer[i],
@@ -1057,6 +1084,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		g_addonUIData.LoadShaderTogglerIniFile();
 		reshade::register_event<reshade::addon_event::init_resource>(onInitResource);
 		reshade::register_event<reshade::addon_event::destroy_resource>(onDestroyResource);
+		reshade::register_event<reshade::addon_event::init_resource_view>(onInitResourceView);
+		reshade::register_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
 		reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
 		reshade::register_event<reshade::addon_event::init_command_list>(onInitCommandList);
 		reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
@@ -1100,6 +1129,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::unregister_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
 		reshade::unregister_event<reshade::addon_event::init_resource>(onInitResource);
 		reshade::unregister_event<reshade::addon_event::destroy_resource>(onDestroyResource);
+		reshade::unregister_event<reshade::addon_event::init_resource_view>(onInitResourceView);
+		reshade::unregister_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
 		reshade::unregister_overlay(nullptr, &displaySettings);
 		reshade::unregister_addon(hModule);
 		break;

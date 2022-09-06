@@ -93,8 +93,8 @@ namespace ShaderToggler
 		void setExtractConstant(bool extract) { _extractConstants = extract; }
 		bool getHasTechniqueExceptions() const { return _hasTechniqueExceptions; }
 		void setHasTechniqueExceptions(bool exceptions) { _hasTechniqueExceptions = exceptions; }
-		const std::unordered_map<string, uintptr_t>& GetVarOffsetMapping() const { return _varOffsetMapping; }
-		bool SetVarMapping(uintptr_t, string&);
+		const std::unordered_map<string, tuple<uintptr_t, bool>>& GetVarOffsetMapping() const { return _varOffsetMapping; }
+		bool SetVarMapping(uintptr_t, string&, bool);
 		bool RemoveVarMapping(string&);
 		
 		bool operator==(const ToggleGroup& rhs)
@@ -117,6 +117,6 @@ namespace ShaderToggler
 		bool _hasTechniqueExceptions; // _preferredTechniques are handled as exception to _allowAllTechniques
 		std::string _textureBindingName;
 		std::unordered_set<std::string> _preferredTechniques;
-		std::unordered_map<string, uintptr_t> _varOffsetMapping;
+		std::unordered_map<string, tuple<uintptr_t, bool>> _varOffsetMapping;
 	};
 }

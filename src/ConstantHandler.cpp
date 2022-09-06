@@ -61,6 +61,7 @@ void ConstantHandler::CopyToScratchpad(const ToggleGroup* group, device* dev, co
 	}
 
 	vector<uint8_t>& bufferContent = groupBufferContent[group];
+	vector<uint8_t>& prevBufferContent = groupPrevBufferContent[group];
 
 	cmd_list->copy_resource(currentBufferRange.buffer, bufferResource);
 
@@ -68,6 +69,7 @@ void ConstantHandler::CopyToScratchpad(const ToggleGroup* group, device* dev, co
 	uint64_t size = targetBufferDesc.buffer.size;
 	if (dev->map_buffer_region(bufferResource, currentBufferRange.offset, currentBufferRange.size, map_access::read_only, &mapped_buffer))
 	{
+		std::memcpy(prevBufferContent.data(), bufferContent.data(), size);
 		std::memcpy(bufferContent.data(), mapped_buffer, size);
 
 		dev->unmap_buffer_region(bufferResource);
@@ -86,6 +88,7 @@ void ConstantHandler::RemoveGroup(const ToggleGroup* group, device* dev, command
 	groupBufferRanges.erase(group);
 	groupBufferResourceScratchpad.erase(group);
 	groupBufferContent.erase(group);
+	groupPrevBufferContent.erase(group);
 }
 
 void ConstantHandler::DestroyScratchpad(const ToggleGroup* group, device* dev, command_queue* queue)
@@ -103,6 +106,7 @@ void ConstantHandler::DestroyScratchpad(const ToggleGroup* group, device* dev, c
 		dev->destroy_resource(res);
 		groupBufferResourceScratchpad[group] = { 0 };
 		groupBufferContent[group].clear();
+		groupPrevBufferContent[group].clear();
 	}
 }
 
@@ -123,10 +127,16 @@ bool ConstantHandler::CreateScratchpad(const ToggleGroup* group, device* dev, re
 
 		groupBufferSize[group] = targetBufferDesc.buffer.size;
 		groupBufferResourceScratchpad[group] = bufferResource;
-		if(groupBufferContent.contains(group))
+		if (groupBufferContent.contains(group))
+		{
 			groupBufferContent[group].resize(targetBufferDesc.buffer.size, 0);
+			groupPrevBufferContent[group].resize(targetBufferDesc.buffer.size, 0);
+		}
 		else
+		{
 			groupBufferContent.emplace(group, vector<uint8_t>(targetBufferDesc.buffer.size, 0));
+			groupPrevBufferContent.emplace(group, vector<uint8_t>(targetBufferDesc.buffer.size, 0));
+		}
 		return true;
 	}
 
@@ -162,11 +172,15 @@ void ConstantHandler::ApplyConstantValues(effect_runtime* runtime, const ToggleG
 	}
 
 	const uint8_t* buffer = groupBufferContent[group].data();
+	const uint8_t* prevBuffer = groupPrevBufferContent[group].data();
 
 	for (const auto& vars : group->GetVarOffsetMapping())
 	{
 		string var = vars.first;
-		uintptr_t offset = vars.second;
+		uintptr_t offset = get<0>(vars.second);
+		bool prevValue = get<1>(vars.second);
+
+		const uint8_t* bufferInUse = prevValue ? prevBuffer : buffer;
 
 		if (!constants.contains(var))
 		{
@@ -187,15 +201,15 @@ void ConstantHandler::ApplyConstantValues(effect_runtime* runtime, const ToggleG
 		{
 			if (type <= constant_type::type_float4x4)
 			{
-				runtime->set_uniform_value_float(effect_var, reinterpret_cast<const float*>(buffer + offset), type_length[typeIndex], 0);
+				runtime->set_uniform_value_float(effect_var, reinterpret_cast<const float*>(bufferInUse + offset), type_length[typeIndex], 0);
 			}
 			else if (type == constant_type::type_int)
 			{
-				runtime->set_uniform_value_int(effect_var, reinterpret_cast<const int32_t*>(buffer + offset), type_length[typeIndex], 0);
+				runtime->set_uniform_value_int(effect_var, reinterpret_cast<const int32_t*>(bufferInUse + offset), type_length[typeIndex], 0);
 			}
 			else
 			{
-				runtime->set_uniform_value_uint(effect_var, reinterpret_cast<const uint32_t*>(buffer + offset), type_length[typeIndex], 0);
+				runtime->set_uniform_value_uint(effect_var, reinterpret_cast<const uint32_t*>(bufferInUse + offset), type_length[typeIndex], 0);
 			}
 		}
 	}

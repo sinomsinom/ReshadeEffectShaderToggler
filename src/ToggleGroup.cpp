@@ -104,9 +104,9 @@ namespace ShaderToggler
 	}
 
 
-	bool ToggleGroup::SetVarMapping(uintptr_t offset, string& variable)
+	bool ToggleGroup::SetVarMapping(uintptr_t offset, string& variable, bool prev)
 	{
-		_varOffsetMapping.emplace(variable, offset);
+		_varOffsetMapping.emplace(variable, make_tuple(offset, prev));
 
 		return true; // do some sanity checking?
 	}
@@ -146,8 +146,9 @@ namespace ShaderToggler
 		counter = 0;
 		for (const auto var : _varOffsetMapping)
 		{
-			iniFile.SetUInt("Offset" + std::to_string(counter), var.second, "", constantsCategory);
+			iniFile.SetUInt("Offset" + std::to_string(counter), std::get<0>(var.second), "", constantsCategory);
 			iniFile.SetValue("Variable" + std::to_string(counter), var.first, "", constantsCategory);
+			iniFile.SetBool("UsePreviousValue" + std::to_string(counter), std::get<1>(var.second), "", constantsCategory);
 			counter++;
 		}
 		iniFile.SetUInt("AmountConstants", counter, "", constantsCategory);
@@ -240,9 +241,10 @@ namespace ShaderToggler
 		{
 			uint32_t offset = iniFile.GetUInt("Offset" + std::to_string(i), constantsCategory);
 			string varName = iniFile.GetString("Variable" + std::to_string(i), constantsCategory);
+			bool prevValue = iniFile.GetBool("UsePreviousValue" + std::to_string(i), constantsCategory);
 			if (offset != UINT_MAX && varName.size() > 0)
 			{
-				_varOffsetMapping.emplace(varName, offset);
+				_varOffsetMapping.emplace(varName, make_tuple(offset, prevValue));
 			}
 		}
 

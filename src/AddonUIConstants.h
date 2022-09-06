@@ -186,6 +186,14 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
 				ImGui::SameLine();
 				ImGui::InputText("Offset", offsetInputBuf, offsetInputBufSize, ImGuiInputTextFlags_CharsHexadecimal);
 
+				static bool prevValue = false;
+				//if (group->GetVarOffsetMapping().contains(varSelectedItem))
+				//{
+				//	constantUsePrevValue = get<1>(group->GetVarOffsetMapping().at(varSelectedItem));
+				//}
+
+				ImGui::Checkbox("Use previous value", &prevValue);
+
 				ImGui::Separator();
 				
 				ImGui::SetCursorPosX(ImGui::GetWindowWidth() / 2 - 120 - ImGui::GetStyle().ItemSpacing.x / 2 - ImGui::GetStyle().FramePadding.x / 2);
@@ -193,7 +201,7 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
 				{
 					if (varSelectedItem.size() > 0)
 					{
-						group->SetVarMapping(std::stoul(string(offsetInputBuf), nullptr, 16), varSelectedItem);
+						group->SetVarMapping(std::stoul(string(offsetInputBuf), nullptr, 16), varSelectedItem, prevValue);
 					}
 					ImGui::CloseCurrentPopup();
 				}
@@ -207,10 +215,10 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
 				ImGui::EndPopup();
 			}
 
-			const char* varColumns[] = { "Variable", "Offset", "Type"};
+			const char* varColumns[] = { "Variable", "Offset", "Type", "Use Previous Value"};
 			vector<string> removal;
 
-			if (varMap.size() > 0 && ImGui::BeginTable("Buffer View Grid##vartable", 4, ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_NoBordersInBody))
+			if (varMap.size() > 0 && ImGui::BeginTable("Buffer View Grid##vartable", IM_ARRAYSIZE(varColumns) + 1, ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_NoBordersInBody))
 			{
 				for (int i = 0; i < IM_ARRAYSIZE(varColumns); i++)
 				{
@@ -227,9 +235,11 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
 					ImGui::TableNextColumn();
 					ImGui::Text(varMapping.first.c_str());
 					ImGui::TableNextColumn();
-					ImGui::Text(std::format("{:#05x}", varMapping.second).c_str());
+					ImGui::Text(std::format("{:#05x}", get<0>(varMapping.second)).c_str());
 					ImGui::TableNextColumn();
 					ImGui::Text(type_desc[static_cast<uint32_t>(std::get<0>(instance.GetRESTVariables()->at(varMapping.first)))]);
+					ImGui::TableNextColumn();
+					ImGui::Text(std::format("{}", get<1>(varMapping.second)).c_str());
 					ImGui::TableNextColumn();
 					if (ImGui::Button(std::format("Remove##{}", varMapping.first).c_str()))
 					{

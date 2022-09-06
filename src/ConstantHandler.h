@@ -21,6 +21,7 @@ namespace ConstantFeedback {
 		type_float3,
 		type_float4,
 		type_float3x3,
+		type_float4x3,
 		type_float4x4,
 		type_int,
 		type_uint
@@ -34,6 +35,7 @@ namespace ConstantFeedback {
 		4,	// float3
 		4,  // float4
 		4,	// float3x3
+		4,  // float4x3
 		4,	// float4x4
 		4,	// int
 		4	// uint
@@ -47,6 +49,7 @@ namespace ConstantFeedback {
 		3,	// float3
 		4,	// float4
 		9,	// float3x3
+		12, // float4x3
 		16,	// float4x4
 		1,	// int
 		1	// uint
@@ -60,6 +63,7 @@ namespace ConstantFeedback {
 		"float3",	// float3
 		"float4",	// float4
 		"float3x3",	// float3x3
+		"float4x3", // float4x3
 		"float4x4",	// float4x4
 		"int",	// int
 		"uint"	// uint
@@ -77,6 +81,7 @@ namespace ConstantFeedback {
 		void ApplyConstantValues(effect_runtime* runtime, const ToggleGroup*, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants);
 	private:
 		unordered_map<const ToggleGroup*, vector<uint8_t>> groupBufferContent;
+		unordered_map<const ToggleGroup*, vector<uint8_t>> groupPrevBufferContent;
 		unordered_map<const ToggleGroup*, resource> groupBufferResourceScratchpad;
 		unordered_map<const ToggleGroup*, buffer_range> groupBufferRanges;
 		unordered_map<const ToggleGroup*, unordered_map<string, uintptr_t>> groupVarMapping;
