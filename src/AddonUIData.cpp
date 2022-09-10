@@ -35,48 +35,48 @@
 using namespace AddonImGui;
 
 AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandlerBase* cHandler, atomic_uint32_t* activeCollectorFrameCounter,
-	vector<string>* techniques, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* constants) :
-	_pixelShaderManager(pixelShaderManager), _vertexShaderManager(vertexShaderManager), _activeCollectorFrameCounter(activeCollectorFrameCounter),
-	_allTechniques(techniques), _constantHandler(cHandler), _constants(constants)
+    vector<string>* techniques, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* constants) :
+    _pixelShaderManager(pixelShaderManager), _vertexShaderManager(vertexShaderManager), _activeCollectorFrameCounter(activeCollectorFrameCounter),
+    _allTechniques(techniques), _constantHandler(cHandler), _constants(constants)
 {
-	_toggleGroupIdShaderEditing = -1;
-	_overlayOpacity = 0.2f;
+    _toggleGroupIdShaderEditing = -1;
+    _overlayOpacity = 0.2f;
 
-	_keyBindings[Keybind::PIXEL_SHADER_DOWN] = VK_NUMPAD1;
-	_keyBindings[Keybind::PIXEL_SHADER_UP] = VK_NUMPAD2;
-	_keyBindings[Keybind::PIXEL_SHADER_MARK] = VK_NUMPAD3;
-	_keyBindings[Keybind::PIXEL_SHADER_MARKED_DOWN] = VK_NUMPAD1 | (VK_CONTROL << 8);
-	_keyBindings[Keybind::PIXEL_SHADER_MARKED_UP] = VK_NUMPAD2 | (VK_CONTROL << 8);
-	_keyBindings[Keybind::VERTEX_SHADER_DOWN] = VK_NUMPAD4;
-	_keyBindings[Keybind::VERTEX_SHADER_UP] = VK_NUMPAD5;
-	_keyBindings[Keybind::VERTEX_SHADER_MARK] = VK_NUMPAD6;
-	_keyBindings[Keybind::VERTEX_SHADER_MARKED_DOWN] = VK_NUMPAD4 | (VK_CONTROL << 8);
-	_keyBindings[Keybind::VERTEX_SHADER_MARKED_UP] = VK_NUMPAD5 | (VK_CONTROL << 8);
-	_keyBindings[Keybind::HISTORY_DOWN] = VK_NUMPAD7;
-	_keyBindings[Keybind::HISTORY_UP] = VK_NUMPAD8;
+    _keyBindings[Keybind::PIXEL_SHADER_DOWN] = VK_NUMPAD1;
+    _keyBindings[Keybind::PIXEL_SHADER_UP] = VK_NUMPAD2;
+    _keyBindings[Keybind::PIXEL_SHADER_MARK] = VK_NUMPAD3;
+    _keyBindings[Keybind::PIXEL_SHADER_MARKED_DOWN] = VK_NUMPAD1 | (VK_CONTROL << 8);
+    _keyBindings[Keybind::PIXEL_SHADER_MARKED_UP] = VK_NUMPAD2 | (VK_CONTROL << 8);
+    _keyBindings[Keybind::VERTEX_SHADER_DOWN] = VK_NUMPAD4;
+    _keyBindings[Keybind::VERTEX_SHADER_UP] = VK_NUMPAD5;
+    _keyBindings[Keybind::VERTEX_SHADER_MARK] = VK_NUMPAD6;
+    _keyBindings[Keybind::VERTEX_SHADER_MARKED_DOWN] = VK_NUMPAD4 | (VK_CONTROL << 8);
+    _keyBindings[Keybind::VERTEX_SHADER_MARKED_UP] = VK_NUMPAD5 | (VK_CONTROL << 8);
+    _keyBindings[Keybind::HISTORY_DOWN] = VK_NUMPAD7;
+    _keyBindings[Keybind::HISTORY_UP] = VK_NUMPAD8;
 }
 
 
 std::unordered_map<int, ToggleGroup>& AddonUIData::GetToggleGroups()
 {
-	return _toggleGroups;
+    return _toggleGroups;
 }
 
 const vector<string>* AddonUIData::GetAllTechniques() const
 {
-	return _allTechniques;
+    return _allTechniques;
 }
 
 
 const atomic_int& AddonUIData::GetToggleGroupIdShaderEditing() const
 {
-	return _toggleGroupIdShaderEditing;
+    return _toggleGroupIdShaderEditing;
 }
 
 void AddonUIData::StopHuntingMode()
 {
-	_pixelShaderManager->stopHuntingMode();
-	_vertexShaderManager->stopHuntingMode();
+    _pixelShaderManager->stopHuntingMode();
+    _vertexShaderManager->stopHuntingMode();
 }
 
 
@@ -85,9 +85,9 @@ void AddonUIData::StopHuntingMode()
 /// </summary>
 void AddonUIData::AddDefaultGroup()
 {
-	ToggleGroup toAdd("Default", ToggleGroup::getNewGroupId());
-	toAdd.setToggleKey(0);
-	_toggleGroups.emplace(toAdd.getId(), toAdd);
+    ToggleGroup toAdd("Default", ToggleGroup::getNewGroupId());
+    toAdd.setToggleKey(0);
+    _toggleGroups.emplace(toAdd.getId(), toAdd);
 }
 
 
@@ -96,47 +96,47 @@ void AddonUIData::AddDefaultGroup()
 /// </summary>
 void AddonUIData::LoadShaderTogglerIniFile()
 {
-	// Will assume it's started at the start of the application and therefore no groups are present.
+    // Will assume it's started at the start of the application and therefore no groups are present.
 
-	CDataFile iniFile;
-	if (!iniFile.Load(HASH_FILE_NAME))
-	{
-		// not there
-		return;
-	}
+    CDataFile iniFile;
+    if (!iniFile.Load(HASH_FILE_NAME))
+    {
+        // not there
+        return;
+    }
 
-	_memcpyHookAttempt = !iniFile.GetBool("DisableMemcpyHook", "General");
+    _memcpyHookAttempt = !iniFile.GetBool("DisableMemcpyHook", "General");
 
-	for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
-	{
-		uint32_t keybinding = iniFile.GetUInt(KeybindNames[i], "Keybindings");
-		if (keybinding != UINT_MAX)
-		{
-			_keyBindings[i] = keybinding;
-		}
-	}
+    for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
+    {
+        uint32_t keybinding = iniFile.GetUInt(KeybindNames[i], "Keybindings");
+        if (keybinding != UINT_MAX)
+        {
+            _keyBindings[i] = keybinding;
+        }
+    }
 
-	int groupCounter = 0;
-	const int numberOfGroups = iniFile.GetInt("AmountGroups", "General");
-	if (numberOfGroups == INT_MIN)
-	{
-		// old format file?
-		AddDefaultGroup();
-		groupCounter = -1;	// enforce old format read for pre 1.0 ini file.
-	}
-	else
-	{
-		for (int i = 0; i < numberOfGroups; i++)
-		{
-			ToggleGroup group("", ToggleGroup::getNewGroupId());
-			_toggleGroups.emplace(group.getId(), group);
-		}
-	}
-	for (auto& group : _toggleGroups)
-	{
-		group.second.loadState(iniFile, groupCounter);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
-		groupCounter++;
-	}
+    int groupCounter = 0;
+    const int numberOfGroups = iniFile.GetInt("AmountGroups", "General");
+    if (numberOfGroups == INT_MIN)
+    {
+        // old format file?
+        AddDefaultGroup();
+        groupCounter = -1;	// enforce old format read for pre 1.0 ini file.
+    }
+    else
+    {
+        for (int i = 0; i < numberOfGroups; i++)
+        {
+            ToggleGroup group("", ToggleGroup::getNewGroupId());
+            _toggleGroups.emplace(group.getId(), group);
+        }
+    }
+    for (auto& group : _toggleGroups)
+    {
+        group.second.loadState(iniFile, groupCounter);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
+        groupCounter++;
+    }
 }
 
 
@@ -145,27 +145,27 @@ void AddonUIData::LoadShaderTogglerIniFile()
 /// </summary>
 void AddonUIData::SaveShaderTogglerIniFile()
 {
-	// format: first section with # of groups, then per group a section with pixel and vertex shaders, as well as their name and key value.
-	// groups are stored with "Group" + group counter, starting with 0.
-	CDataFile iniFile;
+    // format: first section with # of groups, then per group a section with pixel and vertex shaders, as well as their name and key value.
+    // groups are stored with "Group" + group counter, starting with 0.
+    CDataFile iniFile;
 
-	iniFile.SetBool("DisableMemcpyHook", !_memcpyHookAttempt, "", "General");
+    iniFile.SetBool("DisableMemcpyHook", !_memcpyHookAttempt, "", "General");
 
-	for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
-	{
-		uint32_t keybinding = iniFile.SetUInt(KeybindNames[i], _keyBindings[i], "", "Keybindings");
-	}
+    for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
+    {
+        uint32_t keybinding = iniFile.SetUInt(KeybindNames[i], _keyBindings[i], "", "Keybindings");
+    }
 
-	iniFile.SetInt("AmountGroups", static_cast<int>(_toggleGroups.size()), "", "General");
+    iniFile.SetInt("AmountGroups", static_cast<int>(_toggleGroups.size()), "", "General");
 
-	int groupCounter = 0;
-	for (const auto& group : _toggleGroups)
-	{
-		group.second.saveState(iniFile, groupCounter);
-		groupCounter++;
-	}
-	iniFile.SetFileName(HASH_FILE_NAME);
-	iniFile.Save();
+    int groupCounter = 0;
+    for (const auto& group : _toggleGroups)
+    {
+        group.second.saveState(iniFile, groupCounter);
+        groupCounter++;
+    }
+    iniFile.SetFileName(HASH_FILE_NAME);
+    iniFile.Save();
 }
 
 
@@ -176,13 +176,13 @@ void AddonUIData::SaveShaderTogglerIniFile()
 /// <param name="groupEditing"></param>
 void AddonUIData::EndShaderEditing(bool acceptCollectedShaderHashes, ToggleGroup& groupEditing)
 {
-	if (acceptCollectedShaderHashes && _toggleGroupIdShaderEditing == groupEditing.getId())
-	{
-		groupEditing.storeCollectedHashes(_pixelShaderManager->getMarkedShaderHashes(), _vertexShaderManager->getMarkedShaderHashes());
-		_pixelShaderManager->stopHuntingMode();
-		_vertexShaderManager->stopHuntingMode();
-	}
-	_toggleGroupIdShaderEditing = -1;
+    if (acceptCollectedShaderHashes && _toggleGroupIdShaderEditing == groupEditing.getId())
+    {
+        groupEditing.storeCollectedHashes(_pixelShaderManager->getMarkedShaderHashes(), _vertexShaderManager->getMarkedShaderHashes());
+        _pixelShaderManager->stopHuntingMode();
+        _vertexShaderManager->stopHuntingMode();
+    }
+    _toggleGroupIdShaderEditing = -1;
 }
 
 
@@ -192,21 +192,21 @@ void AddonUIData::EndShaderEditing(bool acceptCollectedShaderHashes, ToggleGroup
 /// <param name="groupEditing"></param>
 void AddonUIData::StartShaderEditing(ToggleGroup& groupEditing)
 {
-	if (_toggleGroupIdShaderEditing == groupEditing.getId())
-	{
-		return;
-	}
-	if (_toggleGroupIdShaderEditing >= 0)
-	{
-		EndShaderEditing(false, groupEditing);
-	}
-	_toggleGroupIdShaderEditing = groupEditing.getId();
-	*_activeCollectorFrameCounter = _startValueFramecountCollectionPhase;
-	_pixelShaderManager->startHuntingMode(groupEditing.getPixelShaderHashes());
-	_vertexShaderManager->startHuntingMode(groupEditing.getVertexShaderHashes());
+    if (_toggleGroupIdShaderEditing == groupEditing.getId())
+    {
+        return;
+    }
+    if (_toggleGroupIdShaderEditing >= 0)
+    {
+        EndShaderEditing(false, groupEditing);
+    }
+    _toggleGroupIdShaderEditing = groupEditing.getId();
+    *_activeCollectorFrameCounter = _startValueFramecountCollectionPhase;
+    _pixelShaderManager->startHuntingMode(groupEditing.getPixelShaderHashes());
+    _vertexShaderManager->startHuntingMode(groupEditing.getVertexShaderHashes());
 
-	// after copying them to the managers, we can now clear the group's shader.
-	groupEditing.clearHashes();
+    // after copying them to the managers, we can now clear the group's shader.
+    groupEditing.clearHashes();
 }
 
 
@@ -216,7 +216,7 @@ void AddonUIData::StartShaderEditing(ToggleGroup& groupEditing)
 /// <param name="groupEditing"></param>
 void AddonUIData::StartEffectEditing(ToggleGroup& groupEditing)
 {
-	_toggleGroupIdEffectEditing = groupEditing.getId();
+    _toggleGroupIdEffectEditing = groupEditing.getId();
 }
 
 /// <summary>
@@ -225,7 +225,7 @@ void AddonUIData::StartEffectEditing(ToggleGroup& groupEditing)
 /// <param name="groupEditing"></param>
 void AddonUIData::EndEffectEditing()
 {
-	_toggleGroupIdEffectEditing = -1;
+    _toggleGroupIdEffectEditing = -1;
 }
 
 /// <summary>
@@ -234,7 +234,7 @@ void AddonUIData::EndEffectEditing()
 /// <param name="groupEditing"></param>
 void AddonUIData::StartConstantEditing(ToggleGroup& groupEditing)
 {
-	_toggleGroupIdConstantEditing = groupEditing.getId();
+    _toggleGroupIdConstantEditing = groupEditing.getId();
 }
 
 /// <summary>
@@ -243,15 +243,15 @@ void AddonUIData::StartConstantEditing(ToggleGroup& groupEditing)
 /// <param name="groupEditing"></param>
 void AddonUIData::EndConstantEditing()
 {
-	_toggleGroupIdConstantEditing = -1;
+    _toggleGroupIdConstantEditing = -1;
 }
 
 uint32_t AddonUIData::GetKeybinding(Keybind keybind)
 {
-	return _keyBindings[keybind];
+    return _keyBindings[keybind];
 }
 
 void AddonUIData::SetKeybinding(Keybind keybind, uint32_t keys)
 {
-	_keyBindings[keybind] = keys;
+    _keyBindings[keybind] = keys;
 }
