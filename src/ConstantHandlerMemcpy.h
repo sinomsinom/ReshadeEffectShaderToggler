@@ -57,13 +57,10 @@ namespace ConstantFeedback {
 		void SetBufferRange(const ToggleGroup* group, buffer_range range, device* dev, command_list* cmd_list, command_queue* queue);
 		void RemoveGroup(const ToggleGroup*, device* dev, command_queue* queue);
 
-		//void LockHostConstantBuffer(uintptr_t resourceHandle);
-		//void UnlockHostConstantBuffer(uintptr_t resourceHandle);
 		uint8_t* GetHostConstantBuffer(uint64_t resourceHandle);
 		void CreateHostConstantBuffer(device* dev, resource resource);
 		void DeleteHostConstantBuffer(resource resource);
 		bool IsBufferOfInterest(uint64_t handle);
-		void RegenerateBuffersOfInterest();
 
 		bool Hook(sig_memcpy** original, sig_memcpy* detour);
 		bool Unhook();

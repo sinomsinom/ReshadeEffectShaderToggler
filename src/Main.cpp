@@ -272,7 +272,6 @@ static void RenderRemainingEffects(effect_runtime* runtime)
 
 			if (active_rtv == 0 || !deviceData.rendered_effects) // Nothing rendered yet by the addon in the end, let reshade do it's thing
 			{
-				//constantHandler.PerformCopies(device);
 				return;
 			}
 

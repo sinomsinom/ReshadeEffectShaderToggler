@@ -99,50 +99,16 @@ void ConstantHandlerMemcpy::CreateHostConstantBuffer(device* dev, resource resou
 	resource_desc targetBufferDesc = dev->get_resource_desc(resource);
 
 	deviceToHostConstantBuffer.emplace(resource.handle, vector<uint8_t>(targetBufferDesc.buffer.size, 0));
-	//hostConstantBufferMutex.emplace(resource.handle, std::shared_mutex());
 }
 
 void ConstantHandlerMemcpy::DeleteHostConstantBuffer(resource resource)
 {
-	//hostConstantBufferMutex.erase(resource.handle);
 	deviceToHostConstantBuffer.erase(resource.handle);
 }
 
 bool ConstantHandlerMemcpy::IsBufferOfInterest(uint64_t handle)
 {
 	return buffersOfInterest.contains(handle);
-}
-
-
-void ConstantHandlerMemcpy::RegenerateBuffersOfInterest()
-{
-	//std::transform(groupBufferRanges.cbegin(), groupBufferRanges.cend(),
-	//	std::inserter(buffersOfInterest, buffersOfInterest.begin()),
-	//	[](const std::pair<const ToggleGroup*, buffer_range>& key_value)
-	//	{ 
-	//		return key_value.second.buffer.handle;
-	//	});
-
-	//for (const auto& used : usedBuffers)
-	//{
-	//	buffersOfInterest[used] = 5;
-	//}
-	//
-	//// Delete once a buffer handle wasn't used for 5 frames
-	//vector<uintptr_t> toDelete;
-	//for (const auto& kV : buffersOfInterest)
-	//{
-	//	buffersOfInterest[kV.first] = kV.second - 1;
-	//	if (kV.second == 0)
-	//	{
-	//		toDelete.push_back(kV.first);
-	//	}
-	//}
-	//
-	//for (const auto& del : toDelete)
-	//{
-	//	buffersOfInterest.erase(del);
-	//}
 }
 
 string ConstantHandlerMemcpy::GetExecutableName()
