@@ -1,0 +1,6 @@
+[submodule "deps/sigmatch"]
+	path = deps/sigmatch
+	url = https://github.com/SpriteOvO/sigmatch.git
+[submodule "deps/minhook"]
+	path = deps/minhook
+	url = https://github.com/TsudaKageyu/minhook.git

@@ -34,7 +34,7 @@
 
 using namespace AddonImGui;
 
-AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandler* cHandler, atomic_uint32_t* activeCollectorFrameCounter,
+AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandlerBase* cHandler, atomic_uint32_t* activeCollectorFrameCounter,
 	vector<string>* techniques, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* constants) :
 	_pixelShaderManager(pixelShaderManager), _vertexShaderManager(vertexShaderManager), _activeCollectorFrameCounter(activeCollectorFrameCounter),
 	_allTechniques(techniques), _constantHandler(cHandler), _constants(constants)
@@ -105,6 +105,8 @@ void AddonUIData::LoadShaderTogglerIniFile()
 		return;
 	}
 
+	_memcpyHookAttempt = !iniFile.GetBool("DisableMemcpyHook", "General");
+
 	for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
 	{
 		uint32_t keybinding = iniFile.GetUInt(KeybindNames[i], "Keybindings");
@@ -146,6 +148,8 @@ void AddonUIData::SaveShaderTogglerIniFile()
 	// format: first section with # of groups, then per group a section with pixel and vertex shaders, as well as their name and key value.
 	// groups are stored with "Group" + group counter, starting with 0.
 	CDataFile iniFile;
+
+	iniFile.SetBool("DisableMemcpyHook", !_memcpyHookAttempt, "", "General");
 
 	for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
 	{

@@ -84,7 +84,7 @@ namespace AddonImGui
 	private:
 		ShaderManager* _pixelShaderManager;
 		ShaderManager* _vertexShaderManager;
-		ConstantHandler* _constantHandler;
+		ConstantHandlerBase* _constantHandler;
 		atomic_uint32_t* _activeCollectorFrameCounter;
 		vector<string>* _allTechniques;
 		unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* _constants;
@@ -96,8 +96,9 @@ namespace AddonImGui
 		int _startValueFramecountCollectionPhase = FRAMECOUNT_COLLECTION_PHASE_DEFAULT;
 		float _overlayOpacity = 0.2f;
 		uint32_t _keyBindings[ARRAYSIZE(KeybindNames)];
+		bool _memcpyHookAttempt = true;
 	public:
-		AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandler* constants, atomic_uint32_t* activeCollectorFrameCounter,
+		AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandlerBase* constants, atomic_uint32_t* activeCollectorFrameCounter,
 			vector<string>* techniques, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>*);
 		std::unordered_map<int, ToggleGroup>& GetToggleGroups();
 		void AddDefaultGroup();
@@ -122,8 +123,10 @@ namespace AddonImGui
 		atomic_uint32_t* ActiveCollectorFrameCounter() { return _activeCollectorFrameCounter; }
 		ShaderManager* GetPixelShaderManager() { return _pixelShaderManager; }
 		ShaderManager* GetVertexShaderManager() { return _vertexShaderManager; }
-		ConstantHandler* GetConstantHandler() { return _constantHandler; }
+		void SetConstantHandler(ConstantHandlerBase* handler) { _constantHandler = handler; }
+		ConstantHandlerBase* GetConstantHandler() { return _constantHandler; }
 		uint32_t GetKeybinding(Keybind keybind);
+		bool GetAttemptMemcpyHook() { return _memcpyHookAttempt; }
 		void SetKeybinding(Keybind keybind, uint32_t keys);
 		const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables() { return _constants; };
 		reshade::api::format cFormat;

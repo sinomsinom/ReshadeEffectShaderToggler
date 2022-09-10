@@ -47,6 +47,8 @@
 #include "AddonUIData.h"
 #include "AddonUIDisplay.h"
 #include "ConstantHandler.h"
+#include "ConstantHandlerMemcpy.h"
+#include <MinHook.h>
 
 using namespace reshade::api;
 using namespace ShaderToggler;
@@ -87,19 +89,27 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
 
 static ShaderToggler::ShaderManager g_pixelShaderManager;
 static ShaderToggler::ShaderManager g_vertexShaderManager;
-static ConstantHandler constantHandler;
+
+static ConstantHandler constantHandlerFallback;
+static ConstantHandlerMemcpy constantHandlerMemcpy;
+static ConstantHandlerBase* constantHandler = nullptr;
+static bool constantHandlerHooked = false;
+
 static atomic_uint32_t g_activeCollectorFrameCounter = 0;
 static vector<string> allTechniques;
 static unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>> g_restVariables;
-static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, &constantHandler, &g_activeCollectorFrameCounter, &allTechniques, &g_restVariables);
+static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, constantHandler, &g_activeCollectorFrameCounter, &allTechniques, &g_restVariables);
 static std::shared_mutex device_data_mutex;
 static std::shared_mutex resource_mutex;
+static std::shared_mutex map_mutex;
 static char g_charBuffer[CHAR_BUFFER_SIZE];
 static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
 static const float clearColor[] = { 0, 0, 0, 0 };
-static unordered_set<uintptr_t> s_constantBuffers;
-static unordered_set<uintptr_t> s_resources;
-static unordered_set<uintptr_t> s_resourceViews;
+
+static unordered_set<uint64_t> s_constantBuffers;
+static unordered_set<uint64_t> s_resources;
+static unordered_set<uint64_t> s_resourceViews;
+static unordered_map<uint64_t, void*> s_resourceMemoryMapping;
 
 static resource s_currentBackbuffer = { 0 };
 static resource_view s_backBufferView = { 0 };
@@ -262,6 +272,7 @@ static void RenderRemainingEffects(effect_runtime* runtime)
 
 			if (active_rtv == 0 || !deviceData.rendered_effects) // Nothing rendered yet by the addon in the end, let reshade do it's thing
 			{
+				//constantHandler.PerformCopies(device);
 				return;
 			}
 
@@ -316,9 +327,14 @@ static void onInitResource(device* device, const resource_desc& desc, const subr
 	std::unique_lock<shared_mutex> lock(resource_mutex);
 
 	s_resources.emplace(handle.handle);
-	if (static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
+	if (desc.heap == memory_heap::cpu_to_gpu && static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
 	{
 		s_constantBuffers.emplace(handle.handle);
+
+		if (constantHandlerHooked)
+		{
+			constantHandlerMemcpy.CreateHostConstantBuffer(device, handle);
+		}
 	}
 }
 
@@ -328,6 +344,11 @@ static void onDestroyResource(device* device, resource res)
 	std::unique_lock<shared_mutex> lock(resource_mutex);
 	s_constantBuffers.erase(res.handle);
 	s_resources.erase(res.handle);
+	
+	if (constantHandlerHooked)
+	{
+		constantHandlerMemcpy.DeleteHostConstantBuffer(res);
+	}
 }
 
 
@@ -1042,11 +1063,11 @@ static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipel
 		{
 			if (!s_constantBuffers.contains(buffer[i].buffer.handle))
 				continue;
-
-			constantHandler.SetBufferRange(group, buffer[i],
+			
+			constantHandler->SetBufferRange(group, buffer[i],
 				cmd_list->get_device(), cmd_list, deviceData.current_runtime->get_command_queue());
 	
-			constantHandler.ApplyConstantValues(deviceData.current_runtime, group, g_restVariables);
+			constantHandler->ApplyConstantValues(deviceData.current_runtime, group, g_restVariables);
 			deviceData.constantsUpdated.insert(group);
 			break;
 		}
@@ -1067,10 +1088,92 @@ static void onReshadePresent(effect_runtime* runtime)
 }
 
 
+static void onMapBufferRegion(device* device, resource resource, uint64_t offset, uint64_t size, map_access access, void** data)
+{
+	if(constantHandlerHooked && constantHandlerMemcpy.IsBufferOfInterest(resource.handle))
+	{
+		std::unique_lock<shared_mutex> lock(map_mutex);
+		s_resourceMemoryMapping[resource.handle] = *data;
+	}
+}
+
+
+static void onUnmapBufferRegion(device* device, resource resource)
+{
+	if (constantHandlerHooked && constantHandlerMemcpy.IsBufferOfInterest(resource.handle))
+	{
+		std::unique_lock<shared_mutex> lock(map_mutex);
+		s_resourceMemoryMapping.erase(resource.handle);
+	}
+}
+
+static sig_memcpy* org_memcpy = nullptr;
+
+static void* __fastcall detour_memcpy(void* dest, void* src, size_t size)
+{
+	std::shared_lock<shared_mutex> lock(map_mutex);
+	for (auto& mapping : s_resourceMemoryMapping)
+	{
+		if (dest == mapping.second)
+		{
+			lock.unlock();
+			std::shared_lock<shared_mutex> lockR(resource_mutex);
+			uint8_t* buf = constantHandlerMemcpy.GetHostConstantBuffer(mapping.first);
+			lockR.unlock();
+	
+			if(buf != nullptr)
+				org_memcpy(buf, src, size);
+			break;
+		}
+	}
+	if(lock.owns_lock()) lock.unlock();
+
+	return org_memcpy(dest, src, size);
+}
+
+
 static void displaySettings(effect_runtime* runtime)
 {
 	DisplaySettings(g_addonUIData, runtime);
 }
+
+
+static bool InitHooks()
+{
+	// Initialize MinHook.
+	if (MH_Initialize() != MH_OK)
+	{
+		return false;
+	}
+
+	if (g_addonUIData.GetAttemptMemcpyHook())
+	{
+		if (constantHandlerMemcpy.Hook(&org_memcpy, detour_memcpy))
+		{
+			constantHandler = &constantHandlerMemcpy;
+			g_addonUIData.SetConstantHandler(&constantHandlerMemcpy);
+			constantHandlerHooked = true;
+			return true;
+		}
+	}
+
+	constantHandler = &constantHandlerFallback;
+	g_addonUIData.SetConstantHandler(&constantHandlerFallback);
+
+	return true;
+}
+
+
+static bool UnInitHooks()
+{
+	if (MH_Uninitialize() != MH_OK)
+	{
+		return false;
+	}
+
+	return true;
+}
+
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 {
@@ -1082,7 +1185,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 			return FALSE;
 		}
 		g_addonUIData.LoadShaderTogglerIniFile();
+		InitHooks();
 		reshade::register_event<reshade::addon_event::init_resource>(onInitResource);
+		reshade::register_event<reshade::addon_event::map_buffer_region>(onMapBufferRegion);
+		reshade::register_event<reshade::addon_event::unmap_buffer_region>(onUnmapBufferRegion);
 		reshade::register_event<reshade::addon_event::destroy_resource>(onDestroyResource);
 		reshade::register_event<reshade::addon_event::init_resource_view>(onInitResourceView);
 		reshade::register_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
@@ -1108,7 +1214,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		reshade::register_overlay(nullptr, &displaySettings);
 		break;
 	case DLL_PROCESS_DETACH:
+		UnInitHooks();
 		reshade::unregister_event<reshade::addon_event::reshade_present>(onReshadePresent);
+		reshade::unregister_event<reshade::addon_event::map_buffer_region>(onMapBufferRegion);
+		reshade::unregister_event<reshade::addon_event::unmap_buffer_region>(onUnmapBufferRegion);
 		reshade::unregister_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
 		reshade::unregister_event<reshade::addon_event::init_pipeline>(onInitPipeline);
 		reshade::unregister_event<reshade::addon_event::reshade_overlay>(onReshadeOverlay);
