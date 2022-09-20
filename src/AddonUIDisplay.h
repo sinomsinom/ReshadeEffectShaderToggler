@@ -68,7 +68,7 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
 			ImGui::SameLine();
 			ImGui::Text("Search: ");
 			ImGui::SameLine();
-			ImGui::InputText("", searchBuf, 256, ImGuiInputTextFlags_None);
+			ImGui::InputText("##search", searchBuf, 256, ImGuiInputTextFlags_None);
 
 			ImGui::Separator();
 
