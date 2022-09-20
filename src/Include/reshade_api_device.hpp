@@ -627,6 +627,12 @@ namespace reshade::api
 		/// <param name="count">Number of descriptor sets to bind.</param>
 		/// <param name="sets">Pointer to an array of descriptor sets to bind.</param>
 		virtual void bind_descriptor_sets(shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_set *sets) = 0;
+		/// <summary>
+		/// Binds a pipeline layout describing the descriptors
+		/// </summary>
+		/// <param name="stages">Shader stages that will use the descriptors.</param>
+		/// <param name="layout">Pipeline layout that describes the descriptors.</param>
+		virtual void bind_layout(shader_stage stages, pipeline_layout layout) = 0;
 
 		/// <summary>
 		/// Binds an index buffer to the input-assembler stage.
