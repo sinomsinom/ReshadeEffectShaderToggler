@@ -747,6 +747,9 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 
 static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_set* sets)
 {
+    if (cmd_list->get_device()->get_api() != device_api::d3d12)
+        return;
+
     const int type_index = (stages == shader_stage::all_compute) ? 1 : 0;
 
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
@@ -782,6 +785,9 @@ static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pi
 
 static void onPushConstants(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, uint32_t first, uint32_t count, const uint32_t* values)
 {
+    if (cmd_list->get_device()->get_api() != device_api::d3d12)
+        return;
+
     const int type_index = (stages == shader_stage::all_compute) ? 1 : 0;
 
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
@@ -795,23 +801,11 @@ static void onPushConstants(command_list* cmd_list, shader_stage stages, pipelin
 }
 
 
-static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
-{
-    const int type_index = (stages == shader_stage::all_compute) ? 1 : 0;
-
-    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
-
-    if (data.descriptorsState.transient_mask[layout.handle].size() < layout_param + 1)
-    {
-        data.descriptorsState.transient_mask[layout.handle].resize(layout_param + 1);
-    }
-
-    data.descriptorsState.transient_mask[layout.handle][layout_param] = true;
-}
-
-
 static void onBindViewports(command_list* cmd_list, uint32_t first, uint32_t count, const viewport* viewports)
 {
+    if (cmd_list->get_device()->get_api() != device_api::d3d12)
+        return;
+
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
     data.viewportsState.callIndex = data.callIndex;
     data.callIndex++;
@@ -832,6 +826,9 @@ static void onBindViewports(command_list* cmd_list, uint32_t first, uint32_t cou
 
 static void onBindScissorRects(command_list* cmd_list, uint32_t first, uint32_t count, const rect* rects)
 {
+    if (cmd_list->get_device()->get_api() != device_api::d3d12)
+        return;
+
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
     data.scissorRectsState.callIndex = data.callIndex;
     data.callIndex++;
@@ -852,6 +849,9 @@ static void onBindScissorRects(command_list* cmd_list, uint32_t first, uint32_t 
 
 static void on_bind_pipeline_states(command_list* cmd_list, uint32_t count, const dynamic_state* states, const uint32_t* values)
 {
+    if (cmd_list->get_device()->get_api() != device_api::d3d12)
+        return;
+
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
 
     for (uint32_t i = 0; i < count; i++)
@@ -940,7 +940,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
         reshade::register_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
         reshade::register_event<reshade::addon_event::push_constants>(onPushConstants);
-        reshade::register_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
         reshade::register_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
         reshade::register_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
         reshade::register_event<reshade::addon_event::bind_pipeline_states>(on_bind_pipeline_states);
@@ -970,7 +969,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
         reshade::unregister_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
         reshade::unregister_event<reshade::addon_event::push_constants>(onPushConstants);
-        reshade::unregister_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
         reshade::unregister_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
         reshade::unregister_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
         reshade::unregister_event<reshade::addon_event::bind_pipeline_states>(on_bind_pipeline_states);
