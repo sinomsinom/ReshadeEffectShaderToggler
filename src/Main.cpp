@@ -53,64 +53,162 @@ using namespace AddonImGui;
 extern "C" __declspec(dllexport) const char* NAME = "Reshade Effect Shader Toggler";
 extern "C" __declspec(dllexport) const char* DESCRIPTION = "Addon which allows you to define groups of shaders to render Reshade effects on.";
 
-struct BindRenderTargetsState {
-    command_list* cmd_list;
-    uint32_t count;
-    const resource_view* rtvs;
-    resource_view dsv;
+enum PipelineBindingTypes : uint32_t
+{
+    unknown = 0,
+    bind_render_target,
+    bind_viewport,
+    bind_scissor_rect,
+    bind_descriptors,
+    bind_pipeline_states,
+    push_constants
 };
 
-struct BindViewportsState {
-    command_list* cmd_list;
+struct PipelineBindingBase
+{
+public:
+    command_list* cmd_list = nullptr;
+    uint32_t callIndex = 0;
+    virtual PipelineBindingTypes GetType() { return PipelineBindingTypes::unknown; }
+};
+
+template<PipelineBindingTypes T>
+struct PipelineBinding : PipelineBindingBase
+{
+public:
+    PipelineBindingTypes GetType() override { return T; }
+};
+
+struct BindRenderTargetsState : PipelineBinding<PipelineBindingTypes::bind_render_target> {
+    uint32_t count;
+    vector<resource_view> rtvs;
+    resource_view dsv;
+
+    void Reset()
+    {
+        callIndex = 0;
+        cmd_list = nullptr;
+        rtvs.clear();
+        dsv = { 0 };
+        count = 0;
+    }
+};
+
+struct BindViewportsState : PipelineBinding<PipelineBindingTypes::bind_viewport> {
     uint32_t first;
     uint32_t count;
     vector<viewport> viewports;
+
+    void Reset()
+    {
+        callIndex = 0;
+        cmd_list = nullptr;
+        first = 0;
+        count = 0;
+        viewports.clear();
+    }
 };
 
-struct BindScissorRectsState {
-    command_list* cmd_list;
+struct BindScissorRectsState : PipelineBinding<PipelineBindingTypes::bind_scissor_rect> {
     uint32_t first;
     uint32_t count;
     vector<rect> rects;
+
+    void Reset()
+    {
+        callIndex = 0;
+        cmd_list = nullptr;
+        first = 0;
+        count = 0;
+        rects.clear();
+    }
 };
 
-struct BindPipelineState {
-    command_list* cmd_list;
-    pipeline_stage stages;
-    pipeline pipelineHandle;
+struct PushConstantsState : PipelineBinding<PipelineBindingTypes::push_constants> {
+    uint32_t layout_param;
+    uint32_t first;
+    uint32_t count;
+    vector<uint32_t> values;
+
+    void Reset()
+    {
+        callIndex = 0;
+        cmd_list = nullptr;
+        layout_param = 0;
+        first = 0;
+        count = 0;
+        values.clear();
+    }
 };
 
-struct BindDescriptorsState {
+struct BindDescriptorsState : PipelineBinding<PipelineBindingTypes::bind_descriptors> {
     pipeline_layout current_layout[2];
-    pipeline_layout current_layout_bind[2];
     vector<descriptor_set> current_sets[2];
+    unordered_map<uint64_t, vector<bool>> transient_mask;
+
+    void Reset()
+    {
+        callIndex = 0;
+        cmd_list = nullptr;
+        current_layout[0] = { 0 };
+        current_layout[1] = { 0 };
+        current_sets[0].clear();
+        current_sets[1].clear();
+        transient_mask.clear();
+    }
 };
 
-enum DescriptorEmissionType : uint32_t {
-    unknown = 0,
-    bind_only = 1,
-    push_only = 2,
-    bind_then_push = 4,
-    push_then_bind = 8
+
+struct BindPipelineStatesState : PipelineBinding<PipelineBindingTypes::bind_pipeline_states> {
+    uint32_t value;
+    bool valuesSet;
+    dynamic_state state;
+
+    BindPipelineStatesState(dynamic_state s)
+    {
+        state = s;
+        Reset();
+    }
+
+    void Reset()
+    {
+        callIndex = 0;
+        cmd_list = nullptr;
+        value = 0;
+        valuesSet = false;
+    }
 };
+
+struct BindPipelineStatesStates {
+    BindPipelineStatesState states[2] = { BindPipelineStatesState(dynamic_state::blend_constant), BindPipelineStatesState(dynamic_state::primitive_topology) };
+
+    void Reset()
+    {
+        states[0].Reset();
+        states[1].Reset();
+    }
+};
+
 
 struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataContainer {
     uint64_t activePixelShaderPipeline;
     uint64_t activeVertexShaderPipeline;
-    resource_view active_rtv = resource_view{ 0 };
+    vector<resource_view> active_rtvs;
     atomic_bool rendered_effects = false;
     unordered_set<string> techniquesToRender;
 
+    uint32_t callIndex;
     BindRenderTargetsState renderTargetState;
     BindDescriptorsState descriptorsState;
     BindViewportsState viewportsState;
     BindScissorRectsState scissorRectsState;
-    BindPipelineState pipelineState;
+    BindPipelineStatesStates pipelineStatesState;
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
     effect_runtime* current_runtime = nullptr;
     unordered_map<string, bool> allEnabledTechniques;
+    unordered_map<uint64_t, uint32_t> rootSigParamCount;
 };
 
 #define CHAR_BUFFER_SIZE 256
@@ -121,10 +219,11 @@ static ShaderToggler::ShaderManager g_vertexShaderManager;
 static atomic_uint32_t g_activeCollectorFrameCounter = 0;
 static vector<string> allTechniques;
 static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, &g_activeCollectorFrameCounter, &allTechniques);
-static std::shared_mutex s_mutex;
+static shared_mutex s_render_mutex;
+static shared_mutex s_resource_mutex;
 static char g_charBuffer[CHAR_BUFFER_SIZE];
 static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
-
+static unordered_set<uint64_t> s_resources;
 
 /// <summary>
 /// Calculates a crc32 hash from the passed in shader bytecode. The hash is used to identity the shader in future runs.
@@ -184,18 +283,14 @@ static void onResetCommandList(command_list* commandList)
     commandListData.activePixelShaderPipeline = -1;
     commandListData.activeVertexShaderPipeline = -1;
     commandListData.rendered_effects = false;
-    commandListData.active_rtv = { 0 };
+    commandListData.active_rtvs.clear();
 
-    commandListData.descriptorsState.current_layout[0] = { 0 };
-    commandListData.descriptorsState.current_layout[1] = { 0 };
-    commandListData.descriptorsState.current_layout_bind[0] = { 0 };
-    commandListData.descriptorsState.current_layout_bind[1] = { 0 };
-    commandListData.descriptorsState.current_sets[0].clear();
-    commandListData.descriptorsState.current_sets[1].clear();
-
-    commandListData.scissorRectsState = { nullptr, 0, 0, {} };
-    commandListData.viewportsState = { nullptr, 0, 0, {} };
-    commandListData.pipelineState = { nullptr, pipeline_stage::all, {0} };
+    commandListData.callIndex = 0;
+    commandListData.renderTargetState.Reset();
+    commandListData.descriptorsState.Reset();
+    commandListData.scissorRectsState.Reset();
+    commandListData.viewportsState.Reset();
+    commandListData.pipelineStatesState.Reset();
 
     commandListData.techniquesToRender.clear();
 }
@@ -317,6 +412,8 @@ bool checkDrawCallForCommandList(command_list* commandList)
     CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
 
+    shared_lock<shared_mutex> lock(s_render_mutex);
+
     bool all_rendered = true;
     std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [&all_rendered](const auto& el) {
         all_rendered &= el.second;
@@ -372,23 +469,52 @@ bool checkDrawCallForCommandList(command_list* commandList)
 }
 
 
-static void RenderEffects(command_list* cmd_list)
+static bool RenderEffects(command_list* cmd_list)
 {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
     {
-        return;
+        return false;
     }
 
     device* device = cmd_list->get_device();
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-    if (deviceData.current_runtime == nullptr || commandListData.active_rtv == 0) {
-        return;
+    if (deviceData.current_runtime == nullptr || commandListData.active_rtvs.size() == 0) {
+        return false;
     }
 
+    resource_view active_rtv = { 0 };
+    for (int i = 0; i < commandListData.active_rtvs.size(); i++)
+    {
+        if (deviceData.current_runtime != nullptr && commandListData.active_rtvs[i] != 0)
+        {
+            resource rs = device->get_resource_from_view(commandListData.active_rtvs[i]);
+            if (rs == 0)
+            {
+                // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
+                continue;
+            }
+
+            const resource_desc texture_desc = device->get_resource_desc(rs);
+
+            uint32_t frame_width, frame_height;
+            deviceData.current_runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
+
+            if (texture_desc.texture.height == frame_height && texture_desc.texture.width == frame_width)
+            {
+                active_rtv = commandListData.active_rtvs[i];
+                break;
+            }
+        }
+    }
+
+    if (active_rtv == 0)
+        return false;
+
+    unique_lock<shared_mutex> lock(s_render_mutex);
     if (commandListData.techniquesToRender.size() > 0) {
-        // dummy render call to prevent reshade from rendering effects on top if we're rendering too
+
         if (!commandListData.rendered_effects)
         {
             vector<effect_technique> enabledTechniques;
@@ -405,7 +531,7 @@ static void RenderEffects(command_list* cmd_list)
                 deviceData.current_runtime->set_technique_state(tech, false);
             }
 
-            deviceData.current_runtime->render_effects(cmd_list, commandListData.active_rtv);
+            deviceData.current_runtime->render_effects(cmd_list, active_rtv);
 
             for (auto& tech : enabledTechniques)
             {
@@ -415,19 +541,107 @@ static void RenderEffects(command_list* cmd_list)
             commandListData.rendered_effects = true;
         }
 
-        enumerateTechniques(deviceData.current_runtime, [cmd_list, &deviceData, &commandListData](effect_runtime* runtime, effect_technique technique, string& name) {
-            if (commandListData.techniquesToRender.contains(name) && !deviceData.allEnabledTechniques[name])
+        enumerateTechniques(deviceData.current_runtime, [cmd_list, &deviceData, &commandListData, &active_rtv](effect_runtime* runtime, effect_technique technique, string& name) {
+            if (commandListData.techniquesToRender.contains(name) && !deviceData.allEnabledTechniques.at(name))
             {
-                runtime->render_technique(technique, cmd_list, commandListData.active_rtv);
+                runtime->render_technique(technique, cmd_list, active_rtv);
             }
             });
 
         for (auto& tech : commandListData.techniquesToRender)
         {
-            deviceData.allEnabledTechniques[tech] = true;
+            deviceData.allEnabledTechniques.at(tech) = true;
+        }
+        commandListData.techniquesToRender.clear();
+
+        return true;
+    }
+
+    return false;
+}
+
+
+static void ApplyBoundDescriptorSets(command_list* cmd_list, shader_stage stage, pipeline_layout layout, size_t param_count,
+    const vector<descriptor_set>& descriptors, const vector<bool>& mask)
+{
+    size_t count = min(descriptors.size(), param_count);
+    for (uint32_t i = 0; i < count; i++)
+    {
+        if (descriptors[i] == 0 || (i < mask.size() && mask[i]))
+            continue;
+
+        for (uint32_t j = i + 1; j < count + 1; j++)
+        {
+            if (j == count || descriptors[j] == 0 || (j < mask.size() && mask[j]))
+            {
+                cmd_list->bind_descriptor_sets(stage, layout, i, j - i, &descriptors.data()[i]);
+                i = j;
+
+                break;
+            }
+        }
+    }
+}
+
+
+static void ReApplyState(command_list* cmd_list)
+{
+    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    auto& devData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
+
+    vector<PipelineBindingBase*> blah = {
+        &data.descriptorsState,
+        &data.renderTargetState,
+        &data.scissorRectsState,
+        &data.viewportsState,
+        &data.pipelineStatesState.states[0],
+        &data.pipelineStatesState.states[1],
+    };
+
+    std::sort(blah.begin(), blah.end(), [](const auto& lhs, const auto& rhs)
+        {
+            return lhs->callIndex < rhs->callIndex;
+        });
+
+    for (auto b : blah)
+    {
+        if (b->GetType() == PipelineBindingTypes::bind_descriptors)
+        {
+            if (data.descriptorsState.cmd_list != nullptr)
+            {
+                ApplyBoundDescriptorSets(cmd_list, shader_stage::all_graphics, data.descriptorsState.current_layout[0],
+                    devData.rootSigParamCount[data.descriptorsState.current_layout[0].handle],
+                    data.descriptorsState.current_sets[0], data.descriptorsState.transient_mask[data.descriptorsState.current_layout[0].handle]);
+                ApplyBoundDescriptorSets(cmd_list, shader_stage::all_compute, data.descriptorsState.current_layout[1],
+                    devData.rootSigParamCount[data.descriptorsState.current_layout[1].handle],
+                    data.descriptorsState.current_sets[1], data.descriptorsState.transient_mask[data.descriptorsState.current_layout[1].handle]);
+            }
         }
 
-        commandListData.techniquesToRender.clear();
+        if (b->GetType() == PipelineBindingTypes::bind_render_target)
+        {
+            if (data.renderTargetState.cmd_list != nullptr)
+                cmd_list->bind_render_targets_and_depth_stencil(data.renderTargetState.count, data.renderTargetState.rtvs.data(), data.renderTargetState.dsv);
+        }
+
+        if (b->GetType() == PipelineBindingTypes::bind_scissor_rect)
+        {
+            if (data.scissorRectsState.cmd_list != nullptr)
+                cmd_list->bind_scissor_rects(data.scissorRectsState.first, data.scissorRectsState.count, data.scissorRectsState.rects.data());
+        }
+
+        if (b->GetType() == PipelineBindingTypes::bind_viewport)
+        {
+            if (data.viewportsState.cmd_list != nullptr)
+                cmd_list->bind_viewports(data.viewportsState.first, data.viewportsState.count, data.viewportsState.viewports.data());
+        }
+
+        if (b->GetType() == PipelineBindingTypes::bind_pipeline_states)
+        {
+            BindPipelineStatesState* ss = static_cast<BindPipelineStatesState*>(b);
+            if (ss->cmd_list != nullptr)
+                cmd_list->bind_pipeline_states(1, &ss->state, &ss->value);
+        }
     }
 }
 
@@ -437,15 +651,13 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
     if (nullptr != commandList && pipelineHandle.handle != 0)
     {
         CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
-        commandListData.pipelineState.cmd_list = commandList;
-        commandListData.pipelineState.pipelineHandle = pipelineHandle;
-        commandListData.pipelineState.stages = stages;
 
         const bool handleHasPixelShaderAttached = g_pixelShaderManager.isKnownHandle(pipelineHandle.handle);
         const bool handleHasVertexShaderAttached = g_vertexShaderManager.isKnownHandle(pipelineHandle.handle);
         if (!handleHasPixelShaderAttached && !handleHasVertexShaderAttached)
         {
             // draw call with unknown handle, don't collect it
+
             return;
         }
         switch (stages)
@@ -492,48 +704,13 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
             }
             break;
         }
-    }
-}
 
-
-static void ApplyBoundDescriptorSets(command_list* cmd_list, shader_stage stage, pipeline_layout layout, const vector<descriptor_set>& descriptors)
-{
-    for (uint32_t i = 0; i < descriptors.size(); i++)
-    {
-        if (descriptors[i] == 0)
-            continue;
-
-        for (uint32_t j = i + 1; j < descriptors.size() + 1; j++)
+        if (checkDrawCallForCommandList(commandList) && RenderEffects(commandList))
         {
-            if (j == descriptors.size() || descriptors[j] == 0)
-            {
-                cmd_list->bind_descriptor_sets(stage, layout, i, j - i, &descriptors.data()[i]);
-                i = j;
-                break;
-            }
+            if (commandList->get_device()->get_api() == device_api::d3d12)
+                ReApplyState(commandList);
         }
     }
-}
-
-
-static void ReApplyState(command_list* cmd_list)
-{
-    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
-
-    if (data.pipelineState.cmd_list != nullptr)
-        cmd_list->bind_pipeline(data.pipelineState.stages, data.pipelineState.pipelineHandle);
-
-    if (data.descriptorsState.current_layout[0] == data.descriptorsState.current_layout_bind[0])
-        ApplyBoundDescriptorSets(cmd_list, shader_stage::all_graphics, data.descriptorsState.current_layout[0], data.descriptorsState.current_sets[0]);
-    if (data.descriptorsState.current_layout[1] == data.descriptorsState.current_layout_bind[1])
-        ApplyBoundDescriptorSets(cmd_list, shader_stage::all_compute, data.descriptorsState.current_layout[1], data.descriptorsState.current_sets[1]);
-
-    if (data.viewportsState.cmd_list != nullptr)
-        cmd_list->bind_viewports(data.viewportsState.first, data.viewportsState.count, data.viewportsState.viewports.data());
-    if (data.scissorRectsState.cmd_list != nullptr)
-        cmd_list->bind_scissor_rects(data.scissorRectsState.first, data.scissorRectsState.count, data.scissorRectsState.rects.data());
-
-    cmd_list->bind_render_targets_and_depth_stencil(data.renderTargetState.count, data.renderTargetState.rtvs, data.renderTargetState.dsv);
 }
 
 
@@ -548,42 +725,22 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-    resource_view new_view = { 0 };
-    commandListData.renderTargetState = { cmd_list, count, rtvs, dsv };
+    commandListData.renderTargetState.callIndex = commandListData.callIndex;
+    commandListData.callIndex++;
+
+    commandListData.renderTargetState.cmd_list = cmd_list;
+    commandListData.renderTargetState.count = count;
+    commandListData.renderTargetState.dsv = dsv;
+
+    if (commandListData.renderTargetState.rtvs.size() != count) {
+        commandListData.renderTargetState.rtvs.resize(count);
+        commandListData.active_rtvs.resize(count);
+    }
 
     for (int i = 0; i < count; i++)
     {
-        if (deviceData.current_runtime != nullptr && rtvs[i] != 0)
-        {
-            resource rs = device->get_resource_from_view(rtvs[i]);
-            if (rs == 0)
-            {
-                // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
-                continue;
-            }
-
-            const resource_desc texture_desc = device->get_resource_desc(rs);
-
-            uint32_t frame_width, frame_height;
-            deviceData.current_runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
-
-            if (texture_desc.texture.height == frame_height && texture_desc.texture.width == frame_width)
-            {
-                new_view = rtvs[i];
-                break;
-            }
-        }
-    }
-
-    if (new_view != commandListData.active_rtv)
-    {
-        commandListData.active_rtv = new_view;
-    }
-
-    if (checkDrawCallForCommandList(cmd_list))
-    {
-        RenderEffects(cmd_list);
-        ReApplyState(cmd_list);
+        commandListData.renderTargetState.rtvs[i] = rtvs[i];
+        commandListData.active_rtvs[i] = rtvs[i];
     }
 }
 
@@ -593,13 +750,21 @@ static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pi
     const int type_index = (stages == shader_stage::all_compute) ? 1 : 0;
 
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    data.descriptorsState.callIndex = data.callIndex;
+    data.callIndex++;
 
-    if (data.descriptorsState.current_layout_bind[type_index] != layout)
+    data.descriptorsState.cmd_list = cmd_list;
+
+    if (data.descriptorsState.current_layout[type_index] != layout)
     {
-        data.descriptorsState.current_layout[type_index] = layout;
-        data.descriptorsState.current_layout_bind[type_index] = layout;
+        data.descriptorsState.transient_mask[layout.handle].clear();
+    }
 
-        data.descriptorsState.current_sets[type_index].clear();
+    data.descriptorsState.current_layout[type_index] = layout;
+
+    if (data.descriptorsState.transient_mask[layout.handle].size() < count + first)
+    {
+        data.descriptorsState.transient_mask[layout.handle].resize(count + first);
     }
 
     if (data.descriptorsState.current_sets[type_index].size() < (count + first))
@@ -610,23 +775,46 @@ static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pi
     for (size_t i = 0; i < count; ++i)
     {
         data.descriptorsState.current_sets[type_index][i + first] = sets[i];
+        data.descriptorsState.transient_mask[layout.handle][i + first] = false;
     }
 }
 
 
-static void onBindLayout(command_list* cmd_list, shader_stage stages, pipeline_layout layout)
+static void onPushConstants(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, uint32_t first, uint32_t count, const uint32_t* values)
 {
     const int type_index = (stages == shader_stage::all_compute) ? 1 : 0;
 
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
 
-    data.descriptorsState.current_layout[type_index] = layout;
+    if (data.descriptorsState.transient_mask[layout.handle].size() < layout_param + 1)
+    {
+        data.descriptorsState.transient_mask[layout.handle].resize(layout_param + 1, false);
+    }
+
+    data.descriptorsState.transient_mask[layout.handle][layout_param] = true;
+}
+
+
+static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
+{
+    const int type_index = (stages == shader_stage::all_compute) ? 1 : 0;
+
+    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+
+    if (data.descriptorsState.transient_mask[layout.handle].size() < layout_param + 1)
+    {
+        data.descriptorsState.transient_mask[layout.handle].resize(layout_param + 1);
+    }
+
+    data.descriptorsState.transient_mask[layout.handle][layout_param] = true;
 }
 
 
 static void onBindViewports(command_list* cmd_list, uint32_t first, uint32_t count, const viewport* viewports)
 {
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    data.viewportsState.callIndex = data.callIndex;
+    data.callIndex++;
 
     data.viewportsState.cmd_list = cmd_list;
     data.viewportsState.first = first;
@@ -645,6 +833,8 @@ static void onBindViewports(command_list* cmd_list, uint32_t first, uint32_t cou
 static void onBindScissorRects(command_list* cmd_list, uint32_t first, uint32_t count, const rect* rects)
 {
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    data.scissorRectsState.callIndex = data.callIndex;
+    data.callIndex++;
 
     data.scissorRectsState.cmd_list = cmd_list;
     data.scissorRectsState.first = first;
@@ -657,6 +847,62 @@ static void onBindScissorRects(command_list* cmd_list, uint32_t first, uint32_t 
     {
         data.scissorRectsState.rects[i] = rects[i];
     }
+}
+
+
+static void on_bind_pipeline_states(command_list* cmd_list, uint32_t count, const dynamic_state* states, const uint32_t* values)
+{
+    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+        if (states[i] == dynamic_state::primitive_topology)
+        {
+            data.pipelineStatesState.states[1].cmd_list = cmd_list;
+            data.pipelineStatesState.states[1].callIndex = data.callIndex;
+            data.pipelineStatesState.states[1].value = values[i];
+            data.pipelineStatesState.states[1].valuesSet = true;
+            data.callIndex++;
+        }
+        else if (states[i] == dynamic_state::blend_constant)
+        {
+            data.pipelineStatesState.states[0].cmd_list = cmd_list;
+            data.pipelineStatesState.states[0].callIndex = data.callIndex;
+            data.pipelineStatesState.states[0].value = values[i];
+            data.pipelineStatesState.states[0].valuesSet = true;
+            data.callIndex++;
+        }
+    }
+}
+
+
+static void onInitResource(device* device, const resource_desc& desc, const subresource_data* initData, resource_usage usage, reshade::api::resource handle)
+{
+    std::unique_lock<shared_mutex> lock(s_resource_mutex);
+    s_resources.emplace(handle.handle);
+    lock.unlock();
+}
+
+
+static void onDestroyResource(device* device, resource res)
+{
+    std::unique_lock<shared_mutex> lock(s_resource_mutex);
+    s_resources.erase(res.handle);
+    lock.unlock();
+}
+
+
+static void onInitPipelineLayout(device* device, uint32_t param_count, const pipeline_layout_param* params, pipeline_layout layout)
+{
+    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    deviceData.rootSigParamCount[layout.handle] = param_count;
+}
+
+
+static void onDestroyPipelineLayout(device* device, pipeline_layout layout)
+{
+    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    deviceData.rootSigParamCount.erase(layout.handle);
 }
 
 
@@ -687,11 +933,17 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         {
             return FALSE;
         }
+        reshade::register_event<reshade::addon_event::init_resource>(onInitResource);
+        reshade::register_event<reshade::addon_event::destroy_resource>(onDestroyResource);
         reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
         reshade::register_event<reshade::addon_event::bind_viewports>(onBindViewports);
         reshade::register_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
         reshade::register_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
-        reshade::register_event<reshade::addon_event::bind_layout>(onBindLayout);
+        reshade::register_event<reshade::addon_event::push_constants>(onPushConstants);
+        reshade::register_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
+        reshade::register_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
+        reshade::register_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
+        reshade::register_event<reshade::addon_event::bind_pipeline_states>(on_bind_pipeline_states);
         reshade::register_event<reshade::addon_event::init_command_list>(onInitCommandList);
         reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
         reshade::register_event<reshade::addon_event::reset_command_list>(onResetCommandList);
@@ -711,11 +963,17 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         g_addonUIData.LoadShaderTogglerIniFile();
         break;
     case DLL_PROCESS_DETACH:
+        reshade::unregister_event<reshade::addon_event::init_resource>(onInitResource);
+        reshade::unregister_event<reshade::addon_event::destroy_resource>(onDestroyResource);
         reshade::unregister_event<reshade::addon_event::reshade_present>(onReshadePresent);
         reshade::unregister_event<reshade::addon_event::bind_viewports>(onBindViewports);
         reshade::unregister_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
         reshade::unregister_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
-        reshade::unregister_event<reshade::addon_event::bind_layout>(onBindLayout);
+        reshade::unregister_event<reshade::addon_event::push_constants>(onPushConstants);
+        reshade::unregister_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
+        reshade::unregister_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
+        reshade::unregister_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
+        reshade::unregister_event<reshade::addon_event::bind_pipeline_states>(on_bind_pipeline_states);
         reshade::unregister_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
         reshade::unregister_event<reshade::addon_event::init_pipeline>(onInitPipeline);
         reshade::unregister_event<reshade::addon_event::reshade_overlay>(onReshadeOverlay);
@@ -731,6 +989,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
         reshade::unregister_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
         reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
+
         reshade::unregister_overlay(nullptr, &displaySettings);
         reshade::unregister_addon(hModule);
         break;
