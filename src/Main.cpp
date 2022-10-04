@@ -56,12 +56,14 @@ extern "C" __declspec(dllexport) const char* DESCRIPTION = "Addon which allows y
 enum PipelineBindingTypes : uint32_t
 {
     unknown = 0,
+    bind_pipeline,
     bind_render_target,
     bind_viewport,
     bind_scissor_rect,
     bind_descriptors,
     bind_pipeline_states,
-    push_constants
+    push_constants,
+    render_pass
 };
 
 struct PipelineBindingBase
@@ -83,6 +85,21 @@ struct BindRenderTargetsState : PipelineBinding<PipelineBindingTypes::bind_rende
     uint32_t count;
     vector<resource_view> rtvs;
     resource_view dsv;
+
+    void Reset()
+    {
+        callIndex = 0;
+        cmd_list = nullptr;
+        rtvs.clear();
+        dsv = { 0 };
+        count = 0;
+    }
+};
+
+struct RenderPassState : PipelineBinding<PipelineBindingTypes::render_pass> {
+    uint32_t count;
+    vector<render_pass_render_target_desc> rtvs;
+    render_pass_depth_stencil_desc dsv;
 
     void Reset()
     {
@@ -158,7 +175,6 @@ struct BindDescriptorsState : PipelineBinding<PipelineBindingTypes::bind_descrip
     }
 };
 
-
 struct BindPipelineStatesState : PipelineBinding<PipelineBindingTypes::bind_pipeline_states> {
     uint32_t value;
     bool valuesSet;
@@ -189,12 +205,11 @@ struct BindPipelineStatesStates {
     }
 };
 
-
 struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataContainer {
     uint64_t activePixelShaderPipeline;
     uint64_t activeVertexShaderPipeline;
     vector<resource_view> active_rtvs;
-    atomic_bool rendered_effects = false;
+    bool rendered_effects = false;
     unordered_set<string> techniquesToRender;
 
     uint32_t callIndex;
@@ -203,12 +218,14 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     BindViewportsState viewportsState;
     BindScissorRectsState scissorRectsState;
     BindPipelineStatesStates pipelineStatesState;
+    RenderPassState renderPassState;
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
     effect_runtime* current_runtime = nullptr;
     unordered_map<string, bool> allEnabledTechniques;
     unordered_map<uint64_t, uint32_t> rootSigParamCount;
+    unordered_map<uint64_t, vector<bool>> transient_mask;
 };
 
 #define CHAR_BUFFER_SIZE 256
@@ -291,6 +308,7 @@ static void onResetCommandList(command_list* commandList)
     commandListData.scissorRectsState.Reset();
     commandListData.viewportsState.Reset();
     commandListData.pipelineStatesState.Reset();
+    commandListData.renderPassState.Reset();
 
     commandListData.techniquesToRender.clear();
 }
@@ -514,7 +532,6 @@ static bool RenderEffects(command_list* cmd_list)
 
     unique_lock<shared_mutex> lock(s_render_mutex);
     if (commandListData.techniquesToRender.size() > 0) {
-
         if (!commandListData.rendered_effects)
         {
             vector<effect_technique> enabledTechniques;
@@ -611,10 +628,10 @@ static void ReApplyState(command_list* cmd_list)
             {
                 ApplyBoundDescriptorSets(cmd_list, shader_stage::all_graphics, data.descriptorsState.current_layout[0],
                     devData.rootSigParamCount[data.descriptorsState.current_layout[0].handle],
-                    data.descriptorsState.current_sets[0], data.descriptorsState.transient_mask[data.descriptorsState.current_layout[0].handle]);
+                    data.descriptorsState.current_sets[0], devData.transient_mask[data.descriptorsState.current_layout[0].handle]);
                 ApplyBoundDescriptorSets(cmd_list, shader_stage::all_compute, data.descriptorsState.current_layout[1],
                     devData.rootSigParamCount[data.descriptorsState.current_layout[1].handle],
-                    data.descriptorsState.current_sets[1], data.descriptorsState.transient_mask[data.descriptorsState.current_layout[1].handle]);
+                    data.descriptorsState.current_sets[1], devData.transient_mask[data.descriptorsState.current_layout[1].handle]);
             }
         }
 
@@ -660,52 +677,33 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
 
             return;
         }
-        switch (stages)
+
+        if ((uint32_t)(stages & pipeline_stage::pixel_shader) && handleHasPixelShaderAttached)
         {
-        case pipeline_stage::all:
             if (g_activeCollectorFrameCounter > 0)
             {
                 // in collection mode
-                if (handleHasPixelShaderAttached)
-                {
-                    g_pixelShaderManager.addActivePipelineHandle(pipelineHandle.handle);
-                }
-                if (handleHasVertexShaderAttached)
-                {
-                    g_vertexShaderManager.addActivePipelineHandle(pipelineHandle.handle);
-                }
+                g_pixelShaderManager.addActivePipelineHandle(pipelineHandle.handle);
             }
             else
             {
                 commandListData.activePixelShaderPipeline = handleHasPixelShaderAttached ? pipelineHandle.handle : -1;
+            }
+        }
+        else if ((uint32_t)(stages & pipeline_stage::vertex_shader) && handleHasVertexShaderAttached)
+        {
+            if (g_activeCollectorFrameCounter > 0)
+            {
+                // in collection mode
+                g_vertexShaderManager.addActivePipelineHandle(pipelineHandle.handle);
+            }
+            else
+            {
                 commandListData.activeVertexShaderPipeline = handleHasVertexShaderAttached ? pipelineHandle.handle : -1;
             }
-            break;
-        case pipeline_stage::pixel_shader:
-            if (handleHasPixelShaderAttached)
-            {
-                if (g_activeCollectorFrameCounter > 0)
-                {
-                    // in collection mode
-                    g_pixelShaderManager.addActivePipelineHandle(pipelineHandle.handle);
-                }
-                commandListData.activePixelShaderPipeline = pipelineHandle.handle;
-            }
-            break;
-        case pipeline_stage::vertex_shader:
-            if (handleHasVertexShaderAttached)
-            {
-                if (g_activeCollectorFrameCounter > 0)
-                {
-                    // in collection mode
-                    g_vertexShaderManager.addActivePipelineHandle(pipelineHandle.handle);
-                }
-                commandListData.activeVertexShaderPipeline = pipelineHandle.handle;
-            }
-            break;
         }
 
-        if (checkDrawCallForCommandList(commandList) && RenderEffects(commandList))
+        if (commandListData.renderPassState.cmd_list == nullptr && checkDrawCallForCommandList(commandList) && RenderEffects(commandList))
         {
             if (commandList->get_device()->get_api() == device_api::d3d12)
                 ReApplyState(commandList);
@@ -721,16 +719,17 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
         return;
     }
 
-    device* device = cmd_list->get_device();
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
-    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
+    commandListData.renderPassState.cmd_list = nullptr;
     commandListData.renderTargetState.callIndex = commandListData.callIndex;
     commandListData.callIndex++;
 
     commandListData.renderTargetState.cmd_list = cmd_list;
     commandListData.renderTargetState.count = count;
     commandListData.renderTargetState.dsv = dsv;
+    commandListData.active_rtvs.clear();
+    commandListData.renderTargetState.rtvs.clear();
 
     if (commandListData.renderTargetState.rtvs.size() != count) {
         commandListData.renderTargetState.rtvs.resize(count);
@@ -742,6 +741,57 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
         commandListData.renderTargetState.rtvs[i] = rtvs[i];
         commandListData.active_rtvs[i] = rtvs[i];
     }
+}
+
+
+static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const render_pass_render_target_desc* rts, const render_pass_depth_stencil_desc* ds)
+{
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
+    {
+        return;
+    }
+
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+
+    if (commandListData.renderPassState.cmd_list != nullptr && checkDrawCallForCommandList(cmd_list) && RenderEffects(cmd_list))
+    {
+        //if (cmd_list->get_device()->get_api() == device_api::d3d12 || cmd_list->get_device()->get_api() == device_api::vulkan)
+        //    ReApplyState(cmd_list);
+    }
+
+    commandListData.renderTargetState.cmd_list = nullptr;
+    commandListData.descriptorsState.Reset();
+
+    commandListData.renderPassState.callIndex = commandListData.callIndex;
+    commandListData.callIndex++;
+
+    commandListData.renderPassState.cmd_list = cmd_list;
+    commandListData.renderPassState.count = count;
+
+    commandListData.active_rtvs.clear();
+    commandListData.renderPassState.rtvs.clear();
+
+    if (ds != nullptr)
+        commandListData.renderPassState.dsv = *ds;
+    else
+        commandListData.renderPassState.dsv = { 0 };
+
+    if (commandListData.renderPassState.rtvs.size() != count) {
+        commandListData.renderPassState.rtvs.resize(count);
+        commandListData.active_rtvs.resize(count);
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        commandListData.renderPassState.rtvs[i] = rts[i];
+        commandListData.active_rtvs[i] = rts[i].view;
+    }
+}
+
+
+static void onEndRenderPass(command_list* cmd_list)
+{
+    // nothing here yet
 }
 
 
@@ -760,15 +810,10 @@ static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pi
 
     if (data.descriptorsState.current_layout[type_index] != layout)
     {
-        data.descriptorsState.transient_mask[layout.handle].clear();
+        data.descriptorsState.current_sets[type_index].clear();
     }
 
     data.descriptorsState.current_layout[type_index] = layout;
-
-    if (data.descriptorsState.transient_mask[layout.handle].size() < count + first)
-    {
-        data.descriptorsState.transient_mask[layout.handle].resize(count + first);
-    }
 
     if (data.descriptorsState.current_sets[type_index].size() < (count + first))
     {
@@ -778,26 +823,7 @@ static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pi
     for (size_t i = 0; i < count; ++i)
     {
         data.descriptorsState.current_sets[type_index][i + first] = sets[i];
-        data.descriptorsState.transient_mask[layout.handle][i + first] = false;
     }
-}
-
-
-static void onPushConstants(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, uint32_t first, uint32_t count, const uint32_t* values)
-{
-    if (cmd_list->get_device()->get_api() != device_api::d3d12)
-        return;
-
-    const int type_index = (stages == shader_stage::all_compute) ? 1 : 0;
-
-    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
-
-    if (data.descriptorsState.transient_mask[layout.handle].size() < layout_param + 1)
-    {
-        data.descriptorsState.transient_mask[layout.handle].resize(layout_param + 1, false);
-    }
-
-    data.descriptorsState.transient_mask[layout.handle][layout_param] = true;
 }
 
 
@@ -896,6 +922,15 @@ static void onInitPipelineLayout(device* device, uint32_t param_count, const pip
 {
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
     deviceData.rootSigParamCount[layout.handle] = param_count;
+    deviceData.transient_mask[layout.handle].resize(param_count);
+
+    for (uint32_t i = 0; i < param_count; i++)
+    {
+        if (params[i].type == pipeline_layout_param_type::push_constants)
+        {
+            deviceData.transient_mask[layout.handle][i] = true;
+        }
+    }
 }
 
 
@@ -903,6 +938,7 @@ static void onDestroyPipelineLayout(device* device, pipeline_layout layout)
 {
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
     deviceData.rootSigParamCount.erase(layout.handle);
+    deviceData.transient_mask.erase(layout.handle);
 }
 
 
@@ -939,7 +975,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::bind_viewports>(onBindViewports);
         reshade::register_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
         reshade::register_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
-        reshade::register_event<reshade::addon_event::push_constants>(onPushConstants);
         reshade::register_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
         reshade::register_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
         reshade::register_event<reshade::addon_event::bind_pipeline_states>(on_bind_pipeline_states);
@@ -956,6 +991,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::destroy_device>(onDestroyDevice);
         reshade::register_event<reshade::addon_event::present>(onPresent);
         reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
+        reshade::register_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
+        reshade::register_event<reshade::addon_event::end_render_pass>(onEndRenderPass);
         reshade::register_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
         reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
         reshade::register_overlay(nullptr, &displaySettings);
@@ -968,7 +1005,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::bind_viewports>(onBindViewports);
         reshade::unregister_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
         reshade::unregister_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
-        reshade::unregister_event<reshade::addon_event::push_constants>(onPushConstants);
         reshade::unregister_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
         reshade::unregister_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
         reshade::unregister_event<reshade::addon_event::bind_pipeline_states>(on_bind_pipeline_states);
@@ -985,6 +1021,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::destroy_device>(onDestroyDevice);
         reshade::unregister_event<reshade::addon_event::present>(onPresent);
         reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
+        reshade::unregister_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
+        reshade::unregister_event<reshade::addon_event::end_render_pass>(onEndRenderPass);
         reshade::unregister_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
         reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
 
