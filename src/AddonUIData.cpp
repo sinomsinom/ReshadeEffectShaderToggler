@@ -106,6 +106,7 @@ void AddonUIData::LoadShaderTogglerIniFile()
     }
 
     _memcpyHookAttempt = !iniFile.GetBool("DisableMemcpyHook", "General");
+    _memcpyAssumeUnnested = iniFile.GetBool("MemcpyAssumeUnnestedMap", "General");
 
     for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
     {
@@ -150,6 +151,7 @@ void AddonUIData::SaveShaderTogglerIniFile()
     CDataFile iniFile;
 
     iniFile.SetBool("DisableMemcpyHook", !_memcpyHookAttempt, "", "General");
+    iniFile.SetBool("MemcpyAssumeUnnestedMap", _memcpyAssumeUnnested, "", "General");
 
     for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
     {

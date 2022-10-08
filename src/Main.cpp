@@ -40,6 +40,8 @@
 #include <functional>
 #include <tuple>
 #include <chrono>
+#include <MinHook.h>
+#include <concurrent_unordered_map.h>
 #include "crc32_hash.hpp"
 #include "ShaderManager.h"
 #include "CDataFile.h"
@@ -48,7 +50,9 @@
 #include "AddonUIDisplay.h"
 #include "ConstantHandler.h"
 #include "ConstantHandlerMemcpy.h"
-#include <MinHook.h>
+#include "ConstantCopyMethod.h"
+#include "ConstantCopyMethodSingularMapping.h"
+#include "ConstantCopyMethodNestedMapping.h"
 
 using namespace reshade::api;
 using namespace ShaderToggler;
@@ -92,7 +96,10 @@ static ShaderToggler::ShaderManager g_vertexShaderManager;
 
 static ConstantHandler constantHandlerFallback;
 static ConstantHandlerMemcpy constantHandlerMemcpy;
+static ConstantCopyMethodSingularMapping constantUnnestedMap(&constantHandlerMemcpy);
+static ConstantCopyMethodNestedMapping constantNestedMap(&constantHandlerMemcpy);
 static ConstantHandlerBase* constantHandler = nullptr;
+static ConstantCopyMethod* constantCopyMethod = nullptr;
 static bool constantHandlerHooked = false;
 
 static atomic_uint32_t g_activeCollectorFrameCounter = 0;
@@ -101,7 +108,7 @@ static unordered_map<string, tuple<constant_type, vector<effect_uniform_variable
 static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, constantHandler, &g_activeCollectorFrameCounter, &allTechniques, &g_restVariables);
 static std::shared_mutex device_data_mutex;
 static std::shared_mutex resource_mutex;
-static std::shared_mutex map_mutex;
+static std::shared_mutex constbuffer_mutex;
 static char g_charBuffer[CHAR_BUFFER_SIZE];
 static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
 static const float clearColor[] = { 0, 0, 0, 0 };
@@ -109,7 +116,6 @@ static const float clearColor[] = { 0, 0, 0, 0 };
 static unordered_set<uint64_t> s_constantBuffers;
 static unordered_set<uint64_t> s_resources;
 static unordered_set<uint64_t> s_resourceViews;
-static unordered_map<uint64_t, void*> s_resourceMemoryMapping;
 
 static resource s_currentBackbuffer = { 0 };
 static resource_view s_backBufferView = { 0 };
@@ -321,18 +327,24 @@ static void onResetCommandList(command_list* commandList)
 }
 
 
-static void onInitResource(device* device, const resource_desc& desc, const subresource_data*, resource_usage usage, reshade::api::resource handle)
+static void onInitResource(device* device, const resource_desc& desc, const subresource_data* initData, resource_usage usage, reshade::api::resource handle)
 {
     std::unique_lock<shared_mutex> lock(resource_mutex);
-
     s_resources.emplace(handle.handle);
+    lock.unlock();
+
     if (desc.heap == memory_heap::cpu_to_gpu && static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
     {
+        std::unique_lock<shared_mutex> lock(constbuffer_mutex);
         s_constantBuffers.emplace(handle.handle);
 
         if (constantHandlerHooked)
         {
             constantHandlerMemcpy.CreateHostConstantBuffer(device, handle);
+            if (initData != nullptr && initData->data != nullptr)
+            {
+                constantHandlerMemcpy.SetHostConstantBuffer(handle.handle, initData->data, desc.buffer.size, 0, desc.buffer.size);
+            }
         }
     }
 }
@@ -341,12 +353,19 @@ static void onInitResource(device* device, const resource_desc& desc, const subr
 static void onDestroyResource(device* device, resource res)
 {
     std::unique_lock<shared_mutex> lock(resource_mutex);
-    s_constantBuffers.erase(res.handle);
     s_resources.erase(res.handle);
+    lock.unlock();
 
-    if (constantHandlerHooked)
+    resource_desc desc = device->get_resource_desc(res);
+    if (desc.heap == memory_heap::cpu_to_gpu && static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
     {
-        constantHandlerMemcpy.DeleteHostConstantBuffer(res);
+        std::unique_lock<shared_mutex> lock(constbuffer_mutex);
+        s_constantBuffers.erase(res.handle);
+
+        if (constantHandlerHooked)
+        {
+            constantHandlerMemcpy.DeleteHostConstantBuffer(res);
+        }
     }
 }
 
@@ -366,14 +385,17 @@ static void onDestroyResourceView(device* device, resource_view view)
 
 static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, const rect*, uint32_t, const rect*)
 {
-    CommandListDataContainer& commandListData = queue->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = queue->get_device()->get_private_data<DeviceDataContainer>();
 
     // does this make sense? need to make sure to reset when presenting the reshade command queue, but before reshade_present
     if (queue == deviceData.current_runtime->get_command_queue())
     {
         std::unique_lock<shared_mutex> lock(device_data_mutex);
-        RenderRemainingEffects(deviceData.current_runtime);
+
+        if (deviceData.current_runtime->get_effects_state())
+        {
+            RenderRemainingEffects(deviceData.current_runtime);
+        }
 
         deviceData.techniquesToRender.clear();
         deviceData.rendered_effects = false;
@@ -478,19 +500,19 @@ static void DestroyTextureBinding(effect_runtime* runtime, std::string binding)
         runtime->get_command_queue()->wait_idle();
 
         res = std::get<0>(data.bindingMap[binding]);
-        if (res != 0 && s_resources.contains(res.handle))
+        if (res != 0)
         {
             runtime->get_device()->destroy_resource(res);
         }
 
         srv = std::get<2>(data.bindingMap[binding]);
-        if (srv != 0 && s_resourceViews.contains(srv.handle))
+        if (srv != 0)
         {
             runtime->get_device()->destroy_resource_view(srv);
         }
 
         rtv = std::get<3>(data.bindingMap[binding]);
-        if (rtv != 0 && s_resourceViews.contains(rtv.handle))
+        if (rtv != 0)
         {
             runtime->get_device()->destroy_resource_view(rtv);
         }
@@ -565,10 +587,6 @@ static void onDestroyEffectRuntime(effect_runtime* runtime)
     std::unique_lock<shared_mutex> lock(device_data_mutex);
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
     data.current_runtime = nullptr;
-    //for (const auto& binding : data.bindingMap)
-    //{
-    //	DestroyTextureBinding(runtime, binding.first);
-    //}
     data.bindingMap.clear();
     g_restVariables.clear();
 }
@@ -816,7 +834,7 @@ static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
             resource res = runtime->get_device()->get_resource_from_view(active_rtv);
             resource target_res = std::get<0>(deviceData.bindingMap[bindingName]);
 
-            if (res == 0 || !s_resources.contains(res.handle))
+            if (res == 0)
             {
                 continue;
             }
@@ -892,18 +910,49 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
         {
             resource_view active_rtv = GetCurrentResourceView(*historic_rtv, commandListData);
 
-            if (active_rtv == 0 /* || !s_resourceViews.contains(active_rtv.handle)*/)
+            if (active_rtv == 0)
             {
                 return;
             }
 
             resource res = runtime->get_device()->get_resource_from_view(active_rtv);
-            resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
 
+            if (res == 0)
+            {
+                return;
+            }
+
+            resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
             g_addonUIData.cFormat = resDesc.texture.format;
 
-            deviceData.current_runtime->render_effects(cmd_list, active_rtv);
+            //std::shared_lock<shared_mutex> lockR(resource_mutex);
+            //const auto& usage = s_resourceUsage.find(res.handle);
+            //
+            //if (usage == s_resourceUsage.end())
+            //{
+            //    return;
+            //}
+            //
+            //resource_usage r_usage = resource_usage::undefined;
+            //const auto& usageBlah = usage->second.find(cmd_list);
+            //if (usageBlah != usage->second.end())
+            //{
+            //    r_usage = usageBlah->second;
+            //}
+            //else
+            //{
+            //    r_usage = usage->second.at(NULL);
+            //}
+            //lockR.unlock();
+            //
+            //if (!static_cast<uint32_t>(r_usage & resource_usage::render_target))
+            //{
+            //    return;
+            //}
+            //
+            //cmd_list->barrier(res, oldUsage, resource_usage::render_target);
 
+            runtime->render_effects(cmd_list, active_rtv);
             runtime->render_technique(technique, cmd_list, active_rtv);
 
             deviceData.allEnabledTechniques[name] = true;
@@ -941,6 +990,12 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
             return;
         }
         CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
+        DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
+
+        if (!deviceData.current_runtime->get_effects_state())
+        {
+            return;
+        }
 
         if ((uint32_t)(stages & pipeline_stage::pixel_shader) && handleHasPixelShaderAttached)
         {
@@ -963,7 +1018,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
 
         std::unique_lock<shared_mutex> lock(device_data_mutex);
         (void)checkDrawCallForCommandList(commandList);
-
+        
         UpdateTextureBindings(commandList, false);
         RenderEffects(commandList, false);
     }
@@ -977,14 +1032,19 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
         return;
     }
 
+    device* device = cmd_list->get_device();
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+
+    if (!deviceData.current_runtime->get_effects_state())
+    {
+        return;
+    }
+
     std::unique_lock<std::shared_mutex> lock(device_data_mutex);
     UpdateTextureBindings(cmd_list, true);
     RenderEffects(cmd_list, true);
     lock.unlock();
-
-    device* device = cmd_list->get_device();
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
-    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
     resource_view new_view = { 0 };
 
@@ -993,6 +1053,13 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
         if (deviceData.current_runtime != nullptr && rtvs[i] != 0)
         {
             resource rs = device->get_resource_from_view(rtvs[i]);
+
+            if (rs == 0)
+            {
+                // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
+                continue;
+            }
+
             const resource_desc texture_desc = device->get_resource_desc(rs);
 
             uint32_t frame_width, frame_height;
@@ -1089,43 +1156,24 @@ static void onReshadePresent(effect_runtime* runtime)
 
 static void onMapBufferRegion(device* device, resource resource, uint64_t offset, uint64_t size, map_access access, void** data)
 {
-    if (constantHandlerHooked && constantHandlerMemcpy.IsBufferOfInterest(resource.handle))
-    {
-        std::unique_lock<shared_mutex> lock(map_mutex);
-        s_resourceMemoryMapping[resource.handle] = *data;
-    }
+    if (constantCopyMethod != nullptr)
+        constantCopyMethod->OnMapBufferRegion(device, resource, offset, size, access, data);
 }
 
 
 static void onUnmapBufferRegion(device* device, resource resource)
 {
-    if (constantHandlerHooked && constantHandlerMemcpy.IsBufferOfInterest(resource.handle))
-    {
-        std::unique_lock<shared_mutex> lock(map_mutex);
-        s_resourceMemoryMapping.erase(resource.handle);
-    }
+    if (constantCopyMethod != nullptr)
+        constantCopyMethod->OnUnmapBufferRegion(device, resource);
 }
+
 
 static sig_memcpy* org_memcpy = nullptr;
 
 static void* __fastcall detour_memcpy(void* dest, void* src, size_t size)
 {
-    std::shared_lock<shared_mutex> lock(map_mutex);
-    for (auto& mapping : s_resourceMemoryMapping)
-    {
-        if (dest == mapping.second)
-        {
-            lock.unlock();
-            std::shared_lock<shared_mutex> lockR(resource_mutex);
-            uint8_t* buf = constantHandlerMemcpy.GetHostConstantBuffer(mapping.first);
-            lockR.unlock();
-
-            if (buf != nullptr)
-                org_memcpy(buf, src, size);
-            break;
-        }
-    }
-    if (lock.owns_lock()) lock.unlock();
+    if (constantCopyMethod != nullptr)
+        constantCopyMethod->OnMemcpy(dest, src, size);
 
     return org_memcpy(dest, src, size);
 }
@@ -1152,6 +1200,16 @@ static bool InitHooks()
             constantHandler = &constantHandlerMemcpy;
             g_addonUIData.SetConstantHandler(&constantHandlerMemcpy);
             constantHandlerHooked = true;
+
+            if (g_addonUIData.GetMemcpyAssumeUnnested())
+            {
+                constantCopyMethod = &constantUnnestedMap;
+            }
+            else
+            {
+                constantCopyMethod = &constantNestedMap;
+            }
+
             return true;
         }
     }

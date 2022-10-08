@@ -1,5 +1,6 @@
 #include <cstring>
 #include <MinHook.h>
+#include <reshade.hpp>
 #include "ConstantHandlerMemcpy.h"
 
 using namespace ConstantFeedback;
@@ -39,19 +40,18 @@ void ConstantHandlerMemcpy::CopyToScratchpad(const ToggleGroup* group, device* d
 
     CreateScratchpad(group, dev, targetBufferDesc);
 
-    if (!deviceToHostConstantBuffer.contains(currentBufferRange.buffer.handle))
-    {
-        return;
-    }
-
-    buffersOfInterest.insert(currentBufferRange.buffer.handle);
-
     vector<uint8_t>& bufferContent = groupBufferContent[group];
     vector<uint8_t>& prevBufferContent = groupPrevBufferContent[group];
 
     uint64_t size = targetBufferDesc.buffer.size;
-    std::memcpy(prevBufferContent.data(), bufferContent.data(), size);
-    std::memcpy(bufferContent.data(), deviceToHostConstantBuffer[currentBufferRange.buffer.handle].data(), size);
+
+    shared_lock<shared_mutex> lock(deviceHostMutex);
+    uint8_t* hostbuf = GetHostConstantBuffer(currentBufferRange.buffer.handle);
+    if (hostbuf != nullptr)
+    {
+        std::memcpy(prevBufferContent.data(), bufferContent.data(), size);
+        std::memcpy(bufferContent.data(), hostbuf, size);
+    }
 }
 
 bool ConstantHandlerMemcpy::CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& targetBufferDesc)
@@ -86,9 +86,11 @@ void ConstantHandlerMemcpy::RemoveGroup(const ToggleGroup* group, device* dev, c
 
 uint8_t* ConstantHandlerMemcpy::GetHostConstantBuffer(uint64_t resourceHandle)
 {
-    if (deviceToHostConstantBuffer.contains(resourceHandle))
+    //shared_lock<shared_mutex> lock(deviceHostMutex);
+    const auto& ret = deviceToHostConstantBuffer.find(resourceHandle);
+    if (ret != deviceToHostConstantBuffer.end())
     {
-        return deviceToHostConstantBuffer[resourceHandle].data();
+        return ret->second.data();
     }
 
     return nullptr;
@@ -96,19 +98,31 @@ uint8_t* ConstantHandlerMemcpy::GetHostConstantBuffer(uint64_t resourceHandle)
 
 void ConstantHandlerMemcpy::CreateHostConstantBuffer(device* dev, resource resource)
 {
-    resource_desc targetBufferDesc = dev->get_resource_desc(resource);
-
-    deviceToHostConstantBuffer.emplace(resource.handle, vector<uint8_t>(targetBufferDesc.buffer.size, 0));
+    //resource_desc targetBufferDesc = dev->get_resource_desc(resource);
+    //
+    //deviceToHostConstantBuffer.emplace(resource.handle, vector<uint8_t>(targetBufferDesc.buffer.size, 0));
 }
 
 void ConstantHandlerMemcpy::DeleteHostConstantBuffer(resource resource)
 {
-    deviceToHostConstantBuffer.erase(resource.handle);
+    //deviceToHostConstantBuffer.erase(resource.handle);
 }
 
-bool ConstantHandlerMemcpy::IsBufferOfInterest(uint64_t handle)
+void ConstantHandlerMemcpy::SetHostConstantBuffer(const uint64_t handle, const void* buffer, size_t size, uint64_t offset, uint64_t bufferSize)
 {
-    return buffersOfInterest.contains(handle);
+    unique_lock<shared_mutex> lock(deviceHostMutex);
+    const auto& ret = deviceToHostConstantBuffer.find(handle);
+    if (ret == deviceToHostConstantBuffer.end())
+    {
+        deviceToHostConstantBuffer.emplace(handle, vector<uint8_t>(bufferSize, 0));
+    }
+    else if (ret->second.size() != bufferSize)
+    {
+        ret->second.resize(bufferSize, 0);
+    }
+
+    memcpy(deviceToHostConstantBuffer.at(handle).data() + offset, buffer, size);
+    //deviceToHostConstantBuffer[handle] = buffer;
 }
 
 string ConstantHandlerMemcpy::GetExecutableName()
@@ -133,6 +147,7 @@ static T* ConstantHandlerMemcpy::InstallHook(void* target, T* callback)
     if (MH_CreateHook(target, reinterpret_cast<void*>(callback), &original_function) != MH_OK)
         return nullptr;
 
+    reshade::log_message(3, "Installed static hook");
     return reinterpret_cast<T*>(original_function);
 }
 
@@ -144,6 +159,7 @@ static T* ConstantHandlerMemcpy::InstallApiHook(LPCWSTR pszModule, LPCSTR pszPro
     if (MH_CreateHookApi(pszModule, pszProcName, reinterpret_cast<void*>(callback), &original_function) != MH_OK)
         return nullptr;
 
+    reshade::log_message(3, "Installed dynamic hook");
     return reinterpret_cast<T*>(original_function);
 }
 

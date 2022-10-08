@@ -97,6 +97,7 @@ namespace AddonImGui
         float _overlayOpacity = 0.2f;
         uint32_t _keyBindings[ARRAYSIZE(KeybindNames)];
         bool _memcpyHookAttempt = true;
+        bool _memcpyAssumeUnnested = false;
     public:
         AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandlerBase* constants, atomic_uint32_t* activeCollectorFrameCounter,
             vector<string>* techniques, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>*);
@@ -127,6 +128,7 @@ namespace AddonImGui
         ConstantHandlerBase* GetConstantHandler() { return _constantHandler; }
         uint32_t GetKeybinding(Keybind keybind);
         bool GetAttemptMemcpyHook() { return _memcpyHookAttempt; }
+        bool GetMemcpyAssumeUnnested()  { return _memcpyAssumeUnnested; }
         void SetKeybinding(Keybind keybind, uint32_t keys);
         const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables() { return _constants; };
         reshade::api::format cFormat;

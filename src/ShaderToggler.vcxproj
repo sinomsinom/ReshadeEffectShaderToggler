@@ -176,6 +176,9 @@
     <ClInclude Include="AddonUIData.h" />
     <ClInclude Include="AddonUIDisplay.h" />
     <ClInclude Include="CDataFile.h" />
+    <ClInclude Include="ConstantCopyMethod.h" />
+    <ClInclude Include="ConstantCopyMethodNestedMapping.h" />
+    <ClInclude Include="ConstantCopyMethodSingularMapping.h" />
     <ClInclude Include="ConstantHandler.h" />
     <ClInclude Include="ConstantHandlerBase.h" />
     <ClInclude Include="ConstantHandlerMemcpy.h" />
@@ -189,6 +192,9 @@
   <ItemGroup>
     <ClCompile Include="AddonUIData.cpp" />
     <ClCompile Include="CDataFile.cpp" />
+    <ClCompile Include="ConstantCopyMethod.cpp" />
+    <ClCompile Include="ConstantCopyMethodNestedMapping.cpp" />
+    <ClCompile Include="ConstantCopyMethodSingularMapping.cpp" />
     <ClCompile Include="ConstantHandler.cpp" />
     <ClCompile Include="ConstantHandlerBase.cpp" />
     <ClCompile Include="ConstantHandlerMemcpy.cpp" />

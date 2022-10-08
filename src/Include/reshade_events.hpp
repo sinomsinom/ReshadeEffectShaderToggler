@@ -9,7 +9,7 @@
 
 namespace reshade
 {
-	enum class addon_event
+	enum class addon_event : uint32_t
 	{
 		/// <summary>
 		/// Called after successfull device creation, from:
@@ -134,10 +134,10 @@ namespace reshade
 		/// <item><description>IDXGISwapChain3::ResizeBuffers1</description></item>
 		/// <item><description>vkCreateSwapchainKHR</description></item>
 		/// </list>
-		/// <para>Callback function signature: <c>bool (api::resource_desc &amp;back_buffer_desc, void *hwnd)</c></para>
+		/// <para>Callback function signature: <c>bool (api::swapchain_desc &amp;desc, void *hwnd)</c></para>
 		/// </summary>
 		/// <remarks>
-		/// To overwrite the swap chain description, modify <c>back_buffer_desc</c> in the callback and return <see langword="true"/>, otherwise return <see langword="false"/>.
+		/// To overwrite the swap chain description, modify <c>desc</c> in the callback and return <see langword="true"/>, otherwise return <see langword="false"/>.
 		/// Is not called in OpenGL (since it is not possible to influence swap chain creation there).
 		/// </remarks>
 		create_swapchain,
@@ -772,7 +772,9 @@ namespace reshade
 		/// Called after:
 		/// <list type="bullet">
 		/// <item><description>ID3D12GraphicsCommandList::ResourceBarrier</description></item>
+		/// <item><description>ID3D12GraphicsCommandList7::Barrier</description></item>
 		/// <item><description>vkCmdPipelineBarrier</description></item>
+		/// <item><description>vkCmdPipelineBarrier2</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>void (api::command_list *cmd_list, uint32_t count, const api::resource *resources, const api::resource_usage *old_states, const api::resource_usage *new_states)</c></para>
 		/// </summary>
@@ -783,7 +785,10 @@ namespace reshade
 		/// <list type="bullet">
 		/// <item><description>ID3D12GraphicsCommandList4::BeginRenderPass</description></item>
 		/// <item><description>vkCmdBeginRenderPass</description></item>
+		/// <item><description>vkCmdBeginRenderPass2</description></item>
 		/// <item><description>vkCmdNextSubpass</description></item>
+		/// <item><description>vkCmdNextSubpass2</description></item>
+		/// <item><description>vkCmdBeginRendering</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>void (api::command_list *cmd_list, uint32_t count, const api::render_pass_render_target_desc *rts, const api::render_pass_depth_stencil_desc *ds)</c></para>
 		/// </summary>
@@ -794,7 +799,10 @@ namespace reshade
 		/// <list type="bullet">
 		/// <item><description>ID3D12GraphicsCommandList4::EndRenderPass</description></item>
 		/// <item><description>vkCmdEndRenderPass</description></item>
+		/// <item><description>vkCmdEndRenderPass2</description></item>
 		/// <item><description>vkCmdNextSubpass</description></item>
+		/// <item><description>vkCmdNextSubpass2</description></item>
+		/// <item><description>vkCmdEndRendering</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>void (api::command_list *cmd_list)</c></para>
 		/// </summary>
@@ -957,6 +965,10 @@ namespace reshade
 		/// <item><description>ID3D11DeviceContext::CSSetConstantBuffers</description></item>
 		/// <item><description>ID3D12GraphicsCommandList::SetComputeRootConstantBufferView</description></item>
 		/// <item><description>ID3D12GraphicsCommandList::SetGraphicsRootConstantBufferView</description></item>
+		/// <item><description>ID3D12GraphicsCommandList::SetComputeRootShaderResourceView</description></item>
+		/// <item><description>ID3D12GraphicsCommandList::SetGraphicsRootShaderResourceView</description></item>
+		/// <item><description>ID3D12GraphicsCommandList::SetComputeRootUnorderedAccessView</description></item>
+		/// <item><description>ID3D12GraphicsCommandList::SetGraphicsRootUnorderedAccessView</description></item>
 		/// <item><description>glBindBufferBase</description></item>
 		/// <item><description>glBindBufferRange</description></item>
 		/// <item><description>glBindBuffersBase</description></item>
@@ -976,6 +988,8 @@ namespace reshade
 		/// <summary>
 		/// Called after:
 		/// <list type="bullet">
+		/// <item><description>ID3D12GraphicsCommandList::SetComputeRootSignature</description></item>
+		/// <item><description>ID3D12GraphicsCommandList::SetGraphicsRootSignature</description></item>
 		/// <item><description>ID3D12GraphicsCommandList::SetComputeRootDescriptorTable</description></item>
 		/// <item><description>ID3D12GraphicsCommandList::SetGraphicsRootDescriptorTable</description></item>
 		/// <item><description>vkCmdBindDescriptorSets</description></item>
@@ -1009,6 +1023,7 @@ namespace reshade
 		/// <item><description>glBindVertexBuffer</description></item>
 		/// <item><description>glBindVertexBuffers</description></item>
 		/// <item><description>vkCmdBindVertexBuffers</description></item>
+		/// <item><description>vkCmdBindVertexBuffers2</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>void (api::command_list *cmd_list, uint32_t first, uint32_t count, const api::resource *buffers, const uint64_t *offsets, const uint32_t *strides)</c></para>
 		/// </summary>
@@ -1145,6 +1160,7 @@ namespace reshade
 		/// <item><description>glCopyBufferSubData</description></item>
 		/// <item><description>glCopyNamedBufferSubData</description></item>
 		/// <item><description>vkCmdCopyBuffer</description></item>
+		/// <item><description>vkCmdCopyBuffer2</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>bool (api::command_list *cmd_list, api::resource source, uint64_t source_offset, api::resource dest, uint64_t dest_offset, uint64_t size)</c></para>
 		/// </summary>
@@ -1160,6 +1176,7 @@ namespace reshade
 		/// <list type="bullet">
 		/// <item><description>ID3D12GraphicsCommandList::CopyTextureRegion</description></item>
 		/// <item><description>vkCmdCopyBufferToImage</description></item>
+		/// <item><description>vkCmdCopyBufferToImage2</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>bool (api::command_list *cmd_list, api::resource source, uint64_t source_offset, uint32_t row_length, uint32_t slice_height, api::resource dest, uint32_t dest_subresource, const api::subresource_box *dest_box)</c></para>
 		/// </summary>
@@ -1188,7 +1205,9 @@ namespace reshade
 		/// <item><description>glCopyTextureSubImage2D</description></item>
 		/// <item><description>glCopyTextureSubImage3D</description></item>
 		/// <item><description>vkCmdBlitImage</description></item>
+		/// <item><description>vkCmdBlitImage2</description></item>
 		/// <item><description>vkCmdCopyImage</description></item>
+		/// <item><description>vkCmdCopyImage2</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>bool (api::command_list *cmd_list, api::resource source, uint32_t source_subresource, const api::subresource_box *source_box, api::resource dest, uint32_t dest_subresource, const api::subresource_box *dest_box, api::filter_mode filter)</c></para>
 		/// </summary>
@@ -1204,6 +1223,7 @@ namespace reshade
 		/// <list type="bullet">
 		/// <item><description>ID3D12GraphicsCommandList::CopyTextureRegion</description></item>
 		/// <item><description>vkCmdCopyImageToBuffer</description></item>
+		/// <item><description>vkCmdCopyImageToBuffer2</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>bool (api::command_list *cmd_list, api::resource source, uint32_t source_subresource, const api::subresource_box *source_box, api::resource dest, uint64_t dest_offset, uint32_t row_length, uint32_t slice_height)</c></para>
 		/// </summary>
@@ -1225,6 +1245,7 @@ namespace reshade
 		/// <item><description>glBlitFramebuffer</description></item>
 		/// <item><description>glBlitNamedFramebuffer</description></item>
 		/// <item><description>vkCmdResolveImage</description></item>
+		/// <item><description>vkCmdResolveImage2</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>bool (api::command_list *cmd_list, api::resource source, uint32_t source_subresource, const api::subresource_box *source_box, api::resource dest, uint32_t dest_subresource, int32_t dest_x, int32_t dest_y, int32_t dest_z, api::format format)</c></para>
 		/// </summary>
@@ -1331,6 +1352,7 @@ namespace reshade
 		/// <list type="bullet">
 		/// <item><description>ID3D12GraphicsCommandList::BeginQuery</description></item>
 		/// <item><description>vkCmdBeginQuery</description></item>
+		/// <item><description>vkCmdBeginQueryIndexedEXT</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>bool (api::command_list *cmd_list, api::query_pool pool, api::query_type type, uint32_t index)</c></para>
 		/// </summary>
@@ -1344,7 +1366,9 @@ namespace reshade
 		/// <list type="bullet">
 		/// <item><description>ID3D12GraphicsCommandList::EndQuery</description></item>
 		/// <item><description>vkCmdEndQuery</description></item>
+		/// <item><description>vkCmdEndQueryIndexedEXT</description></item>
 		/// <item><description>vkCmdWriteTimestamp</description></item>
+		/// <item><description>vkCmdWriteTimestamp2</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>bool (api::command_list *cmd_list, api::query_pool pool, api::query_type type, uint32_t index)</c></para>
 		/// </summary>
@@ -1388,10 +1412,13 @@ namespace reshade
 		close_command_list,
 
 		/// <summary>
-		/// Called when a command list is submitted to a command queue, before:
+		/// Called when a command list is submitted to a command queue (or an immediate command list is flushed), before:
 		/// <list type="bullet">
-		/// <item><description>ID3D11DeviceContext::ExecuteCommandList</description></item>
+		/// <item><description>IDirect3DDevice9::EndScene</description></item>
+		/// <item><description>ID3D10Device::Flush</description></item>
+		/// <item><description>ID3D11DeviceContext::Flush</description></item>
 		/// <item><description>ID3D12CommandQueue::ExecuteCommandLists</description></item>
+		/// <item><description>glFlush</description></item>
 		/// <item><description>vkQueueSubmit</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>void (api::command_queue *queue, api::command_list *cmd_list)</c></para>
@@ -1401,12 +1428,13 @@ namespace reshade
 		/// <summary>
 		/// Called when a secondary command list is executed on a primary command list, before:
 		/// <list type="bullet">
+		/// <item><description>ID3D11DeviceContext::ExecuteCommandList</description></item>
 		/// <item><description>ID3D12GraphicsCommandList::ExecuteBundle</description></item>
 		/// <item><description>vkCmdExecuteCommands</description></item>
 		/// </list>
 		/// In addition, called after:
 		/// <list type="bullet">
-		/// <item><description>ID3D11DeviceContext::FinishCommandList
+		/// <item><description>ID3D11DeviceContext::FinishCommandList</description></item>
 		/// </list>
 		/// <para>Callback function signature: <c>void (api::command_list *cmd_list, api::command_list *secondary_cmd_list)</c></para>
 		/// </summary>
@@ -1487,6 +1515,12 @@ namespace reshade
 		/// </summary>
 		reshade_screenshot,
 
+		/// <summary>
+		/// Called for each technique after it was rendered, usually between <see cref="reshade_begin_effects"/> and <see cref="reshade_finish_effects"/>.
+		/// <para>Callback function signature: <c>void (api::effect_runtime *runtime, api::effect_technique technique, api::command_list *cmd_list, api::resource_view rtv, api::resource_view rtv_srgb)</c></para>
+		/// </summary>
+		reshade_render_technique,
+
 #ifdef RESHADE_ADDON
 		max // Last value used internally by ReShade to determine number of events in this enum
 #endif
@@ -1512,7 +1546,7 @@ namespace reshade
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::destroy_command_queue, void, api::command_queue *queue);
 
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::init_swapchain, void, api::swapchain *swapchain);
-	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::create_swapchain, bool, api::resource_desc &back_buffer_desc, void *hwnd);
+	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::create_swapchain, bool, api::swapchain_desc &desc, void *hwnd);
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::destroy_swapchain, void, api::swapchain *swapchain);
 
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::init_effect_runtime, void, api::effect_runtime *runtime);
@@ -1613,4 +1647,6 @@ namespace reshade
 
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_overlay, void, api::effect_runtime *runtime);
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_screenshot, void, api::effect_runtime *runtime, const char *filename);
+
+	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_render_technique, void, api::effect_runtime *runtime, api::effect_technique technique, api::command_list *cmd_list, api::resource_view rtv, api::resource_view rtv_srgb);
 }

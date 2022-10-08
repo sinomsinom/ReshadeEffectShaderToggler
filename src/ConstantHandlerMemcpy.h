@@ -60,7 +60,7 @@ namespace ConstantFeedback {
         uint8_t* GetHostConstantBuffer(uint64_t resourceHandle);
         void CreateHostConstantBuffer(device* dev, resource resource);
         void DeleteHostConstantBuffer(resource resource);
-        bool IsBufferOfInterest(uint64_t handle);
+        void SetHostConstantBuffer(const uint64_t handle, const void* buffer, size_t size, uint64_t offset, uint64_t bufferSize);
 
         bool Hook(sig_memcpy** original, sig_memcpy* detour);
         bool Unhook();
@@ -70,9 +70,9 @@ namespace ConstantFeedback {
         using ConstantHandlerBase::ApplyConstantValues;
     private:
         unordered_map<const ToggleGroup*, buffer_range> groupBufferRanges;
-        unordered_set<uint64_t> buffersOfInterest;
 
         unordered_map<uint64_t, vector<uint8_t>> deviceToHostConstantBuffer;
+        shared_mutex deviceHostMutex;
 
         bool CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& target);
         void CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list, command_queue* queue);
