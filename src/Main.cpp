@@ -589,6 +589,12 @@ static void onDestroyEffectRuntime(effect_runtime* runtime)
     data.current_runtime = nullptr;
     data.bindingMap.clear();
     g_restVariables.clear();
+
+    if (s_backBufferView != 0) {
+        runtime->get_command_queue()->wait_idle();
+        runtime->get_device()->destroy_resource_view(s_backBufferView);
+        s_backBufferView = { 0 };
+    }
 }
 
 
