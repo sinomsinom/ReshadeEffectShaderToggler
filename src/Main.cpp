@@ -53,11 +53,13 @@
 #include "ConstantCopyMethod.h"
 #include "ConstantCopyMethodSingularMapping.h"
 #include "ConstantCopyMethodNestedMapping.h"
+#include "PipelineStateTracker.h"
 
 using namespace reshade::api;
 using namespace ShaderToggler;
 using namespace AddonImGui;
 using namespace ConstantFeedback;
+using namespace StateTracker;
 
 extern "C" __declspec(dllexport) const char* NAME = "Reshade Effect Shader Toggler";
 extern "C" __declspec(dllexport) const char* DESCRIPTION = "Addon which allows you to define groups of shaders to render Reshade effects on.";
@@ -65,7 +67,9 @@ extern "C" __declspec(dllexport) const char* DESCRIPTION = "Addon which allows y
 struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataContainer {
     uint64_t activePixelShaderPipeline;
     uint64_t activeVertexShaderPipeline;
-    vector<resource_view> active_rtv_history = vector<resource_view>(MAX_RT_HISTORY);
+    unordered_map<string, int32_t> techniquesToRender;
+    unordered_map<string, int32_t> bindingsToUpdate;
+    vector<vector<resource_view>> active_rtv_history = vector<vector<resource_view>>(MAX_RT_HISTORY);
     unordered_set < pair<string, int32_t>,
         decltype([](const pair<string, int32_t>& v) {
         return std::hash<std::string>{}(v.first); // Don't care about history index, we'll overwrite them in case of collisions
@@ -73,18 +77,18 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
         decltype([](const pair<string, int32_t>& lhs, const pair<string, int32_t>& rhs) {
                 return lhs.first == rhs.first;
             }) > immediateActionSet;
+    PipelineStateTracker stateTracker;
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
     effect_runtime* current_runtime = nullptr;
     atomic_bool rendered_effects = false;
     unordered_map<string, bool> allEnabledTechniques;
-    unordered_map<string, int32_t> techniquesToRender;
-    unordered_map<string, int32_t> bindingsToUpdate;
     unordered_map<string, constant_type> rest_variables;
     unordered_map<string, tuple<resource, reshade::api::format, resource_view, resource_view>> bindingMap;
     unordered_set<string> bindingsUpdated;
     unordered_set<const ToggleGroup*> constantsUpdated;
+    unordered_map<uint64_t, vector<bool>> transient_mask;
 };
 
 #define CHAR_BUFFER_SIZE 256
@@ -106,9 +110,13 @@ static atomic_uint32_t g_activeCollectorFrameCounter = 0;
 static vector<string> allTechniques;
 static unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>> g_restVariables;
 static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, constantHandler, &g_activeCollectorFrameCounter, &allTechniques, &g_restVariables);
-static std::shared_mutex device_data_mutex;
+//static std::shared_mutex device_data_mutex;
 static std::shared_mutex resource_mutex;
+static std::shared_mutex resource_view_mutex;
 static std::shared_mutex constbuffer_mutex;
+static std::shared_mutex pipeline_layout_mutex;
+static std::shared_mutex render_mutex;
+static std::shared_mutex binding_mutex;
 static char g_charBuffer[CHAR_BUFFER_SIZE];
 static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
 static const float clearColor[] = { 0, 0, 0, 0 };
@@ -117,8 +125,7 @@ static unordered_set<uint64_t> s_constantBuffers;
 static unordered_set<uint64_t> s_resources;
 static unordered_set<uint64_t> s_resourceViews;
 
-static resource s_currentBackbuffer = { 0 };
-static resource_view s_backBufferView = { 0 };
+static unordered_map<uint64_t, resource_view> s_backBufferView;
 
 /// <summary>
 /// Calculates a crc32 hash from the passed in shader bytecode. The hash is used to identity the shader in future runs.
@@ -232,55 +239,50 @@ static void reloadConstantVariables(effect_runtime* runtime)
 
 static void initBackbuffer(effect_runtime* runtime)
 {
-    // Create backbuffer resource view
-    if (s_currentBackbuffer == 0 || s_currentBackbuffer.handle != runtime->get_current_back_buffer().handle)
+    // Create backbuffer resource views
+    device* dev = runtime->get_device();
+    uint32_t count = runtime->get_back_buffer_count();
+
+    for (uint32_t i = 0; i < count; ++i)
     {
-        device* dev = runtime->get_device();
-        s_currentBackbuffer = runtime->get_current_back_buffer();
+        resource backBuffer = runtime->get_back_buffer(i);
+        resource_view backBufferView = { 0 };
+        resource_desc desc = dev->get_resource_desc(backBuffer);
 
-        resource_desc desc = dev->get_resource_desc(s_currentBackbuffer);
+        dev->create_resource_view(backBuffer, resource_usage::render_target,
+            resource_view_desc(desc.texture.format), &backBufferView);
 
-        if (s_backBufferView != 0) {
-            runtime->get_command_queue()->wait_idle();
-            runtime->get_device()->destroy_resource_view(s_backBufferView);
-            s_backBufferView = { 0 };
-        }
-
-        dev->create_resource_view(s_currentBackbuffer, resource_usage::render_target,
-            resource_view_desc(desc.texture.format), &s_backBufferView);
-
+        s_backBufferView[backBuffer.handle] = backBufferView;
     }
 }
 
 
-static void RenderRemainingEffects(effect_runtime* runtime)
+static bool RenderRemainingEffects(effect_runtime* runtime)
 {
     if (runtime == nullptr || runtime->get_device() == nullptr)
     {
-        return;
+        return false;
     }
 
     command_list* cmd_list = runtime->get_command_queue()->get_immediate_command_list();
     device* device = runtime->get_device();
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    resource_view active_rtv = { 0 };
 
-    if (deviceData.current_runtime == nullptr) {
-        return;
+    if (s_backBufferView.contains(runtime->get_current_back_buffer().handle))
+    {
+        active_rtv = s_backBufferView.at(runtime->get_current_back_buffer().handle);
     }
 
-    initBackbuffer(deviceData.current_runtime);
+    if (deviceData.current_runtime == nullptr || active_rtv == 0 || !deviceData.rendered_effects) {
+        return false;
+    }
 
-    enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device](effect_runtime* runtime, effect_technique technique, string& name) {
+    bool rendered = false;
+    enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &active_rtv, &rendered](effect_runtime* runtime, effect_technique technique, string& name) {
         if (deviceData.allEnabledTechniques.contains(name) && !deviceData.allEnabledTechniques[name])
         {
-            resource_view active_rtv = s_backBufferView;
-
-            if (active_rtv == 0 || !deviceData.rendered_effects) // Nothing rendered yet by the addon in the end, let reshade do it's thing
-            {
-                return;
-            }
-
             resource res = runtime->get_device()->get_resource_from_view(active_rtv);
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
 
@@ -289,8 +291,11 @@ static void RenderRemainingEffects(effect_runtime* runtime)
             runtime->render_technique(technique, cmd_list, active_rtv);
 
             deviceData.allEnabledTechniques[name] = true;
+            rendered = true;
         }
         });
+
+    return rendered;
 }
 
 
@@ -324,6 +329,9 @@ static void onResetCommandList(command_list* commandList)
     commandListData.activePixelShaderPipeline = -1;
     commandListData.activeVertexShaderPipeline = -1;
     commandListData.active_rtv_history.clear();
+    commandListData.bindingsToUpdate.clear();
+    commandListData.techniquesToRender.clear();
+    commandListData.stateTracker.Reset();
 }
 
 
@@ -372,47 +380,20 @@ static void onDestroyResource(device* device, resource res)
 
 static void onInitResourceView(device* device, resource resource, resource_usage usage_type, const resource_view_desc& desc, resource_view view)
 {
-    std::unique_lock<shared_mutex> lock(resource_mutex);
+    std::unique_lock<shared_mutex> lock(resource_view_mutex);
     s_resourceViews.emplace(view.handle);
 }
 
 static void onDestroyResourceView(device* device, resource_view view)
 {
-    std::unique_lock<shared_mutex> lock(resource_mutex);
+    std::unique_lock<shared_mutex> lock(resource_view_mutex);
     s_resourceViews.erase(view.handle);
-}
-
-
-static void onPresent(command_queue* queue, swapchain* swapchain, const rect*, const rect*, uint32_t, const rect*)
-{
-    DeviceDataContainer& deviceData = queue->get_device()->get_private_data<DeviceDataContainer>();
-
-    // does this make sense? need to make sure to reset when presenting the reshade command queue, but before reshade_present
-    if (queue == deviceData.current_runtime->get_command_queue())
-    {
-        std::unique_lock<shared_mutex> lock(device_data_mutex);
-
-        if (deviceData.current_runtime->get_effects_state())
-        {
-            RenderRemainingEffects(deviceData.current_runtime);
-        }
-
-        deviceData.techniquesToRender.clear();
-        deviceData.rendered_effects = false;
-
-        std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [](auto& el) {
-            el.second = false;
-            });
-
-        deviceData.bindingsUpdated.clear();
-        deviceData.constantsUpdated.clear();
-    }
 }
 
 
 static void onReshadeReloadedEffects(effect_runtime* runtime)
 {
-    std::unique_lock<shared_mutex> lock(device_data_mutex);
+    std::unique_lock<shared_mutex> lock(render_mutex);
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
     data.allEnabledTechniques.clear();
     allTechniques.clear();
@@ -563,6 +544,8 @@ static void onInitEffectRuntime(effect_runtime* runtime)
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
     data.current_runtime = runtime;
 
+    initBackbuffer(runtime);
+
     // Initialize texture bindings with default format
     for (auto& group : g_addonUIData.GetToggleGroups())
     {
@@ -574,6 +557,7 @@ static void onInitEffectRuntime(effect_runtime* runtime)
 
             if (CreateTextureBinding(runtime, &res, &srv, &rtv, format::r8g8b8a8_unorm))
             {
+                std::unique_lock<shared_mutex> lock(binding_mutex);
                 data.bindingMap[group.second.getTextureBindingName()] = std::make_tuple(res, format::r8g8b8a8_unorm, srv, rtv);
                 runtime->update_texture_bindings(group.second.getTextureBindingName().c_str(), srv);
             }
@@ -584,17 +568,18 @@ static void onInitEffectRuntime(effect_runtime* runtime)
 
 static void onDestroyEffectRuntime(effect_runtime* runtime)
 {
-    std::unique_lock<shared_mutex> lock(device_data_mutex);
+    std::unique_lock<shared_mutex> lock(binding_mutex);
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
     data.current_runtime = nullptr;
     data.bindingMap.clear();
     g_restVariables.clear();
 
-    if (s_backBufferView != 0) {
+    for (auto& view : s_backBufferView) {
         runtime->get_command_queue()->wait_idle();
-        runtime->get_device()->destroy_resource_view(s_backBufferView);
-        s_backBufferView = { 0 };
+        runtime->get_device()->destroy_resource_view(view.second);
     }
+
+    s_backBufferView.clear();
 }
 
 
@@ -661,18 +646,19 @@ bool checkDrawCallForCommandList(command_list* commandList)
         }
     }
 
+    std::shared_lock<std::shared_mutex> dev_mutex(render_mutex);
     for (auto tGroup : tGroups)
     {
         if (tGroup->isProvidingTextureBinding())
         {
-            if (deviceData.bindingsToUpdate.contains(tGroup->getTextureBindingName()))
+            if (commandListData.bindingsToUpdate.contains(tGroup->getTextureBindingName()))
             {
-                if (tGroup->getHistoryIndex() < deviceData.bindingsToUpdate[tGroup->getTextureBindingName()])
-                    deviceData.bindingsToUpdate[tGroup->getTextureBindingName()] = tGroup->getHistoryIndex();
+                if (tGroup->getHistoryIndex() < commandListData.bindingsToUpdate[tGroup->getTextureBindingName()])
+                    commandListData.bindingsToUpdate[tGroup->getTextureBindingName()] = tGroup->getHistoryIndex();
             }
             else
             {
-                deviceData.bindingsToUpdate.emplace(tGroup->getTextureBindingName(), tGroup->getHistoryIndex());
+                commandListData.bindingsToUpdate.emplace(tGroup->getTextureBindingName(), tGroup->getHistoryIndex());
             }
         }
 
@@ -687,14 +673,14 @@ bool checkDrawCallForCommandList(command_list* commandList)
 
                 if (!tech.second)
                 {
-                    if (deviceData.techniquesToRender.contains(tech.first))
+                    if (commandListData.techniquesToRender.contains(tech.first))
                     {
-                        if (tGroup->getHistoryIndex() < deviceData.techniquesToRender[tech.first])
-                            deviceData.techniquesToRender[tech.first] = tGroup->getHistoryIndex();
+                        if (tGroup->getHistoryIndex() < commandListData.techniquesToRender[tech.first])
+                            commandListData.techniquesToRender[tech.first] = tGroup->getHistoryIndex();
                     }
                     else
                     {
-                        deviceData.techniquesToRender.emplace(tech.first, tGroup->getHistoryIndex());
+                        commandListData.techniquesToRender.emplace(tech.first, tGroup->getHistoryIndex());
                     }
                 }
             }
@@ -702,23 +688,24 @@ bool checkDrawCallForCommandList(command_list* commandList)
         else if (tGroup->preferredTechniques().size() > 0) {
             for (auto& techName : tGroup->preferredTechniques())
             {
-                if (deviceData.allEnabledTechniques.contains(techName) && !deviceData.allEnabledTechniques[techName])
+                if (deviceData.allEnabledTechniques.contains(techName) && !deviceData.allEnabledTechniques.at(techName))
                 {
-                    if (deviceData.techniquesToRender.contains(techName))
+                    if (commandListData.techniquesToRender.contains(techName))
                     {
-                        if (tGroup->getHistoryIndex() < deviceData.techniquesToRender[techName])
-                            deviceData.techniquesToRender[techName] = tGroup->getHistoryIndex();
+                        if (tGroup->getHistoryIndex() < commandListData.techniquesToRender[techName])
+                            commandListData.techniquesToRender[techName] = tGroup->getHistoryIndex();
                     }
                     else
                     {
-                        deviceData.techniquesToRender.emplace(techName, tGroup->getHistoryIndex());
+                        commandListData.techniquesToRender.emplace(techName, tGroup->getHistoryIndex());
                     }
                 }
             }
         }
     }
+    dev_mutex.unlock();
 
-    return deviceData.techniquesToRender.size() > 0 || deviceData.bindingsToUpdate.size() > 0;
+    return commandListData.techniquesToRender.size() > 0 || commandListData.bindingsToUpdate.size() > 0;
 }
 
 
@@ -762,21 +749,49 @@ static const ToggleGroup* checkDescriptors(command_list* commandList)
 }
 
 
-static resource_view GetCurrentResourceView(const pair<string, int32_t>& matchObject, CommandListDataContainer& commandListData)
+static const resource_view GetCurrentResourceView(effect_runtime* runtime, const pair<string, int32_t>& matchObject, CommandListDataContainer& commandListData)
 {
-    resource_view active_rtv = { 0 };
+    uint32_t index;
 
     if (commandListData.active_rtv_history.size() > abs(matchObject.second) && matchObject.second <= 0)
     {
-        active_rtv = commandListData.active_rtv_history[abs(matchObject.second)];
+        index = abs(matchObject.second);
     }
     else if (matchObject.second < commandListData.active_rtv_history.size() - 1)
     {
-        active_rtv = commandListData.active_rtv_history[commandListData.active_rtv_history.size() - 1];
+        index = commandListData.active_rtv_history.size() - 1;
     }
     else
     {
-        active_rtv = commandListData.active_rtv_history[0];
+        index = 0;
+    }
+
+    device* device = runtime->get_device();
+    const vector<resource_view>& rtvs = commandListData.active_rtv_history.at(index);
+    resource_view active_rtv = { 0 };
+
+    for (int i = 0; i < rtvs.size(); i++)
+    {
+        if (runtime != nullptr && rtvs[i] != 0)
+        {
+            resource rs = device->get_resource_from_view(rtvs[i]);
+            if (rs == 0)
+            {
+                // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
+                continue;
+            }
+
+            const resource_desc texture_desc = device->get_resource_desc(rs);
+
+            uint32_t frame_width, frame_height;
+            runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
+
+            if (texture_desc.texture.height == frame_height && texture_desc.texture.width == frame_width)
+            {
+                active_rtv = rtvs[i];
+                break;
+            }
+        }
     }
 
     return active_rtv;
@@ -794,11 +809,11 @@ static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
-    if (deviceData.current_runtime == nullptr || commandListData.active_rtv_history.size() == 0 || deviceData.bindingsToUpdate.size() == 0) {
+    if (deviceData.current_runtime == nullptr || commandListData.active_rtv_history.size() == 0 || commandListData.bindingsToUpdate.size() == 0) {
         return;
     }
 
-    for (const auto& binding : deviceData.bindingsToUpdate)
+    for (const auto& binding : commandListData.bindingsToUpdate)
     {
         if (binding.second <= 0) {
             commandListData.immediateActionSet.emplace(binding);
@@ -809,41 +824,37 @@ static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
     {
         if (dec)
         {
-            for (auto& tech : deviceData.bindingsToUpdate)
+            for (auto& tech : commandListData.bindingsToUpdate)
             {
-                if (deviceData.bindingsToUpdate[tech.first] > 0)
-                    deviceData.bindingsToUpdate[tech.first]--;
+                if (commandListData.bindingsToUpdate[tech.first] > 0)
+                    commandListData.bindingsToUpdate[tech.first]--;
             }
         }
 
         return;
     }
 
+    std::unique_lock<shared_mutex> mtx(binding_mutex);
     for (const auto& binding : commandListData.immediateActionSet)
     {
         string bindingName = binding.first;
+        effect_runtime* runtime = deviceData.current_runtime;
 
         if (deviceData.bindingsUpdated.contains(bindingName)) {
             continue;
         }
 
-        resource_view active_rtv = GetCurrentResourceView(binding, commandListData);
+        resource_view active_rtv = GetCurrentResourceView(runtime, binding, commandListData);
 
-        if (active_rtv == 0 || !s_resourceViews.contains(active_rtv.handle))
+        if (active_rtv == 0)
         {
             continue;
         }
 
-        effect_runtime* runtime = deviceData.current_runtime;
         if (deviceData.bindingMap.contains(bindingName))
         {
             resource res = runtime->get_device()->get_resource_from_view(active_rtv);
             resource target_res = std::get<0>(deviceData.bindingMap[bindingName]);
-
-            if (res == 0)
-            {
-                continue;
-            }
 
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
             if (UpdateTextureBinding(runtime, bindingName, resDesc.texture.format))
@@ -854,18 +865,19 @@ static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
             }
         }
     }
+    mtx.unlock();
 
     for (auto& tech : commandListData.immediateActionSet)
     {
-        deviceData.bindingsToUpdate.erase(tech.first);
+        commandListData.bindingsToUpdate.erase(tech.first);
     }
 
     if (dec)
     {
-        for (auto& tech : deviceData.bindingsToUpdate)
+        for (auto& tech : commandListData.bindingsToUpdate)
         {
-            if (deviceData.bindingsToUpdate[tech.first] > 0)
-                deviceData.bindingsToUpdate[tech.first]--;
+            if (commandListData.bindingsToUpdate[tech.first] > 0)
+                commandListData.bindingsToUpdate[tech.first]--;
         }
     }
 
@@ -883,12 +895,13 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
     device* device = cmd_list->get_device();
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+    bool rendered = false;
 
-    if (deviceData.current_runtime == nullptr || commandListData.active_rtv_history.size() == 0 || deviceData.techniquesToRender.size() == 0) {
+    if (deviceData.current_runtime == nullptr || commandListData.active_rtv_history.size() == 0 || commandListData.techniquesToRender.size() == 0) {
         return;
     }
 
-    for (const auto& tech : deviceData.techniquesToRender)
+    for (const auto& tech : commandListData.techniquesToRender)
     {
         if (tech.second <= 0) {
             commandListData.immediateActionSet.emplace(tech);
@@ -899,22 +912,23 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
     {
         if (inc)
         {
-            for (auto& tech : deviceData.techniquesToRender)
+            for (auto& tech : commandListData.techniquesToRender)
             {
-                if (deviceData.techniquesToRender[tech.first] > 0)
-                    deviceData.techniquesToRender[tech.first]--;
+                if (commandListData.techniquesToRender[tech.first] > 0)
+                    commandListData.techniquesToRender[tech.first]--;
             }
         }
 
         return;
     }
 
-    enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device](effect_runtime* runtime, effect_technique technique, string& name) {
+    std::unique_lock<std::shared_mutex> dev_mutex(render_mutex);
+    enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &rendered](effect_runtime* runtime, effect_technique technique, string& name) {
         auto historic_rtv = commandListData.immediateActionSet.find(pair<string, int32_t>(name, 0));
 
         if (historic_rtv != commandListData.immediateActionSet.end() && historic_rtv->second <= 0 && !deviceData.allEnabledTechniques[name])
         {
-            resource_view active_rtv = GetCurrentResourceView(*historic_rtv, commandListData);
+            resource_view active_rtv = GetCurrentResourceView(runtime, *historic_rtv, commandListData);
 
             if (active_rtv == 0)
             {
@@ -923,64 +937,40 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 
             resource res = runtime->get_device()->get_resource_from_view(active_rtv);
 
-            if (res == 0)
-            {
-                return;
-            }
-
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
             g_addonUIData.cFormat = resDesc.texture.format;
-
-            //std::shared_lock<shared_mutex> lockR(resource_mutex);
-            //const auto& usage = s_resourceUsage.find(res.handle);
-            //
-            //if (usage == s_resourceUsage.end())
-            //{
-            //    return;
-            //}
-            //
-            //resource_usage r_usage = resource_usage::undefined;
-            //const auto& usageBlah = usage->second.find(cmd_list);
-            //if (usageBlah != usage->second.end())
-            //{
-            //    r_usage = usageBlah->second;
-            //}
-            //else
-            //{
-            //    r_usage = usage->second.at(NULL);
-            //}
-            //lockR.unlock();
-            //
-            //if (!static_cast<uint32_t>(r_usage & resource_usage::render_target))
-            //{
-            //    return;
-            //}
-            //
-            //cmd_list->barrier(res, oldUsage, resource_usage::render_target);
 
             runtime->render_effects(cmd_list, active_rtv);
             runtime->render_technique(technique, cmd_list, active_rtv);
 
             deviceData.allEnabledTechniques[name] = true;
             deviceData.rendered_effects = true;
+            rendered = true;
         }
         });
+    dev_mutex.unlock();
 
     for (auto& tech : commandListData.immediateActionSet)
     {
-        deviceData.techniquesToRender.erase(tech.first);
+        commandListData.techniquesToRender.erase(tech.first);
     }
     if (inc)
     {
-        for (auto& tech : deviceData.techniquesToRender)
+        for (auto& tech : commandListData.techniquesToRender)
         {
 
-            if (deviceData.techniquesToRender[tech.first] > 0)
-                deviceData.techniquesToRender[tech.first]--;
+            if (commandListData.techniquesToRender[tech.first] > 0)
+                commandListData.techniquesToRender[tech.first]--;
         }
     }
 
     commandListData.immediateActionSet.clear();
+
+    if (rendered && (device->get_api() == device_api::d3d12 || device->get_api() == device_api::vulkan))
+    {
+        std::shared_lock<std::shared_mutex> dev_mutex(pipeline_layout_mutex);
+        commandListData.stateTracker.ReApplyState(cmd_list, deviceData.transient_mask);
+    }
 }
 
 
@@ -997,6 +987,11 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         }
         CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
         DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
+
+        if (commandList->get_device()->get_api() == device_api::vulkan)
+        {
+            commandListData.stateTracker.OnBindPipeline(commandList, stages, pipelineHandle);
+        }
 
         if (!deviceData.current_runtime->get_effects_state())
         {
@@ -1022,11 +1017,13 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
             commandListData.activeVertexShaderPipeline = pipelineHandle.handle;
         }
 
-        std::unique_lock<shared_mutex> lock(device_data_mutex);
         (void)checkDrawCallForCommandList(commandList);
-        
-        UpdateTextureBindings(commandList, false);
-        RenderEffects(commandList, false);
+
+        if (!commandListData.stateTracker.IsInRenderPass())
+        {
+            UpdateTextureBindings(commandList, false);
+            RenderEffects(commandList, false);
+        }
     }
 }
 
@@ -1042,51 +1039,68 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
+    commandListData.stateTracker.OnBindRenderTargetsAndDepthStencil(cmd_list, count, rtvs, dsv);
+
     if (!deviceData.current_runtime->get_effects_state())
     {
         return;
     }
 
-    std::unique_lock<std::shared_mutex> lock(device_data_mutex);
     UpdateTextureBindings(cmd_list, true);
     RenderEffects(cmd_list, true);
-    lock.unlock();
 
-    resource_view new_view = { 0 };
+    vector<resource_view> new_views = vector<resource_view>(count);
 
     for (uint32_t i = 0; i < count; i++)
     {
-        if (deviceData.current_runtime != nullptr && rtvs[i] != 0)
-        {
-            resource rs = device->get_resource_from_view(rtvs[i]);
-
-            if (rs == 0)
-            {
-                // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
-                continue;
-            }
-
-            const resource_desc texture_desc = device->get_resource_desc(rs);
-
-            uint32_t frame_width, frame_height;
-            deviceData.current_runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
-
-            if (texture_desc.texture.height == frame_height && texture_desc.texture.width == frame_width)
-            {
-                new_view = rtvs[i];
-                break;
-            }
-        }
+        new_views[i] = rtvs[i];
     }
 
-    if (new_view != 0)
+    if (commandListData.active_rtv_history.size() >= MAX_RT_HISTORY)
+    {
+        commandListData.active_rtv_history.pop_back();
+    }
+
+    commandListData.active_rtv_history.insert(commandListData.active_rtv_history.begin(), new_views);
+}
+
+
+static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const render_pass_render_target_desc* rts, const render_pass_depth_stencil_desc* ds)
+{
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
+    {
+        return;
+    }
+
+    device* device = cmd_list->get_device();
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+
+    commandListData.stateTracker.OnBeginRenderPass(cmd_list, count, rts, ds);
+
+    if (!deviceData.current_runtime->get_effects_state())
+    {
+        return;
+    }
+
+    UpdateTextureBindings(cmd_list, true);
+    RenderEffects(cmd_list, true);
+
+    vector<resource_view> new_views = vector<resource_view>(count);
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+        new_views[i] = rts[i].view;
+    }
+
+    if (new_views.size() > 0)
     {
         if (commandListData.active_rtv_history.size() >= MAX_RT_HISTORY)
         {
             commandListData.active_rtv_history.pop_back();
         }
 
-        commandListData.active_rtv_history.insert(commandListData.active_rtv_history.begin(), new_view);
+        commandListData.active_rtv_history.insert(commandListData.active_rtv_history.begin(), new_views);
     }
 }
 
@@ -1094,26 +1108,34 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 static void onReshadeBeginEffects(effect_runtime* runtime, command_list* cmd_list, resource_view rtv, resource_view rtv_srgb)
 {
     DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    CommandListDataContainer& cmdData = cmd_list->get_private_data<CommandListDataContainer>();
 
-    enumerateTechniques(deviceData.current_runtime, [&deviceData](effect_runtime* runtime, effect_technique technique, string& name) {
-        if (deviceData.allEnabledTechniques.contains(name) && deviceData.techniquesToRender.size() > 0)
-        {
-            deviceData.current_runtime->set_technique_state(technique, false);
-        }
-        });
+    if (&cmdData != nullptr && cmdData.techniquesToRender.size() > 0)
+    {
+        enumerateTechniques(deviceData.current_runtime, [&deviceData](effect_runtime* runtime, effect_technique technique, string& name) {
+            if (deviceData.allEnabledTechniques.contains(name))
+            {
+                deviceData.current_runtime->set_technique_state(technique, false);
+            }
+            });
+    }
 }
 
 
 static void onReshadeFinishEffects(effect_runtime* runtime, command_list* cmd_list, resource_view rtv, resource_view rtv_srgb)
 {
     DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    CommandListDataContainer& cmdData = cmd_list->get_private_data<CommandListDataContainer>();
 
-    enumerateTechniques(deviceData.current_runtime, [&deviceData](effect_runtime* runtime, effect_technique technique, string& name) {
-        if (deviceData.allEnabledTechniques.contains(name) && deviceData.techniquesToRender.size() > 0)
-        {
-            deviceData.current_runtime->set_technique_state(technique, true);
-        }
-        });
+    if (&cmdData != nullptr && cmdData.techniquesToRender.size() > 0)
+    {
+        enumerateTechniques(deviceData.current_runtime, [&deviceData](effect_runtime* runtime, effect_technique technique, string& name) {
+            if (deviceData.allEnabledTechniques.contains(name))
+            {
+                deviceData.current_runtime->set_technique_state(technique, true);
+            }
+            });
+    }
 }
 
 
@@ -1147,6 +1169,60 @@ static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipel
 }
 
 
+static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_set* sets)
+{
+    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    data.stateTracker.OnBindDescriptorSets(cmd_list, stages, layout, first, count, sets);
+}
+
+
+static void onBindViewports(command_list* cmd_list, uint32_t first, uint32_t count, const viewport* viewports)
+{
+    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    data.stateTracker.OnBindViewports(cmd_list, first, count, viewports);
+}
+
+
+static void onBindScissorRects(command_list* cmd_list, uint32_t first, uint32_t count, const rect* rects)
+{
+    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    data.stateTracker.OnBindScissorRects(cmd_list, first, count, rects);
+}
+
+
+static void onBindPipelineStates(command_list* cmd_list, uint32_t count, const dynamic_state* states, const uint32_t* values)
+{
+    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    data.stateTracker.OnBindPipelineStates(cmd_list, count, states, values);
+}
+
+
+static void onInitPipelineLayout(device* device, uint32_t param_count, const pipeline_layout_param* params, pipeline_layout layout)
+{
+    unique_lock<shared_mutex> lock(pipeline_layout_mutex);
+
+    auto& data = device->get_private_data<DeviceDataContainer>();
+    data.transient_mask[layout.handle].resize(param_count);
+
+    for (uint32_t i = 0; i < param_count; i++)
+    {
+        if (params[i].type == pipeline_layout_param_type::push_constants)
+        {
+            data.transient_mask[layout.handle][i] = true;
+        }
+    }
+}
+
+
+static void onDestroyPipelineLayout(device* device, pipeline_layout layout)
+{
+    unique_lock<shared_mutex> lock(pipeline_layout_mutex);
+
+    auto& data = device->get_private_data<DeviceDataContainer>();
+    data.transient_mask.erase(layout.handle);
+}
+
+
 static void onReshadeOverlay(effect_runtime* runtime)
 {
     DisplayOverlay(g_addonUIData, runtime);
@@ -1157,6 +1233,30 @@ static void onReshadePresent(effect_runtime* runtime)
 {
     reloadConstantVariables(runtime);
     CheckHotkeys(g_addonUIData, runtime);
+
+    device* dev = runtime->get_device();
+    DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
+    command_queue* queue = runtime->get_command_queue();
+
+    // does this make sense? need to make sure to reset when presenting the reshade command queue, but before reshade_present
+    if (queue == deviceData.current_runtime->get_command_queue())
+    {
+        //std::unique_lock<shared_mutex> lock(device_data_mutex);
+
+        if (deviceData.current_runtime->get_effects_state())
+        {
+            RenderRemainingEffects(deviceData.current_runtime);
+        }
+
+        deviceData.rendered_effects = false;
+
+        std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [](auto& el) {
+            el.second = false;
+            });
+
+        deviceData.bindingsUpdated.clear();
+        deviceData.constantsUpdated.clear();
+    }
 }
 
 
@@ -1256,6 +1356,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::init_resource_view>(onInitResourceView);
         reshade::register_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
         reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
+        reshade::register_event<reshade::addon_event::bind_viewports>(onBindViewports);
+        reshade::register_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
+        reshade::register_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
+        reshade::register_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
+        reshade::register_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
+        reshade::register_event<reshade::addon_event::bind_pipeline_states>(onBindPipelineStates);
         reshade::register_event<reshade::addon_event::init_command_list>(onInitCommandList);
         reshade::register_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
         reshade::register_event<reshade::addon_event::reset_command_list>(onResetCommandList);
@@ -1267,8 +1373,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
         reshade::register_event<reshade::addon_event::init_device>(onInitDevice);
         reshade::register_event<reshade::addon_event::destroy_device>(onDestroyDevice);
-        reshade::register_event<reshade::addon_event::present>(onPresent);
         reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
+        reshade::register_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
         reshade::register_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
         reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
         reshade::register_event<reshade::addon_event::reshade_begin_effects>(onReshadeBeginEffects);
@@ -1287,13 +1393,19 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::reshade_reloaded_effects>(onReshadeReloadedEffects);
         reshade::unregister_event<reshade::addon_event::reshade_set_technique_state>(onReshadeSetTechniqueState);
         reshade::unregister_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
+        reshade::unregister_event<reshade::addon_event::bind_viewports>(onBindViewports);
+        reshade::unregister_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
+        reshade::unregister_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
+        reshade::unregister_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
+        reshade::unregister_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
+        reshade::unregister_event<reshade::addon_event::bind_pipeline_states>(onBindPipelineStates);
         reshade::unregister_event<reshade::addon_event::init_command_list>(onInitCommandList);
         reshade::unregister_event<reshade::addon_event::destroy_command_list>(onDestroyCommandList);
         reshade::unregister_event<reshade::addon_event::reset_command_list>(onResetCommandList);
         reshade::unregister_event<reshade::addon_event::init_device>(onInitDevice);
         reshade::unregister_event<reshade::addon_event::destroy_device>(onDestroyDevice);
-        reshade::unregister_event<reshade::addon_event::present>(onPresent);
         reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(onBindRenderTargetsAndDepthStencil);
+        reshade::unregister_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
         reshade::unregister_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
         reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
         reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(onReshadeBeginEffects);

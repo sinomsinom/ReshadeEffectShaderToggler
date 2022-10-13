@@ -63,6 +63,9 @@
     <ClInclude Include="ConstantCopyMethodNestedMapping.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="PipelineStateTracker.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -96,6 +99,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ConstantCopyMethodNestedMapping.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PipelineStateTracker.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
