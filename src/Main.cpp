@@ -41,7 +41,6 @@
 #include <tuple>
 #include <chrono>
 #include <MinHook.h>
-#include <concurrent_unordered_map.h>
 #include "crc32_hash.hpp"
 #include "ShaderManager.h"
 #include "CDataFile.h"
@@ -1238,25 +1237,22 @@ static void onReshadePresent(effect_runtime* runtime)
     DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
     command_queue* queue = runtime->get_command_queue();
 
-    // does this make sense? need to make sure to reset when presenting the reshade command queue, but before reshade_present
-    if (queue == deviceData.current_runtime->get_command_queue())
+    if (deviceData.current_runtime->get_effects_state())
     {
-        //std::unique_lock<shared_mutex> lock(device_data_mutex);
-
-        if (deviceData.current_runtime->get_effects_state())
-        {
-            RenderRemainingEffects(deviceData.current_runtime);
-        }
-
-        deviceData.rendered_effects = false;
-
-        std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [](auto& el) {
-            el.second = false;
-            });
-
-        deviceData.bindingsUpdated.clear();
-        deviceData.constantsUpdated.clear();
+        RenderRemainingEffects(deviceData.current_runtime);
     }
+
+    if (dev->get_api() != device_api::d3d12 && dev->get_api() != device_api::vulkan)
+        onResetCommandList(queue->get_immediate_command_list());
+
+    deviceData.rendered_effects = false;
+
+    std::for_each(deviceData.allEnabledTechniques.begin(), deviceData.allEnabledTechniques.end(), [](auto& el) {
+        el.second = false;
+        });
+
+    deviceData.bindingsUpdated.clear();
+    deviceData.constantsUpdated.clear();
 }
 
 
