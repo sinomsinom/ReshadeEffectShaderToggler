@@ -466,7 +466,7 @@ static bool CreateTextureBinding(effect_runtime* runtime, resource* res, resourc
 }
 
 
-static void DestroyTextureBinding(effect_runtime* runtime, std::string binding)
+static void DestroyTextureBinding(effect_runtime* runtime, const string& binding)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
@@ -503,7 +503,7 @@ static void DestroyTextureBinding(effect_runtime* runtime, std::string binding)
 }
 
 
-static bool UpdateTextureBinding(effect_runtime* runtime, std::string binding, reshade::api::format format)
+static bool UpdateTextureBinding(effect_runtime* runtime, const string& binding, reshade::api::format format)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
@@ -569,12 +569,18 @@ static void onDestroyEffectRuntime(effect_runtime* runtime)
 {
     std::unique_lock<shared_mutex> lock(binding_mutex);
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
+
+    for (auto& binding : data.bindingMap)
+    {
+        DestroyTextureBinding(runtime, binding.first);
+    }
+
     data.current_runtime = nullptr;
     data.bindingMap.clear();
     g_restVariables.clear();
 
+    runtime->get_command_queue()->wait_idle();
     for (auto& view : s_backBufferView) {
-        runtime->get_command_queue()->wait_idle();
         runtime->get_device()->destroy_resource_view(view.second);
     }
 
