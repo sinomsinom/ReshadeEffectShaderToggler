@@ -96,7 +96,7 @@ namespace AddonImGui
         int _startValueFramecountCollectionPhase = FRAMECOUNT_COLLECTION_PHASE_DEFAULT;
         float _overlayOpacity = 0.2f;
         uint32_t _keyBindings[ARRAYSIZE(KeybindNames)];
-        bool _memcpyHookAttempt = true;
+        bool _memcpyHookAttempt = false;
         bool _memcpyAssumeUnnested = false;
     public:
         AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandlerBase* constants, atomic_uint32_t* activeCollectorFrameCounter,
