@@ -35,18 +35,18 @@ void ConstantHandlerMemcpy::SetBufferRange(const ToggleGroup* group, buffer_rang
 
 void ConstantHandlerMemcpy::CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list, command_queue* queue)
 {
-    buffer_range currentBufferRange = groupBufferRanges[group];
+    buffer_range currentBufferRange = groupBufferRanges.at(group);
     resource_desc targetBufferDesc = dev->get_resource_desc(currentBufferRange.buffer);
 
     CreateScratchpad(group, dev, targetBufferDesc);
 
-    vector<uint8_t>& bufferContent = groupBufferContent[group];
-    vector<uint8_t>& prevBufferContent = groupPrevBufferContent[group];
+    vector<uint8_t>& bufferContent = groupBufferContent.at(group);
+    vector<uint8_t>& prevBufferContent = groupPrevBufferContent.at(group);
 
     uint64_t size = targetBufferDesc.buffer.size;
 
     shared_lock<shared_mutex> lock(deviceHostMutex);
-    uint8_t* hostbuf = GetHostConstantBuffer(currentBufferRange.buffer.handle);
+    const uint8_t* hostbuf = GetHostConstantBuffer(currentBufferRange.buffer.handle);
     if (hostbuf != nullptr)
     {
         std::memcpy(prevBufferContent.data(), bufferContent.data(), size);
@@ -56,12 +56,12 @@ void ConstantHandlerMemcpy::CopyToScratchpad(const ToggleGroup* group, device* d
 
 bool ConstantHandlerMemcpy::CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& targetBufferDesc)
 {
-    groupBufferSize[group] = targetBufferDesc.buffer.size;
+    groupBufferSize.at(group) = targetBufferDesc.buffer.size;
 
     if (groupBufferContent.contains(group))
     {
-        groupBufferContent[group].resize(targetBufferDesc.buffer.size, 0);
-        groupPrevBufferContent[group].resize(targetBufferDesc.buffer.size, 0);
+        groupBufferContent.at(group).resize(targetBufferDesc.buffer.size, 0);
+        groupPrevBufferContent.at(group).resize(targetBufferDesc.buffer.size, 0);
     }
     else
     {
@@ -84,7 +84,7 @@ void ConstantHandlerMemcpy::RemoveGroup(const ToggleGroup* group, device* dev, c
     groupPrevBufferContent.erase(group);
 }
 
-uint8_t* ConstantHandlerMemcpy::GetHostConstantBuffer(uint64_t resourceHandle)
+const uint8_t* ConstantHandlerMemcpy::GetHostConstantBuffer(uint64_t resourceHandle)
 {
     //shared_lock<shared_mutex> lock(deviceHostMutex);
     const auto& ret = deviceToHostConstantBuffer.find(resourceHandle);

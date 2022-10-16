@@ -109,7 +109,6 @@ static atomic_uint32_t g_activeCollectorFrameCounter = 0;
 static vector<string> allTechniques;
 static unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>> g_restVariables;
 static AddonUIData g_addonUIData(&g_pixelShaderManager, &g_vertexShaderManager, constantHandler, &g_activeCollectorFrameCounter, &allTechniques, &g_restVariables);
-//static std::shared_mutex device_data_mutex;
 static std::shared_mutex resource_mutex;
 static std::shared_mutex resource_view_mutex;
 static std::shared_mutex constbuffer_mutex;
@@ -124,7 +123,10 @@ static unordered_set<uint64_t> s_constantBuffers;
 static unordered_set<uint64_t> s_resources;
 static unordered_set<uint64_t> s_resourceViews;
 
-static unordered_map<uint64_t, resource_view> s_backBufferView;
+static unordered_map<uint64_t, pair<resource_view, resource_view>> s_backBufferView;
+static unordered_map<uint64_t, pair<resource_view, resource_view>> s_sRGBResourceViews;
+static unordered_map<const resource_desc*, reshade::api::format> s_resourceFormatTransient;
+static unordered_map<uint64_t, reshade::api::format> s_resourceFormat;
 
 /// <summary>
 /// Calculates a crc32 hash from the passed in shader bytecode. The hash is used to identity the shader in future runs.
@@ -218,6 +220,65 @@ static void enumerateRESTUniformVariables(effect_runtime* runtime, std::function
         });
 }
 
+
+static bool isSRGB(reshade::api::format value)
+{
+    switch (value)
+    {
+    case format::r8g8b8a8_unorm_srgb:
+    case format::r8g8b8x8_unorm_srgb:
+    case format::b8g8r8a8_unorm_srgb:
+    case format::b8g8r8x8_unorm_srgb:
+    case format::bc1_unorm_srgb:
+    case format::bc2_unorm_srgb:
+    case format::bc3_unorm_srgb:
+    case format::bc7_unorm_srgb:
+        return true;
+    default:
+        return false;
+    }
+
+    return false;
+}
+
+
+static bool hasSRGB(reshade::api::format value)
+{
+    switch (value)
+    {
+    case format::r8g8b8a8_typeless:
+    case format::r8g8b8a8_unorm:
+    case format::r8g8b8a8_unorm_srgb:
+    case format::r8g8b8x8_typeless:
+    case format::r8g8b8x8_unorm:
+    case format::r8g8b8x8_unorm_srgb:
+    case format::b8g8r8a8_typeless:
+    case format::b8g8r8a8_unorm:
+    case format::b8g8r8a8_unorm_srgb:
+    case format::b8g8r8x8_typeless:
+    case format::b8g8r8x8_unorm:
+    case format::b8g8r8x8_unorm_srgb:
+    case format::bc1_typeless:
+    case format::bc1_unorm:
+    case format::bc1_unorm_srgb:
+    case format::bc2_typeless:
+    case format::bc2_unorm:
+    case format::bc2_unorm_srgb:
+    case format::bc3_typeless:
+    case format::bc3_unorm:
+    case format::bc3_unorm_srgb:
+    case format::bc7_typeless:
+    case format::bc7_unorm:
+    case format::bc7_unorm_srgb:
+        return true;
+    default:
+        return false;
+    }
+
+    return false;
+}
+
+
 static void reloadConstantVariables(effect_runtime* runtime)
 {
     g_restVariables.clear();
@@ -228,9 +289,9 @@ static void reloadConstantVariables(effect_runtime* runtime)
             g_restVariables.emplace(name, make_tuple(type, vector<effect_uniform_variable>()));
         }
 
-        if (type == std::get<0>(g_restVariables[name]))
+        if (type == std::get<0>(g_restVariables.at(name)))
         {
-            std::get<1>(g_restVariables[name]).push_back(variable);
+            std::get<1>(g_restVariables.at(name)).push_back(variable);
         }
         });
 }
@@ -245,13 +306,31 @@ static void initBackbuffer(effect_runtime* runtime)
     for (uint32_t i = 0; i < count; ++i)
     {
         resource backBuffer = runtime->get_back_buffer(i);
-        resource_view backBufferView = { 0 };
         resource_desc desc = dev->get_resource_desc(backBuffer);
 
-        dev->create_resource_view(backBuffer, resource_usage::render_target,
-            resource_view_desc(desc.texture.format), &backBufferView);
+        resource_view backBufferView = { 0 };
+        resource_view backBufferViewSRGB = { 0 };
+        reshade::api::format viewFormat = desc.texture.format;
+        reshade::api::format viewFormatSRGB = desc.texture.format;
 
-        s_backBufferView[backBuffer.handle] = backBufferView;
+        if (hasSRGB(desc.texture.format))
+        {
+            if (isSRGB(desc.texture.format))
+            {
+                viewFormat = format_to_default_typed(desc.texture.format);
+            }
+            else
+            {
+                viewFormatSRGB = format_to_default_typed(desc.texture.format, 1);
+            }
+        }
+
+        dev->create_resource_view(backBuffer, resource_usage::render_target,
+            resource_view_desc(viewFormat), &backBufferView);
+        dev->create_resource_view(backBuffer, resource_usage::render_target,
+            resource_view_desc(viewFormatSRGB), &backBufferViewSRGB);
+
+        s_backBufferView[backBuffer.handle] = make_pair(backBufferView, backBufferViewSRGB);
     }
 }
 
@@ -268,10 +347,12 @@ static bool RenderRemainingEffects(effect_runtime* runtime)
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
     resource_view active_rtv = { 0 };
+    resource_view active_rtv_srgb = { 0 };
 
     if (s_backBufferView.contains(runtime->get_current_back_buffer().handle))
     {
-        active_rtv = s_backBufferView.at(runtime->get_current_back_buffer().handle);
+        active_rtv = s_backBufferView.at(runtime->get_current_back_buffer().handle).first;
+        active_rtv_srgb = s_backBufferView.at(runtime->get_current_back_buffer().handle).second;
     }
 
     if (deviceData.current_runtime == nullptr || active_rtv == 0 || !deviceData.rendered_effects) {
@@ -279,7 +360,7 @@ static bool RenderRemainingEffects(effect_runtime* runtime)
     }
 
     bool rendered = false;
-    enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &active_rtv, &rendered](effect_runtime* runtime, effect_technique technique, string& name) {
+    enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &active_rtv, &active_rtv_srgb, &rendered](effect_runtime* runtime, effect_technique technique, string& name) {
         if (deviceData.allEnabledTechniques.contains(name) && !deviceData.allEnabledTechniques[name])
         {
             resource res = runtime->get_device()->get_resource_from_view(active_rtv);
@@ -287,7 +368,7 @@ static bool RenderRemainingEffects(effect_runtime* runtime)
 
             g_addonUIData.cFormat = resDesc.texture.format;
 
-            runtime->render_technique(technique, cmd_list, active_rtv);
+            runtime->render_technique(technique, cmd_list, active_rtv, active_rtv_srgb);
 
             deviceData.allEnabledTechniques[name] = true;
             rendered = true;
@@ -334,15 +415,65 @@ static void onResetCommandList(command_list* commandList)
 }
 
 
+static bool onCreateResource(device* device, resource_desc& desc, subresource_data* initial_data, resource_usage initial_state)
+{
+    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d)
+    {
+        if (hasSRGB(desc.texture.format)) {
+            std::unique_lock<shared_mutex> lock(resource_mutex);
+
+            s_resourceFormatTransient.emplace(&desc, desc.texture.format);
+
+            desc.texture.format = format_to_typeless(desc.texture.format);
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
 static void onInitResource(device* device, const resource_desc& desc, const subresource_data* initData, resource_usage usage, reshade::api::resource handle)
 {
+    auto& data = device->get_private_data<DeviceDataContainer>();
+
     std::unique_lock<shared_mutex> lock(resource_mutex);
     s_resources.emplace(handle.handle);
+
+    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d)
+    {
+        if (s_resourceFormatTransient.contains(&desc))
+        {
+            reshade::api::format orgFormat = s_resourceFormatTransient.at(&desc);
+            s_resourceFormat.emplace(handle.handle, orgFormat);
+            s_resourceFormatTransient.erase(&desc);
+
+            resource_view view_non_srgb = { 0 };
+            resource_view view_srgb = { 0 };
+
+            reshade::api::format format_non_srgb = format_to_default_typed(desc.texture.format);
+            reshade::api::format format_srgb = format_to_default_typed(desc.texture.format, 1);
+
+            if (!isSRGB(orgFormat))
+            {
+                format_non_srgb = orgFormat;
+            }
+
+            device->create_resource_view(handle, resource_usage::render_target,
+                resource_view_desc(format_non_srgb), &view_non_srgb);
+
+            device->create_resource_view(handle, resource_usage::render_target,
+                resource_view_desc(format_srgb), &view_srgb);
+
+            s_sRGBResourceViews.emplace(handle.handle, make_pair(view_non_srgb, view_srgb));
+        }
+    }
     lock.unlock();
 
     if (desc.heap == memory_heap::cpu_to_gpu && static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
     {
-        std::unique_lock<shared_mutex> lock(constbuffer_mutex);
+        std::unique_lock<shared_mutex> colock(constbuffer_mutex);
         s_constantBuffers.emplace(handle.handle);
 
         if (constantHandlerHooked)
@@ -360,13 +491,28 @@ static void onInitResource(device* device, const resource_desc& desc, const subr
 static void onDestroyResource(device* device, resource res)
 {
     std::unique_lock<shared_mutex> lock(resource_mutex);
+
     s_resources.erase(res.handle);
+    s_resourceFormat.erase(res.handle);
+
+    if (s_sRGBResourceViews.contains(res.handle))
+    {
+        auto& views = s_sRGBResourceViews.at(res.handle);
+    
+        if (views.first != 0)
+            device->destroy_resource_view(views.first);
+        if (views.second != 0)
+            device->destroy_resource_view(views.second);
+    }
+
+    s_sRGBResourceViews.erase(res.handle);
+
     lock.unlock();
 
     resource_desc desc = device->get_resource_desc(res);
     if (desc.heap == memory_heap::cpu_to_gpu && static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
     {
-        std::unique_lock<shared_mutex> lock(constbuffer_mutex);
+        std::unique_lock<shared_mutex> colock(constbuffer_mutex);
         s_constantBuffers.erase(res.handle);
 
         if (constantHandlerHooked)
@@ -377,11 +523,39 @@ static void onDestroyResource(device* device, resource res)
 }
 
 
+static bool onCreateResourceView(device* device, resource resource, resource_usage usage_type, resource_view_desc& desc)
+{
+    const resource_desc texture_desc = device->get_resource_desc(resource);
+    if (!static_cast<uint32_t>(texture_desc.usage & resource_usage::render_target) || texture_desc.type != resource_type::texture_2d)
+        return false;
+
+    std::shared_lock<shared_mutex> lock(resource_mutex);
+    if (s_resourceFormat.contains(resource.handle))
+    {
+        desc.format = s_resourceFormat.at(resource.handle);    
+        
+        if (desc.type == resource_view_type::unknown)
+        {
+            desc.type = texture_desc.texture.depth_or_layers > 1 ? resource_view_type::texture_2d_array : resource_view_type::texture_2d;
+            desc.texture.first_level = 0;
+            desc.texture.level_count = (usage_type == resource_usage::shader_resource) ? UINT32_MAX : 1;
+            desc.texture.first_layer = 0;
+            desc.texture.layer_count = (usage_type == resource_usage::shader_resource) ? UINT32_MAX : 1;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+
 static void onInitResourceView(device* device, resource resource, resource_usage usage_type, const resource_view_desc& desc, resource_view view)
 {
     std::unique_lock<shared_mutex> lock(resource_view_mutex);
     s_resourceViews.emplace(view.handle);
 }
+
 
 static void onDestroyResourceView(device* device, resource_view view)
 {
@@ -567,21 +741,23 @@ static void onInitEffectRuntime(effect_runtime* runtime)
 
 static void onDestroyEffectRuntime(effect_runtime* runtime)
 {
-    std::unique_lock<shared_mutex> lock(binding_mutex);
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    data.current_runtime = nullptr;
+
+    std::unique_lock<shared_mutex> lock(binding_mutex);
 
     for (auto& binding : data.bindingMap)
     {
         DestroyTextureBinding(runtime, binding.first);
     }
 
-    data.current_runtime = nullptr;
     data.bindingMap.clear();
-    g_restVariables.clear();
 
-    runtime->get_command_queue()->wait_idle();
     for (auto& view : s_backBufferView) {
-        runtime->get_device()->destroy_resource_view(view.second);
+        if(view.second.first != 0)
+            runtime->get_device()->destroy_resource_view(view.second.first);
+        if (view.second.second != 0)
+            runtime->get_device()->destroy_resource_view(view.second.second);
     }
 
     s_backBufferView.clear();
@@ -942,11 +1118,21 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 
             resource res = runtime->get_device()->get_resource_from_view(active_rtv);
 
+            resource_view view_non_srgb = active_rtv;
+            resource_view view_srgb = active_rtv;
+
+            if (s_sRGBResourceViews.contains(res.handle))
+            {
+                const auto& views = s_sRGBResourceViews.at(res.handle);
+                view_non_srgb = views.first;
+                view_srgb = views.second;
+            }
+
+            runtime->render_effects(cmd_list, view_non_srgb, view_srgb);
+            runtime->render_technique(technique, cmd_list, view_non_srgb, view_srgb);
+
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
             g_addonUIData.cFormat = resDesc.texture.format;
-
-            runtime->render_effects(cmd_list, active_rtv);
-            runtime->render_technique(technique, cmd_list, active_rtv);
 
             deviceData.allEnabledTechniques[name] = true;
             deviceData.rendered_effects = true;
@@ -1147,10 +1333,11 @@ static void onReshadeFinishEffects(effect_runtime* runtime, command_list* cmd_li
 static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
 {
     const ToggleGroup* group = nullptr;
-    if (update.type == descriptor_type::constant_buffer && (static_cast<uint32_t>(stages & shader_stage::pixel) || static_cast<uint32_t>(stages & shader_stage::vertex)) && (group = checkDescriptors(cmd_list)) != nullptr)
+    if (update.type == descriptor_type::constant_buffer && (group = checkDescriptors(cmd_list)) != nullptr)
     {
         DeviceDataContainer& deviceData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
 
+        std::unique_lock<shared_mutex> ulock(constbuffer_mutex);
         if (deviceData.constantsUpdated.contains(group))
         {
             return;
@@ -1236,9 +1423,6 @@ static void onReshadeOverlay(effect_runtime* runtime)
 
 static void onReshadePresent(effect_runtime* runtime)
 {
-    reloadConstantVariables(runtime);
-    CheckHotkeys(g_addonUIData, runtime);
-
     device* dev = runtime->get_device();
     DeviceDataContainer& deviceData = dev->get_private_data<DeviceDataContainer>();
     command_queue* queue = runtime->get_command_queue();
@@ -1259,6 +1443,9 @@ static void onReshadePresent(effect_runtime* runtime)
 
     deviceData.bindingsUpdated.clear();
     deviceData.constantsUpdated.clear();
+    
+    reloadConstantVariables(runtime);
+    CheckHotkeys(g_addonUIData, runtime);
 }
 
 
@@ -1352,9 +1539,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         g_addonUIData.LoadShaderTogglerIniFile();
         InitHooks();
         reshade::register_event<reshade::addon_event::init_resource>(onInitResource);
+        reshade::register_event<reshade::addon_event::create_resource>(onCreateResource);
         reshade::register_event<reshade::addon_event::map_buffer_region>(onMapBufferRegion);
         reshade::register_event<reshade::addon_event::unmap_buffer_region>(onUnmapBufferRegion);
         reshade::register_event<reshade::addon_event::destroy_resource>(onDestroyResource);
+        reshade::register_event<reshade::addon_event::create_resource_view>(onCreateResourceView);
         reshade::register_event<reshade::addon_event::init_resource_view>(onInitResourceView);
         reshade::register_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
         reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
@@ -1413,8 +1602,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(onReshadeBeginEffects);
         reshade::unregister_event<reshade::addon_event::reshade_finish_effects>(onReshadeFinishEffects);
         reshade::unregister_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
+        reshade::unregister_event<reshade::addon_event::create_resource>(onCreateResource);
         reshade::unregister_event<reshade::addon_event::init_resource>(onInitResource);
         reshade::unregister_event<reshade::addon_event::destroy_resource>(onDestroyResource);
+        reshade::unregister_event<reshade::addon_event::create_resource_view>(onCreateResourceView);
         reshade::unregister_event<reshade::addon_event::init_resource_view>(onInitResourceView);
         reshade::unregister_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
         reshade::unregister_overlay(nullptr, &displaySettings);

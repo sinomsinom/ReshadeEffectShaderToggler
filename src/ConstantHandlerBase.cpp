@@ -15,7 +15,7 @@ size_t ConstantHandlerBase::GetConstantBufferSize(const ToggleGroup* group)
 {
     if (groupBufferSize.contains(group))
     {
-        return groupBufferSize[group];
+        return groupBufferSize.at(group);
     }
 
     return 0;
@@ -25,28 +25,28 @@ uint8_t* ConstantHandlerBase::GetConstantBuffer(const ToggleGroup* group)
 {
     if (groupBufferContent.contains(group))
     {
-        return groupBufferContent[group].data();
+        return groupBufferContent.at(group).data();
     }
 
     return nullptr;
 }
 
 void ConstantHandlerBase::ApplyConstantValues(effect_runtime* runtime, const ToggleGroup* group,
-    unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants)
+    const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants)
 {
     if (!groupBufferContent.contains(group) || runtime == nullptr)
     {
         return;
     }
 
-    const uint8_t* buffer = groupBufferContent[group].data();
-    const uint8_t* prevBuffer = groupPrevBufferContent[group].data();
+    const uint8_t* buffer = groupBufferContent.at(group).data();
+    const uint8_t* prevBuffer = groupPrevBufferContent.at(group).data();
 
     for (const auto& vars : group->GetVarOffsetMapping())
     {
-        string var = vars.first;
-        uintptr_t offset = get<0>(vars.second);
-        bool prevValue = get<1>(vars.second);
+        const string& var = get<0>(vars);
+        uintptr_t offset = get<0>(get<1>(vars));
+        bool prevValue = get<1>(get<1>(vars));
 
         const uint8_t* bufferInUse = prevValue ? prevBuffer : buffer;
 
@@ -55,15 +55,15 @@ void ConstantHandlerBase::ApplyConstantValues(effect_runtime* runtime, const Tog
             continue;
         }
 
-        constant_type type = std::get<0>(constants[var]);
+        constant_type type = std::get<0>(constants.at(var));
         uint32_t typeIndex = static_cast<uint32_t>(type);
 
-        if (offset + type_size[typeIndex] * type_length[typeIndex] >= groupBufferSize[group])
+        if (offset + type_size[typeIndex] * type_length[typeIndex] >= groupBufferSize.at(group))
         {
             continue;
         }
 
-        const vector<effect_uniform_variable>& effect_variables = std::get<1>(constants[var]);
+        const vector<effect_uniform_variable>& effect_variables = std::get<1>(constants.at(var));
 
         for (const auto& effect_var : effect_variables)
         {

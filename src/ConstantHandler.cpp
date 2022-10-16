@@ -35,12 +35,12 @@ void ConstantHandler::SetBufferRange(const ToggleGroup* group, buffer_range rang
 void ConstantHandler::CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list, command_queue* queue)
 {
     resource bufferResource = { 0 };
-    buffer_range currentBufferRange = groupBufferRanges[group];
+    buffer_range currentBufferRange = groupBufferRanges.at(group);
     resource_desc targetBufferDesc = dev->get_resource_desc(currentBufferRange.buffer);
 
     if (CreateScratchpad(group, dev, targetBufferDesc))
     {
-        bufferResource = groupBufferResourceScratchpad[group];
+        bufferResource = groupBufferResourceScratchpad.at(group);
         resource_desc desc = dev->get_resource_desc(bufferResource);
 
         if (desc.buffer.size != targetBufferDesc.buffer.size)
@@ -52,7 +52,7 @@ void ConstantHandler::CopyToScratchpad(const ToggleGroup* group, device* dev, co
                 return;
             }
 
-            bufferResource = groupBufferResourceScratchpad[group];
+            bufferResource = groupBufferResourceScratchpad.at(group);
         }
     }
     else
@@ -60,17 +60,18 @@ void ConstantHandler::CopyToScratchpad(const ToggleGroup* group, device* dev, co
         return;
     }
 
-    vector<uint8_t>& bufferContent = groupBufferContent[group];
-    vector<uint8_t>& prevBufferContent = groupPrevBufferContent[group];
+    vector<uint8_t>& bufferContent = groupBufferContent.at(group);
+    vector<uint8_t>& prevBufferContent = groupPrevBufferContent.at(group);
 
     cmd_list->copy_resource(currentBufferRange.buffer, bufferResource);
 
     void* mapped_buffer;
     uint64_t size = targetBufferDesc.buffer.size;
-    if (dev->map_buffer_region(bufferResource, currentBufferRange.offset, currentBufferRange.size, map_access::read_only, &mapped_buffer))
+    uint64_t offset = currentBufferRange.offset;
+    if (dev->map_buffer_region(bufferResource, offset, currentBufferRange.size, map_access::read_only, &mapped_buffer))
     {
         std::memcpy(prevBufferContent.data(), bufferContent.data(), size);
-        std::memcpy(bufferContent.data(), mapped_buffer, size);
+        std::memcpy(bufferContent.data() + offset, mapped_buffer, size - offset);
 
         dev->unmap_buffer_region(bufferResource);
     }
@@ -104,15 +105,15 @@ void ConstantHandler::DestroyScratchpad(const ToggleGroup* group, device* dev, c
     {
         queue->wait_idle();
         dev->destroy_resource(res);
-        groupBufferResourceScratchpad[group] = { 0 };
-        groupBufferContent[group].clear();
-        groupPrevBufferContent[group].clear();
+        groupBufferResourceScratchpad.at(group) = { 0 };
+        groupBufferContent.at(group).clear();
+        groupPrevBufferContent.at(group).clear();
     }
 }
 
 bool ConstantHandler::CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& targetBufferDesc)
 {
-    resource bufferResource = groupBufferResourceScratchpad[group];
+    resource bufferResource = groupBufferResourceScratchpad.at(group);
 
     if (bufferResource == 0)
     {
@@ -125,12 +126,12 @@ bool ConstantHandler::CreateScratchpad(const ToggleGroup* group, device* dev, re
             return false;
         }
 
-        groupBufferSize[group] = targetBufferDesc.buffer.size;
-        groupBufferResourceScratchpad[group] = bufferResource;
+        groupBufferSize.at(group) = targetBufferDesc.buffer.size;
+        groupBufferResourceScratchpad.at(group) = bufferResource;
         if (groupBufferContent.contains(group))
         {
-            groupBufferContent[group].resize(targetBufferDesc.buffer.size, 0);
-            groupPrevBufferContent[group].resize(targetBufferDesc.buffer.size, 0);
+            groupBufferContent.at(group).resize(targetBufferDesc.buffer.size, 0);
+            groupPrevBufferContent.at(group).resize(targetBufferDesc.buffer.size, 0);
         }
         else
         {

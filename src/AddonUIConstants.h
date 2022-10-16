@@ -87,6 +87,7 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
             {
                 size_t elements = bufferSize / typeSizes[typeSelectionIndex];
 
+                ImGui::TableSetupScrollFreeze(0, 1);
                 for (int i = 0; i < columns + 1; i++)
                 {
                     if (i == 0)
@@ -101,41 +102,52 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
 
                 ImGui::TableHeadersRow();
 
-                for (int i = 0; i < elements + elements / (columns); i++)
+                ImGuiListClipper clipper;
+
+                double clipElements = (static_cast<double>(elements) + static_cast<double>(elements) / static_cast<double>(columns)) / static_cast<double>(columns + 1);
+                clipper.Begin(ceil(clipElements));
+                while (clipper.Step())
                 {
-                    if (i % (columns + 1) == 0)
+                    for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
                     {
-                        ImGui::TableNextColumn();
-                        ImGui::TableHeader(std::format("{:#05x}", i / (columns + 1) * typeSizes[typeSelectionIndex] * columns).c_str());
-                        continue;
-                    }
-
-                    stringstream sContent;
-
-                    if (typeSelectionIndex == 0) {
-                        sContent << std::format("{:02X}", bufferContent[i - i / (columns + 1) - 1]) << std::endl;
-                    }
-                    else
-                    {
-                        uint32_t bufferOffset = (i - i / (columns + 1) - 1) * typeSizes[typeSelectionIndex];
-
-                        switch (typeSelectionIndex)
+                        for (int i = row * (columns + 1); i < row * (columns + 1) + (columns + 1); i++)
                         {
-                        case 1:
-                            sContent << std::format("{:.8f}", *(reinterpret_cast<const float*>(&bufferContent[bufferOffset]))) << std::endl;
-                            break;
-                        case 2:
-                            sContent << *(reinterpret_cast<const int32_t*>(&bufferContent[bufferOffset])) << std::endl;
-                            break;
-                        case 3:
-                            sContent << *(reinterpret_cast<const uint32_t*>(&bufferContent[bufferOffset])) << std::endl;
-                            break;
+                            if (i % (columns + 1) == 0)
+                            {
+                                ImGui::TableNextColumn();
+                                ImGui::TableHeader(std::format("{:#05x}", i / (columns + 1) * typeSizes[typeSelectionIndex] * columns).c_str());
+                                continue;
+                            }
+                        
+                            stringstream sContent;
+                        
+                            if (typeSelectionIndex == 0) {
+                                sContent << std::format("{:02X}", bufferContent[i - i / (columns + 1) - 1]) << std::endl;
+                            }
+                            else
+                            {
+                                uint32_t bufferOffset = (i - i / (columns + 1) - 1) * typeSizes[typeSelectionIndex];
+                        
+                                switch (typeSelectionIndex)
+                                {
+                                case 1:
+                                    sContent << std::format("{:.8f}", *(reinterpret_cast<const float*>(&bufferContent[bufferOffset]))) << std::endl;
+                                    break;
+                                case 2:
+                                    sContent << *(reinterpret_cast<const int32_t*>(&bufferContent[bufferOffset])) << std::endl;
+                                    break;
+                                case 3:
+                                    sContent << *(reinterpret_cast<const uint32_t*>(&bufferContent[bufferOffset])) << std::endl;
+                                    break;
+                                }
+                            }
+                        
+                            ImGui::TableNextColumn();
+                            ImGui::Text(sContent.str().c_str());
                         }
                     }
-
-                    ImGui::TableNextColumn();
-                    ImGui::Text(sContent.str().c_str());
                 }
+                clipper.End();
 
                 ImGui::EndTable();
             }
@@ -187,10 +199,6 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
                 ImGui::InputText("Offset", offsetInputBuf, offsetInputBufSize, ImGuiInputTextFlags_CharsHexadecimal);
 
                 static bool prevValue = false;
-                //if (group->GetVarOffsetMapping().contains(varSelectedItem))
-                //{
-                //	constantUsePrevValue = get<1>(group->GetVarOffsetMapping().at(varSelectedItem));
-                //}
 
                 ImGui::Checkbox("Use previous value", &prevValue);
 

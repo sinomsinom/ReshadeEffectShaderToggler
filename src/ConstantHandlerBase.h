@@ -1,7 +1,5 @@
 #pragma once
 
-#pragma once
-
 #include <reshade_api.hpp>
 #include <reshade_api_device.hpp>
 #include <reshade_api_pipeline.hpp>
@@ -78,7 +76,7 @@ namespace ConstantFeedback {
         virtual void RemoveGroup(const ToggleGroup*, device* dev, command_queue* queue) = 0;
         uint8_t* GetConstantBuffer(const ToggleGroup* group);
         size_t GetConstantBufferSize(const ToggleGroup* group);
-        void ApplyConstantValues(effect_runtime* runtime, const ToggleGroup*, unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants);
+        void ApplyConstantValues(effect_runtime* runtime, const ToggleGroup*, const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants);
     protected:
         unordered_map<const ToggleGroup*, vector<uint8_t>> groupBufferContent;
         unordered_map<const ToggleGroup*, vector<uint8_t>> groupPrevBufferContent;
