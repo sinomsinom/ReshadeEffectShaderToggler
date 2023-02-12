@@ -40,6 +40,7 @@
 #include <functional>
 #include <tuple>
 #include <chrono>
+#include <filesystem>
 #include <MinHook.h>
 #include "crc32_hash.hpp"
 #include "ShaderManager.h"
@@ -60,9 +61,11 @@ using namespace StateTracker;
 extern "C" __declspec(dllexport) const char* NAME = "Reshade Effect Shader Toggler";
 extern "C" __declspec(dllexport) const char* DESCRIPTION = "Addon which allows you to define groups of shaders to render Reshade effects on.";
 
-#define CHAR_BUFFER_SIZE 256
-#define MAX_EFFECT_HANDLES 128
-#define REST_VAR_ANNOTATION "source"
+constexpr auto MAX_EFFECT_HANDLES = 128;
+constexpr auto REST_VAR_ANNOTATION = "source";
+
+static filesystem::path g_dllPath;
+static filesystem::path g_basePath;
 
 static ShaderToggler::ShaderManager g_pixelShaderManager;
 static ShaderToggler::ShaderManager g_vertexShaderManager;
@@ -114,9 +117,9 @@ static void enumerateTechniques(effect_runtime* runtime, std::function<void(effe
 {
     runtime->enumerate_techniques(nullptr, [func](effect_runtime* rt, effect_technique technique) {
         g_charBufferSize = CHAR_BUFFER_SIZE;
-        rt->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
-        string name(g_charBuffer);
-        func(rt, technique, name);
+    rt->get_technique_name(technique, g_charBuffer, &g_charBufferSize);
+    string name(g_charBuffer);
+    func(rt, technique, name);
         });
 }
 
@@ -125,63 +128,63 @@ static void enumerateRESTUniformVariables(effect_runtime* runtime, std::function
 {
     runtime->enumerate_uniform_variables(nullptr, [func](effect_runtime* rt, effect_uniform_variable variable) {
         g_charBufferSize = CHAR_BUFFER_SIZE;
-        if (!rt->get_annotation_string_from_uniform_variable(variable, REST_VAR_ANNOTATION, g_charBuffer))
+    if (!rt->get_annotation_string_from_uniform_variable(variable, REST_VAR_ANNOTATION, g_charBuffer))
+    {
+        return;
+    }
+
+    string id(g_charBuffer);
+
+    reshade::api::format format;
+    uint32_t rows;
+    uint32_t columns;
+    uint32_t array_length;
+
+    rt->get_uniform_variable_type(variable, &format, &rows, &columns, &array_length);
+    constant_type type = constant_type::type_unknown;
+    switch (format)
+    {
+    case reshade::api::format::r32_float:
+        if (array_length > 0)
+            type = constant_type::type_unknown;
+        else
         {
-            return;
-        }
-
-        string id(g_charBuffer);
-
-        reshade::api::format format;
-        uint32_t rows;
-        uint32_t columns;
-        uint32_t array_length;
-
-        rt->get_uniform_variable_type(variable, &format, &rows, &columns, &array_length);
-        constant_type type = constant_type::type_unknown;
-        switch (format)
-        {
-        case reshade::api::format::r32_float:
-            if (array_length > 0)
-                type = constant_type::type_unknown;
+            if (rows == 4 && columns == 4)
+                type = constant_type::type_float4x4;
+            else if (rows == 3 && columns == 4)
+                type = constant_type::type_float4x3;
+            else if (rows == 3 && columns == 3)
+                type = constant_type::type_float3x3;
+            else if (rows == 3 && columns == 1)
+                type = constant_type::type_float3;
+            else if (rows == 2 && columns == 1)
+                type = constant_type::type_float2;
+            else if (rows == 1 && columns == 1)
+                type = constant_type::type_float;
             else
-            {
-                if (rows == 4 && columns == 4)
-                    type = constant_type::type_float4x4;
-                else if (rows == 3 && columns == 4)
-                    type = constant_type::type_float4x3;
-                else if (rows == 3 && columns == 3)
-                    type = constant_type::type_float3x3;
-                else if (rows == 3 && columns == 1)
-                    type = constant_type::type_float3;
-                else if (rows == 2 && columns == 1)
-                    type = constant_type::type_float2;
-                else if (rows == 1 && columns == 1)
-                    type = constant_type::type_float;
-                else
-                    type = constant_type::type_unknown;
-            }
-            break;
-        case reshade::api::format::r32_sint:
-            if (array_length > 0 || rows > 1 || columns > 1)
                 type = constant_type::type_unknown;
-            else
-                type = constant_type::type_int;
-            break;
-        case reshade::api::format::r32_uint:
-            if (array_length > 0 || rows > 1 || columns > 1)
-                type = constant_type::type_unknown;
-            else
-                type = constant_type::type_uint;
-            break;
         }
+        break;
+    case reshade::api::format::r32_sint:
+        if (array_length > 0 || rows > 1 || columns > 1)
+            type = constant_type::type_unknown;
+        else
+            type = constant_type::type_int;
+        break;
+    case reshade::api::format::r32_uint:
+        if (array_length > 0 || rows > 1 || columns > 1)
+            type = constant_type::type_unknown;
+        else
+            type = constant_type::type_uint;
+        break;
+    }
 
-        if (type == constant_type::type_unknown)
-        {
-            return;
-        }
+    if (type == constant_type::type_unknown)
+    {
+        return;
+    }
 
-        func(rt, variable, type, id);
+    func(rt, variable, type, id);
         });
 }
 
@@ -242,6 +245,7 @@ static bool hasSRGB(reshade::api::format value)
 
     return false;
 }
+
 
 
 static void initBackbuffer(effect_runtime* runtime)
@@ -437,7 +441,7 @@ static void onDestroyResource(device* device, resource res)
     if (s_sRGBResourceViews.contains(res.handle))
     {
         auto& views = s_sRGBResourceViews.at(res.handle);
-    
+
         if (views.first != 0)
             device->destroy_resource_view(views.first);
         if (views.second != 0)
@@ -462,8 +466,8 @@ static bool onCreateResourceView(device* device, resource resource, resource_usa
     std::shared_lock<shared_mutex> lock(resource_mutex);
     if (s_resourceFormat.contains(resource.handle))
     {
-        desc.format = s_resourceFormat.at(resource.handle);    
-        
+        desc.format = s_resourceFormat.at(resource.handle);
+
         if (desc.type == resource_view_type::unknown)
         {
             desc.type = texture_desc.texture.depth_or_layers > 1 ? resource_view_type::texture_2d_array : resource_view_type::texture_2d;
@@ -686,7 +690,7 @@ static void onDestroyEffectRuntime(effect_runtime* runtime)
     data.bindingMap.clear();
     
     for (auto& view : s_backBufferView) {
-        if(view.second.first != 0)
+        if (view.second.first != 0)
             runtime->get_device()->destroy_resource_view(view.second.first);
         if (view.second.second != 0)
             runtime->get_device()->destroy_resource_view(view.second.second);
@@ -1017,7 +1021,7 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
         if (historic_rtv != commandListData.immediateActionSet.end() && historic_rtv->second <= 0 && !deviceData.allEnabledTechniques[name])
         {
             resource_view active_rtv = GetCurrentResourceView(runtime, *historic_rtv, commandListData);
-
+    
             if (active_rtv == 0)
             {
                 return;
@@ -1042,11 +1046,11 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
             g_addonUIData.cFormat = resDesc.texture.format;
-
+        
             deviceData.allEnabledTechniques[name] = true;
             rendered = true;
         }
-        });
+    });
     dev_mutex.unlock();
 
     for (auto& tech : commandListData.immediateActionSet)
@@ -1409,6 +1413,17 @@ static bool UnInitHooks()
 }
 
 
+
+/// <summary>
+/// copied from Reshade
+/// Returns the path to the module file identified by the specified <paramref name="module"/> handle.
+/// </summary>
+filesystem::path getModulePath(HMODULE module)
+{
+    WCHAR buf[4096];
+    return GetModuleFileNameW(module, buf, ARRAYSIZE(buf)) ? buf : std::filesystem::path();
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 {
     switch (fdwReason)
@@ -1418,6 +1433,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         {
             return FALSE;
         }
+
+        g_dllPath = getModulePath(hModule);
+
+        g_addonUIData.SetBasePath(g_dllPath.parent_path());
         g_addonUIData.LoadShaderTogglerIniFile();
         InitHooks();
         reshade::register_event<reshade::addon_event::init_resource>(onInitResource);
