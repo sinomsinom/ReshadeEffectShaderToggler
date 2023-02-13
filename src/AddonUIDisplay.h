@@ -448,7 +448,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
             {
                 group.toggleActive();
 
-                if (!groupActive)
+                if (!groupActive && instance.GetConstantHandler() != nullptr)
                 {
                     instance.GetConstantHandler()->RemoveGroup(&group, runtime->get_device(), runtime->get_command_queue());
                 }
