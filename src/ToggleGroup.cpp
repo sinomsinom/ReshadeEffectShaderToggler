@@ -154,7 +154,6 @@ namespace ShaderToggler
         iniFile.SetUInt("AmountConstants", counter, "", constantsCategory);
 
         iniFile.SetValue("Name", _name, "", sectionRoot);
-        //iniFile.SetUInt("ToggleKey", _keyData.getKeyForIniFile(), "", sectionRoot);
         iniFile.SetUInt("ToggleKey", _keybind, "", sectionRoot);
         iniFile.SetBool("Active", _isActive, "", sectionRoot);
 

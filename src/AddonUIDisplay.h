@@ -183,7 +183,7 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* ru
             tGroup = &instance.GetToggleGroups()[idx];
         }
 
-        DisplayConstantViewer(instance, tGroup, runtime->get_device(), runtime->get_command_queue());
+        DisplayConstantViewer(instance, tGroup, runtime->get_device());
     }
 
     if (instance.GetToggleGroupIdEffectEditing() >= 0)
@@ -450,7 +450,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 
                 if (!groupActive && instance.GetConstantHandler() != nullptr)
                 {
-                    instance.GetConstantHandler()->RemoveGroup(&group, runtime->get_device(), runtime->get_command_queue());
+                    instance.GetConstantHandler()->RemoveGroup(&group, runtime->get_device());
                 }
             }
 

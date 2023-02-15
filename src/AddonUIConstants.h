@@ -30,7 +30,7 @@ static const unordered_set<string> varExclusionSet({
     "ui_hovered",
     "overlay_hovered" });
 
-static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup* group, device* dev, command_queue* queue)
+static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup* group, device* dev)
 {
     if (group == nullptr || instance.GetConstantHandler() == nullptr)
     {
@@ -58,7 +58,7 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
 
         if (!extractionEnabled)
         {
-            instance.GetConstantHandler()->RemoveGroup(group, dev, queue);
+            instance.GetConstantHandler()->RemoveGroup(group, dev);
         }
 
         float height = ImGui::GetWindowHeight();

@@ -37,7 +37,6 @@
 #include <reshade_api_pipeline.hpp>
 #include <shared_mutex>
 #include <unordered_set>
-//#include <boost/unordered/unordered_flat_map.hpp>
 
 #include "CDataFile.h"
 #include "ToggleGroup.h"
@@ -99,12 +98,6 @@ namespace ShaderToggler
         int getActiveHuntedShaderIndex() { return _activeHuntedShaderIndex; }
         void toggleHideMarkedShaders() { _hideMarkedShaders = !_hideMarkedShaders; }
 
-        //vector<uint32_t> getHuntedShaders();
-        //void markHuntedShader(uint32_t shader);
-        //void unmarkHuntedShader(uint32_t shader);
-        //bool isMarkedShader(uint32_t shader);
-        //void setActiveHuntedShader(uint32_t shader);
-
         bool isHuntedShaderMarked()
         {
             std::shared_lock lock(_markedShaderHashMutex);
@@ -131,7 +124,6 @@ namespace ShaderToggler
 
         inline uint32_t safeGetShaderHash(uint64_t pipelineHandle)
         {
-            //std::shared_lock lock(_hashHandlesMutex);
             const auto& it = _handleToShaderHash.find(pipelineHandle);
 
             return it == _handleToShaderHash.end() ? 0 : it->second;
@@ -142,7 +134,6 @@ namespace ShaderToggler
 
         std::unordered_set<uint32_t> _shaderHashes;				// all shader hashes added through init pipeline
         std::unordered_map<uint64_t, uint32_t> _handleToShaderHash;		// pipeline handle per shader hash. Handle is removed when a pipeline is destroyed.
-        //boost::unordered::unordered_flat_map<uint64_t, uint32_t> _handleToShaderHash;
         std::unordered_set<uint32_t> _collectedActiveShaderHashes;	// shader hashes bound to pipeline handles which were collected during the collection phase after hunting was enabled, which are the pipeline handles active during the last X frames
         std::unordered_set<uint32_t> _markedShaderHashes;		// the hashes for shaders which are currently marked.
 

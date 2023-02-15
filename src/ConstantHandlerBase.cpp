@@ -193,9 +193,7 @@ void ConstantHandlerBase::OnPushDescriptors(command_list* cmd_list, shader_stage
             if (!constantBuffers.contains(buffer[i].buffer.handle))
                 continue;
 
-            SetBufferRange(group, buffer[i],
-                cmd_list->get_device(), cmd_list, deviceData.current_runtime->get_command_queue());
-
+            SetBufferRange(group, buffer[i], cmd_list->get_device(), cmd_list);
             ApplyConstantValues(deviceData.current_runtime, group, restVariables);
             deviceData.constantsUpdated.insert(group);
             break;
@@ -229,8 +227,9 @@ void ConstantHandlerBase::ApplyConstantValues(effect_runtime* runtime, const Tog
 
         constant_type type = std::get<0>(constants.at(var));
         uint32_t typeIndex = static_cast<uint32_t>(type);
+        size_t bufferSize = groupBufferSize.at(group);
 
-        if (offset + type_size[typeIndex] * type_length[typeIndex] >= groupBufferSize.at(group))
+        if (offset + type_size[typeIndex] * type_length[typeIndex] >= bufferSize)
         {
             continue;
         }
@@ -255,7 +254,7 @@ void ConstantHandlerBase::ApplyConstantValues(effect_runtime* runtime, const Tog
     }
 }
 
-void ConstantHandlerBase::SetBufferRange(const ToggleGroup* group, buffer_range range, device* dev, command_list* cmd_list, command_queue* queue)
+void ConstantHandlerBase::SetBufferRange(const ToggleGroup* group, buffer_range range, device* dev, command_list* cmd_list)
 {
     if (dev == nullptr || cmd_list == nullptr || range.buffer == 0)
     {
@@ -272,10 +271,10 @@ void ConstantHandlerBase::SetBufferRange(const ToggleGroup* group, buffer_range 
         groupBufferRanges[group] = range;
     }
 
-    CopyToScratchpad(group, dev, cmd_list, queue);
+    CopyToScratchpad(group, dev, cmd_list);
 }
 
-void ConstantHandlerBase::CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list, command_queue* queue)
+void ConstantHandlerBase::CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list)
 {
     buffer_range currentBufferRange = groupBufferRanges.at(group);
     resource_desc targetBufferDesc = dev->get_resource_desc(currentBufferRange.buffer);
@@ -314,7 +313,7 @@ bool ConstantHandlerBase::CreateScratchpad(const ToggleGroup* group, device* dev
     return true;
 }
 
-void ConstantHandlerBase::RemoveGroup(const ToggleGroup* group, device* dev, command_queue* queue)
+void ConstantHandlerBase::RemoveGroup(const ToggleGroup* group, device* dev)
 {
     if (!groupBufferContent.contains(group))
     {

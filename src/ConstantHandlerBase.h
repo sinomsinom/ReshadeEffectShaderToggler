@@ -87,8 +87,8 @@ namespace ConstantFeedback {
         ConstantHandlerBase();
         ~ConstantHandlerBase();
 
-        virtual void SetBufferRange(const ToggleGroup* group, buffer_range range, device* dev, command_list* cmd_list, command_queue* queue);
-        virtual void RemoveGroup(const ToggleGroup*, device* dev, command_queue* queue);
+        virtual void SetBufferRange(const ToggleGroup* group, buffer_range range, device* dev, command_list* cmd_list);
+        virtual void RemoveGroup(const ToggleGroup*, device* dev);
         uint8_t* GetConstantBuffer(const ToggleGroup* group);
         size_t GetConstantBufferSize(const ToggleGroup* group);
         static const ToggleGroup* CheckDescriptors(command_list* commandList, ShaderManager& pixelShaderManager, ShaderManager& vertexShaderManager, uint32_t psShaderHash, uint32_t vsShaderHash);
@@ -127,8 +127,9 @@ namespace ConstantFeedback {
         unordered_map<uint64_t, vector<uint8_t>> deviceToHostConstantBuffer;
 
         shared_mutex deviceHostMutex;
+        shared_mutex blah;
 
         bool CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& target);
-        void CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list, command_queue* queue);
+        void CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list);
     };
 }
