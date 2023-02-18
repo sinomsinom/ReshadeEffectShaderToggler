@@ -309,7 +309,7 @@ static bool RenderRemainingEffects(effect_runtime* runtime)
         return false;
     }
 
-    runtime->render_effects(cmd_list, active_rtv, active_rtv_srgb);
+    runtime->render_effects(cmd_list, static_cast<resource_view>(0), static_cast<resource_view>(0));
 
     bool rendered = false;
     enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &active_rtv, &active_rtv_srgb, &rendered](effect_runtime* runtime, effect_technique technique, string& name) {
@@ -317,8 +317,6 @@ static bool RenderRemainingEffects(effect_runtime* runtime)
         {
             resource res = runtime->get_device()->get_resource_from_view(active_rtv);
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
-
-            g_addonUIData.cFormat = resDesc.texture.format;
 
             runtime->render_technique(technique, cmd_list, active_rtv, active_rtv_srgb);
 
@@ -948,7 +946,6 @@ static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
             if (UpdateTextureBinding(runtime, bindingName, resDesc.texture.format))
             {
-                g_addonUIData.cFormat = resDesc.texture.format;
                 cmd_list->copy_resource(res, target_res);
                 deviceData.bindingsUpdated.emplace(bindingName);
             }
@@ -1011,6 +1008,8 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
         return;
     }
 
+    deviceData.current_runtime->render_effects(cmd_list, static_cast<resource_view>(0), static_cast<resource_view>(0));
+
     std::unique_lock<std::shared_mutex> dev_mutex(render_mutex);
     enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &rendered](effect_runtime* runtime, effect_technique technique, string& name) {
         auto historic_rtv = commandListData.immediateActionSet.find(pair<string, int32_t>(name, 0));
@@ -1038,7 +1037,6 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 
             deviceData.rendered_effects = true;
 
-            runtime->render_effects(cmd_list, view_non_srgb, view_srgb);
             runtime->render_technique(technique, cmd_list, view_non_srgb, view_srgb);
 
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
@@ -1218,40 +1216,6 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
 }
 
 
-static void onReshadeBeginEffects(effect_runtime* runtime, command_list* cmd_list, resource_view rtv, resource_view rtv_srgb)
-{
-    DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
-    CommandListDataContainer& cmdData = cmd_list->get_private_data<CommandListDataContainer>();
-    
-    if (&cmdData != nullptr /* && cmdData.techniquesToRender.size() > 0*/)
-    {
-        enumerateTechniques(deviceData.current_runtime, [&deviceData](effect_runtime* runtime, effect_technique technique, string& name) {
-            if (deviceData.allEnabledTechniques.contains(name))
-            {
-                deviceData.current_runtime->set_technique_state(technique, false);
-            }
-            });
-    }
-}
-
-
-static void onReshadeFinishEffects(effect_runtime* runtime, command_list* cmd_list, resource_view rtv, resource_view rtv_srgb)
-{
-    DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
-    CommandListDataContainer& cmdData = cmd_list->get_private_data<CommandListDataContainer>();
-    
-    if (&cmdData != nullptr/* && cmdData.techniquesToRender.size() > 0*/)
-    {
-        enumerateTechniques(deviceData.current_runtime, [&deviceData](effect_runtime* runtime, effect_technique technique, string& name) {
-            if (deviceData.allEnabledTechniques.contains(name))
-            {
-                deviceData.current_runtime->set_technique_state(technique, true);
-            }
-            });
-    }
-}
-
-
 static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
 {
     if (constantHandler != nullptr)
@@ -1332,7 +1296,7 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect* so
 
     if (queue == deviceData.current_runtime->get_command_queue())
     {
-        if (deviceData.current_runtime->get_effects_state())
+        if (deviceData.current_runtime->get_effects_state() && deviceData.rendered_effects)
         {
             RenderRemainingEffects(deviceData.current_runtime);
         }
@@ -1464,8 +1428,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
         reshade::register_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
         reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
-        reshade::register_event<reshade::addon_event::reshade_begin_effects>(onReshadeBeginEffects);
-        reshade::register_event<reshade::addon_event::reshade_finish_effects>(onReshadeFinishEffects);
         reshade::register_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
         reshade::register_event<reshade::addon_event::present>(onPresent);
         reshade::register_overlay(nullptr, &displaySettings);
@@ -1496,8 +1458,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::begin_render_pass>(onBeginRenderPass);
         reshade::unregister_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
         reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
-        reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(onReshadeBeginEffects);
-        reshade::unregister_event<reshade::addon_event::reshade_finish_effects>(onReshadeFinishEffects);
         reshade::unregister_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
         reshade::unregister_event<reshade::addon_event::create_resource>(onCreateResource);
         reshade::unregister_event<reshade::addon_event::init_resource>(onInitResource);
