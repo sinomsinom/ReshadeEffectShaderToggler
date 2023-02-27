@@ -175,6 +175,8 @@ namespace ShaderToggler
         iniFile.SetBool("TechniqueExceptions", _hasTechniqueExceptions, "", sectionRoot);
 
         iniFile.SetInt("HistoryIndex", _historyIndex, "", sectionRoot);
+        iniFile.SetUInt("PipelineSlot", _slotIndex, "", sectionRoot);
+        iniFile.SetUInt("DescriptorIndex", _descIndex, "", sectionRoot);
 
         iniFile.SetBool("ProvideTextureBinding", _isProvidingTextureBinding, "", sectionRoot);
         iniFile.SetValue("TextureBindingName", _textureBindingName, "", sectionRoot);
@@ -287,6 +289,26 @@ namespace ShaderToggler
         else
         {
             _historyIndex = 0;
+        }
+
+        uint32_t slotIndex = iniFile.GetUInt("PipelineSlot", sectionRoot);
+        if (slotIndex != UINT_MAX)
+        {
+            _slotIndex = slotIndex;
+        }
+        else
+        {
+            _slotIndex = 2;
+        }
+
+        uint32_t descIndex = iniFile.GetUInt("DescriptorIndex", sectionRoot);
+        if (descIndex != UINT_MAX)
+        {
+            _descIndex = descIndex;
+        }
+        else
+        {
+            _descIndex = 0;
         }
 
         _isProvidingTextureBinding = iniFile.GetBool("ProvideTextureBinding", sectionRoot);

@@ -171,33 +171,86 @@ void ConstantHandlerBase::ReloadConstantVariables(effect_runtime* runtime)
         });
 }
 
-void ConstantHandlerBase::OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update,
-    ShaderManager& pixelShaderManager, ShaderManager& vertexShaderManager)
+bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, const ToggleGroup* group, uint32_t index)
 {
-    const ToggleGroup* group = nullptr;
-    CommandListDataContainer& cmdData = cmd_list->get_private_data<CommandListDataContainer>();
-    if (update.type == descriptor_type::constant_buffer && (group = CheckDescriptors(cmd_list, pixelShaderManager, vertexShaderManager, cmdData.activePixelShaderHash, cmdData.activeVertexShaderHash)) != nullptr)
+    uint32_t slot_size = cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index].size();
+    uint32_t slot = min(group->getSlotIndex(), slot_size - 1);
+
+    if (slot_size == 0)
+        return false;
+
+    uint32_t desc_size = cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index][slot].size();
+    uint32_t desc = min(group->getDescriptorIndex(), desc_size - 1);
+
+    if (desc_size == 0)
+        return false;
+
+    buffer_range buf = cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index][slot][desc];
+
+    if (buf.buffer != 0)
     {
-        DeviceDataContainer& deviceData = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
+        SetBufferRange(group, buf, cmd_list->get_device(), cmd_list);
+        ApplyConstantValues(devData.current_runtime, group, restVariables);
+        devData.constantsUpdated.insert(group);
 
-        std::unique_lock<shared_mutex> ulock(constbuffer_mutex);
-        if (deviceData.constantsUpdated.contains(group))
+        return true;
+    }
+
+    return false;
+}
+
+void ConstantHandlerBase::UpdateConstants(command_list* cmd_list)
+{
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
+    {
+        return;
+    }
+
+    device* device = cmd_list->get_device();
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+
+    if (deviceData.current_runtime == nullptr ||
+        (commandListData.psConstantBuffersToUpdate.size() == 0 && commandListData.psConstantBuffersToUpdate.size() == 0)) {
+        return;
+    }
+
+    vector<const ToggleGroup*> psRemovalList;
+    for (const auto& cb : commandListData.psConstantBuffersToUpdate)
+    {
+        commandListData.psConstantBuffersToUpdate.at(cb.first)--;
+
+        if (cb.second < 0 && !deviceData.constantsUpdated.contains(cb.first))
         {
-            return;
+            if (UpdateConstantEntries(cmd_list, commandListData, deviceData, cb.first, 0))
+            {
+                psRemovalList.push_back(cb.first);
+            }
         }
+    }
 
-        const buffer_range* buffer = static_cast<const reshade::api::buffer_range*>(update.descriptors);
+    vector<const ToggleGroup*> vsRemovalList;
+    for (const auto& cb : commandListData.vsConstantBuffersToUpdate)
+    {
+        commandListData.vsConstantBuffersToUpdate.at(cb.first)--;
 
-        for (uint32_t i = update.array_offset; i < update.count; ++i)
+        if (cb.second < 0 && !deviceData.constantsUpdated.contains(cb.first))
         {
-            if (!constantBuffers.contains(buffer[i].buffer.handle))
-                continue;
-
-            SetBufferRange(group, buffer[i], cmd_list->get_device(), cmd_list);
-            ApplyConstantValues(deviceData.current_runtime, group, restVariables);
-            deviceData.constantsUpdated.insert(group);
-            break;
+            if (UpdateConstantEntries(cmd_list, commandListData, deviceData, cb.first, 1))
+            {
+                vsRemovalList.push_back(cb.first);
+            }
         }
+    }
+
+    for (auto& g : psRemovalList)
+    {
+        commandListData.psConstantBuffersToUpdate.erase(g);
+    }
+
+    for (auto& g : vsRemovalList)
+    {
+        commandListData.vsConstantBuffersToUpdate.erase(g);
     }
 }
 

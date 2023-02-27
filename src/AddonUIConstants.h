@@ -30,6 +30,78 @@ static const unordered_set<string> varExclusionSet({
     "ui_hovered",
     "overlay_hovered" });
 
+static void DisplayConstantSettings(ToggleGroup* group)
+{
+    ImGui::Text("Slot #: %u", group->getSlotIndex());
+
+    ImGui::SameLine();
+
+    ImGui::PushID(0);
+    if (ImGui::SmallButton("+"))
+    {
+        group->setSlotIndex(group->getSlotIndex() + 1);
+    }
+    ImGui::PopID();
+
+    if (group->getSlotIndex() != 0)
+    {
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("-"))
+        {
+            group->setSlotIndex(group->getSlotIndex() - 1);
+        }
+    }
+
+    //ImGui::NewLine();
+
+    ImGui::Text("Binding #: %u", group->getDescriptorIndex());
+
+    ImGui::SameLine();
+
+    ImGui::PushID(2);
+    if (ImGui::SmallButton("+"))
+    {
+        group->setDescriptorIndex(group->getDescriptorIndex() + 1);
+    }
+    ImGui::PopID();
+
+    if (group->getDescriptorIndex() != 0)
+    {
+        ImGui::SameLine();
+
+        ImGui::PushID(1);
+        if (ImGui::SmallButton("-"))
+        {
+            group->setDescriptorIndex(group->getDescriptorIndex() - 1);
+        }
+        ImGui::PopID();
+    }
+
+    ImGui::Text("Draw call #: %u", group->getHistoryIndex());
+
+    ImGui::SameLine();
+
+    ImGui::PushID(4);
+    if (ImGui::SmallButton("+"))
+    {
+        group->setHistoryIndex(group->getHistoryIndex() + 1);
+    }
+    ImGui::PopID();
+
+    if (group->getHistoryIndex() != 0)
+    {
+        ImGui::SameLine();
+
+        ImGui::PushID(3);
+        if (ImGui::SmallButton("-"))
+        {
+            group->setHistoryIndex(group->getHistoryIndex() - 1);
+        }
+        ImGui::PopID();
+    }
+}
+
 static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup* group, device* dev)
 {
     if (group == nullptr || instance.GetConstantHandler() == nullptr)
@@ -60,6 +132,10 @@ static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ToggleGroup
         {
             instance.GetConstantHandler()->RemoveGroup(group, dev);
         }
+
+        ImGui::Separator();
+
+        DisplayConstantSettings(group);
 
         float height = ImGui::GetWindowHeight();
 

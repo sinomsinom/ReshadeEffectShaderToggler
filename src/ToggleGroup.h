@@ -81,6 +81,12 @@ namespace ShaderToggler
         std::unordered_set<uint32_t> getVertexShaderHashes() const { return _vertexShaderHashes; }
         void setHistoryIndex(int32_t index) { _historyIndex = index; }
         int32_t getHistoryIndex() const { return _historyIndex; }
+        void setSlotIndex(uint32_t index) { _slotIndex = index; }
+        uint32_t getSlotIndex() const { return _slotIndex; }
+        void setDescriptorIndex(uint32_t index) { _descIndex = index; }
+        uint32_t getDescriptorIndex() const { return _descIndex; }
+        //void setConstantBufferPipelineStage(pipeline_stage stage) { _constantBufferStage = stage; }
+        //pipeline_stage getConstantBufferPipelineStage() const { return _constantBufferStage; }
         bool isProvidingTextureBinding() const { return _isProvidingTextureBinding; }
         void setProvidingTextureBinding(bool isProvidingTextureBinding) { _isProvidingTextureBinding = isProvidingTextureBinding; }
         const std::string& getTextureBindingName() const { return _textureBindingName; }
@@ -107,6 +113,9 @@ namespace ShaderToggler
         std::unordered_set<uint32_t> _vertexShaderHashes;
         std::unordered_set<uint32_t> _pixelShaderHashes;
         int32_t _historyIndex;
+        uint32_t _slotIndex = 0;
+        uint32_t _descIndex = 0;
+        //pipeline_stage _constantBufferStage = pipeline_stage::pixel_shader;
         bool _isActive;				// true means the group is actively toggled (so the hashes have to be hidden.
         bool _isEditing;			// true means the group is actively edited (name, key)
         bool _allowAllTechniques;	// true means all techniques are allowed, regardless of preferred techniques.

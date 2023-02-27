@@ -38,7 +38,7 @@ void PipelineStateTracker::ApplyBoundDescriptorSets(command_list* cmd_list, shad
 void PipelineStateTracker::ReApplyState(command_list* cmd_list, const unordered_map<uint64_t, vector<bool>>& transient_mask)
 {
     vector<PipelineBindingBase*> blah = {
-        &_descriptorsState,
+        &_descriptorSetsState,
         &_renderTargetState,
         &_scissorRectsState,
         &_viewportsState,
@@ -57,28 +57,28 @@ void PipelineStateTracker::ReApplyState(command_list* cmd_list, const unordered_
 
     for (auto b : blah)
     {
-        if (b->GetType() == PipelineBindingTypes::bind_descriptors)
+        if (b->GetType() == PipelineBindingTypes::bind_descriptor_sets)
         {
-            if (_descriptorsState.cmd_list != nullptr)
+            if (_descriptorSetsState.cmd_list != nullptr)
             {
                 vector<bool> emptyMask;
                 const vector<bool>* mask_graphics = &emptyMask;
                 const vector<bool>* mask_compute = &emptyMask;
 
-                if (transient_mask.contains(_descriptorsState.current_layout[0].handle))
+                if (transient_mask.contains(_descriptorSetsState.current_layout[0].handle))
                 {
-                    mask_graphics = &transient_mask.at(_descriptorsState.current_layout[0].handle);
+                    mask_graphics = &transient_mask.at(_descriptorSetsState.current_layout[0].handle);
                 }
 
-                if (transient_mask.contains(_descriptorsState.current_layout[1].handle))
+                if (transient_mask.contains(_descriptorSetsState.current_layout[1].handle))
                 {
-                    mask_compute = &transient_mask.at(_descriptorsState.current_layout[1].handle);
+                    mask_compute = &transient_mask.at(_descriptorSetsState.current_layout[1].handle);
                 }
 
-                ApplyBoundDescriptorSets(cmd_list, shader_stage::all_graphics, _descriptorsState.current_layout[0],
-                    _descriptorsState.current_sets[0], *mask_graphics);
-                ApplyBoundDescriptorSets(cmd_list, shader_stage::all_compute, _descriptorsState.current_layout[1],
-                    _descriptorsState.current_sets[1], *mask_compute);
+                ApplyBoundDescriptorSets(cmd_list, shader_stage::all_graphics, _descriptorSetsState.current_layout[0],
+                    _descriptorSetsState.current_sets[0], *mask_graphics);
+                ApplyBoundDescriptorSets(cmd_list, shader_stage::all_compute, _descriptorSetsState.current_layout[1],
+                    _descriptorSetsState.current_sets[1], *mask_compute);
             }
         }
 
@@ -170,21 +170,57 @@ void PipelineStateTracker::OnBindDescriptorSets(command_list* cmd_list, shader_s
 
     const int type_index = (stages == shader_stage::all_compute) ? 1 : 0;
 
-    _descriptorsState.callIndex = _callIndex;
+    _descriptorSetsState.callIndex = _callIndex;
     _callIndex++;
 
-    _descriptorsState.cmd_list = cmd_list;
+    _descriptorSetsState.cmd_list = cmd_list;
 
-    _descriptorsState.current_layout[type_index] = layout;
+    _descriptorSetsState.current_layout[type_index] = layout;
 
-    if (_descriptorsState.current_sets[type_index].size() < (count + first))
+    if (_descriptorSetsState.current_sets[type_index].size() < (count + first))
     {
-        _descriptorsState.current_sets[type_index].resize(count + first);
+        _descriptorSetsState.current_sets[type_index].resize(count + first);
     }
 
     for (size_t i = 0; i < count; ++i)
     {
-        _descriptorsState.current_sets[type_index][i + first] = sets[i];
+        _descriptorSetsState.current_sets[type_index][i + first] = sets[i];
+    }
+}
+
+void PipelineStateTracker::OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
+{
+    // only consider pixel and vertex shader CBs for now
+    if (update.type != descriptor_type::constant_buffer ||
+        !(static_cast<uint32_t>(stages) & (static_cast<uint32_t>(shader_stage::pixel) | static_cast<uint32_t>(shader_stage::vertex))))
+    {
+        return;
+    }
+
+    const int stage_index = (static_cast<uint32_t>(stages) & static_cast<uint32_t>(shader_stage::pixel)) ? 0 : 1;
+
+    _pushDescriptorsState.callIndex = _callIndex;
+    _callIndex++;
+
+    _pushDescriptorsState.cmd_list = cmd_list;
+
+    _pushDescriptorsState.current_layout[stage_index] = layout;
+
+    if (_pushDescriptorsState.current_descriptors[stage_index].size() < layout_param + 1)
+    {
+        _pushDescriptorsState.current_descriptors[stage_index].resize(layout_param + 1);
+    }
+
+    if (_pushDescriptorsState.current_descriptors[stage_index][layout_param].size() < update.binding + update.count)
+    {
+        _pushDescriptorsState.current_descriptors[stage_index][layout_param].resize(update.binding + update.count);
+    }
+
+    const buffer_range* buffer = static_cast<const reshade::api::buffer_range*>(update.descriptors);
+
+    for (size_t i = 0; i < update.count; ++i)
+    {
+        _pushDescriptorsState.current_descriptors[stage_index][layout_param][update.binding + i] = buffer[i];
     }
 }
 
@@ -270,11 +306,25 @@ bool PipelineStateTracker::IsInRenderPass()
     return _renderPassState.cmd_list != nullptr;
 }
 
+void PipelineStateTracker::ClearPushDescriptorState(pipeline_stage stage = pipeline_stage::all)
+{
+    if (static_cast<uint32_t>(stage) & static_cast<uint32_t>(shader_stage::pixel))
+    {
+        _pushDescriptorsState.current_descriptors[0].clear();
+    }
+
+    if (static_cast<uint32_t>(stage) & static_cast<uint32_t>(shader_stage::vertex))
+    {
+        _pushDescriptorsState.current_descriptors[1].clear();
+    }
+}
+
 void PipelineStateTracker::Reset()
 {
     _callIndex = 0;
     _renderTargetState.Reset();
-    _descriptorsState.Reset();
+    _descriptorSetsState.Reset();
+    _pushDescriptorsState.Reset();
     _viewportsState.Reset();
     _scissorRectsState.Reset();
     _pipelineStatesState.Reset();

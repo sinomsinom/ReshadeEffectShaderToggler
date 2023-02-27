@@ -608,7 +608,7 @@ static void DestroyTextureBinding(effect_runtime* runtime, const string& binding
 }
 
 
-static bool UpdateTextureBinding(effect_runtime* runtime, const string& binding, reshade::api::format format)
+static uint32_t UpdateTextureBinding(effect_runtime* runtime, const string& binding, reshade::api::format format)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
@@ -630,16 +630,18 @@ static bool UpdateTextureBinding(effect_runtime* runtime, const string& binding,
             }
             else
             {
-                return false;
+                return 0;
             }
+
+            return 2;
         }
     }
     else
     {
-        return false;
+        return 0;
     }
 
-    return true;
+    return 1;
 }
 
 
@@ -741,17 +743,25 @@ bool checkDrawCallForCommandList(command_list* commandList, uint32_t psShaderHas
 
     vector<const ToggleGroup*> tGroups;
 
-    if (deviceData.huntedGroup != nullptr && (g_pixelShaderManager.isBlockedShader(psShaderHash) || g_vertexShaderManager.isBlockedShader(vsShaderHash)))
-    {
-        tGroups.push_back(deviceData.huntedGroup);
-    }
-
     if (commandListData.blockedPixelShaderGroups != nullptr)
     {
         for (auto group : *commandListData.blockedPixelShaderGroups)
         {
             if (group->isActive())
             {
+                if (group->getExtractConstants() && !deviceData.constantsUpdated.contains(group))
+                {
+                    if (commandListData.psConstantBuffersToUpdate.contains(group))
+                    {
+                        if (group->getHistoryIndex() < commandListData.psConstantBuffersToUpdate.at(group))
+                            commandListData.psConstantBuffersToUpdate.at(group) = group->getHistoryIndex();
+                    }
+                    else
+                    {
+                        commandListData.psConstantBuffersToUpdate.emplace(group, group->getHistoryIndex());
+                    }
+                }
+
                 tGroups.push_back(group);
             }
         }
@@ -763,6 +773,19 @@ bool checkDrawCallForCommandList(command_list* commandList, uint32_t psShaderHas
         {
             if (group->isActive())
             {
+                if (group->getExtractConstants() && !deviceData.constantsUpdated.contains(group))
+                {
+                    if (commandListData.vsConstantBuffersToUpdate.contains(group))
+                    {
+                        if (group->getHistoryIndex() < commandListData.vsConstantBuffersToUpdate.at(group))
+                            commandListData.vsConstantBuffersToUpdate.at(group) = group->getHistoryIndex();
+                    }
+                    else
+                    {
+                        commandListData.vsConstantBuffersToUpdate.emplace(group, group->getHistoryIndex());
+                    }
+                }
+
                 tGroups.push_back(group);
             }
         }
@@ -827,7 +850,8 @@ bool checkDrawCallForCommandList(command_list* commandList, uint32_t psShaderHas
     }
     dev_mutex.unlock();
 
-    return commandListData.techniquesToRender.size() > 0 || commandListData.bindingsToUpdate.size() > 0;
+    return commandListData.techniquesToRender.size() > 0 || commandListData.bindingsToUpdate.size() > 0 ||
+        commandListData.vsConstantBuffersToUpdate.size() > 0 || commandListData.psConstantBuffersToUpdate.size() > 0;
 }
 
 
@@ -878,7 +902,6 @@ static const resource_view GetCurrentResourceView(effect_runtime* runtime, const
 
     return active_rtv;
 }
-
 
 static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
 {
@@ -938,13 +961,21 @@ static void UpdateTextureBindings(command_list* cmd_list, bool dec = false)
             resource res = runtime->get_device()->get_resource_from_view(active_rtv);
             resource target_res = std::get<0>(deviceData.bindingMap[bindingName]);
 
-            if (res == 0)
+            if (res == 0 || target_res == 0)
             {
                 continue;
             }
 
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
-            if (UpdateTextureBinding(runtime, bindingName, resDesc.texture.format))
+
+            uint32_t retUpdate = UpdateTextureBinding(runtime, bindingName, resDesc.texture.format);
+
+            if (retUpdate > 1)
+            {
+                target_res = std::get<0>(deviceData.bindingMap[bindingName]);
+            }
+
+            if (retUpdate)
             {
                 cmd_list->copy_resource(res, target_res);
                 deviceData.bindingsUpdated.emplace(bindingName);
@@ -1008,6 +1039,7 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
         return;
     }
 
+
     deviceData.current_runtime->render_effects(cmd_list, static_cast<resource_view>(0), static_cast<resource_view>(0));
 
     std::unique_lock<std::shared_mutex> dev_mutex(render_mutex);
@@ -1037,7 +1069,9 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 
             deviceData.rendered_effects = true;
 
+            //runtime->invoke_reshade_begin_effects(cmd_list, view_non_srgb, view_srgb);
             runtime->render_technique(technique, cmd_list, view_non_srgb, view_srgb);
+            //runtime->invoke_reshade_finish_effects(cmd_list, view_non_srgb, view_srgb);
 
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
             g_addonUIData.cFormat = resDesc.texture.format;
@@ -1103,6 +1137,11 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
                 // in collection mode
                 g_pixelShaderManager.addActivePipelineHandle(pipelineHandle.handle);
             }
+            if (commandListData.activePixelShaderHash != handleHasPixelShaderAttached)
+            {
+                commandListData.psConstantBuffersToUpdate.clear();
+            }
+
             commandListData.blockedPixelShaderGroups = g_addonUIData.GetToggleGroupsForPixelShaderHash(handleHasPixelShaderAttached);
             commandListData.activePixelShaderHash = handleHasPixelShaderAttached;
         }
@@ -1119,6 +1158,11 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
                 // in collection mode
                 g_vertexShaderManager.addActivePipelineHandle(pipelineHandle.handle);
             }
+            if (commandListData.activeVertexShaderHash != handleHasVertexShaderAttached)
+            {
+                commandListData.vsConstantBuffersToUpdate.clear();
+            }
+
             commandListData.blockedVertexShaderGroups = g_addonUIData.GetToggleGroupsForVertexShaderHash(handleHasVertexShaderAttached);
             commandListData.activeVertexShaderHash = handleHasVertexShaderAttached;
         }
@@ -1218,10 +1262,8 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
 
 static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
 {
-    if (constantHandler != nullptr)
-    {
-        constantHandler->OnPushDescriptors(cmd_list, stages, layout, layout_param, update, g_pixelShaderManager, g_vertexShaderManager);
-    }
+    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    data.stateTracker.OnPushDescriptors(cmd_list, stages, layout, layout_param, update);
 }
 
 
@@ -1296,9 +1338,26 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect* so
 
     if (queue == deviceData.current_runtime->get_command_queue())
     {
+        effect_runtime* runtime = deviceData.current_runtime;
+
         if (deviceData.current_runtime->get_effects_state() && deviceData.rendered_effects)
         {
-            RenderRemainingEffects(deviceData.current_runtime);
+            RenderRemainingEffects(runtime);
+        }
+        else if (deviceData.current_runtime->get_effects_state() && !deviceData.rendered_effects)
+        {
+            // Draw effect to the backbuffer views we created instead, otherwise reshade is gonna nope out
+            resource_view active_rtv = { 0 };
+            resource_view active_rtv_srgb = { 0 };
+
+            if (s_backBufferView.contains(runtime->get_current_back_buffer().handle))
+            {
+                active_rtv = s_backBufferView.at(runtime->get_current_back_buffer().handle).first;
+                active_rtv_srgb = s_backBufferView.at(runtime->get_current_back_buffer().handle).second;
+            }
+            deviceData.current_runtime->get_command_queue()->get_immediate_command_list()->bind_render_targets_and_depth_stencil(0, nullptr);
+            deviceData.current_runtime->render_effects(runtime->get_command_queue()->get_immediate_command_list(),
+                active_rtv, active_rtv_srgb);
         }
     }
 
@@ -1371,7 +1430,25 @@ static bool UnInitHooks()
     return constantManager.UnInit();
 }
 
+bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
+{
+    if (constantHandler != nullptr)
+    {
+        constantHandler->UpdateConstants(cmd_list);
+    }
 
+    return false;
+}
+
+bool onDrawIndexed(command_list* cmd_list, uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
+{
+    if (constantHandler != nullptr)
+    {
+        constantHandler->UpdateConstants(cmd_list);
+    }
+
+    return false;
+}
 
 /// <summary>
 /// copied from Reshade
@@ -1430,6 +1507,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
         reshade::register_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
         reshade::register_event<reshade::addon_event::present>(onPresent);
+
+        reshade::register_event<reshade::addon_event::draw>(onDraw);
+        reshade::register_event<reshade::addon_event::draw_indexed>(onDrawIndexed);
+
         reshade::register_overlay(nullptr, &displaySettings);
         break;
     case DLL_PROCESS_DETACH:
@@ -1466,6 +1547,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::init_resource_view>(onInitResourceView);
         reshade::unregister_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
         reshade::unregister_event<reshade::addon_event::present>(onPresent);
+
+        reshade::unregister_event<reshade::addon_event::draw>(onDraw);
+        reshade::unregister_event<reshade::addon_event::draw_indexed>(onDrawIndexed);
+
         reshade::unregister_overlay(nullptr, &displaySettings);
         reshade::unregister_addon(hModule);
         break;

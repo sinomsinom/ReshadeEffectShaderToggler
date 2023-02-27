@@ -56,12 +56,7 @@ bool ConstantCopyFFXIV::Unhook()
     return true;
 }
 
-void __fastcall ConstantCopyFFXIV::detour_ffxiv_cbload(
-    int64_t p1,
-    uint16_t* p2,
-    uint64_t p3,
-    intptr_t** p4
-)
+void __fastcall ConstantCopyFFXIV::detour_ffxiv_cbload(int64_t p1, uint16_t* p2, uint64_t p3, intptr_t** p4)
 {
     ConstantHandlerFFXIV::Origin = *p4;
     ConstantHandlerFFXIV::Size = (reinterpret_cast<uint64_t>(p4[1]) & 0xffffffff) << 4;

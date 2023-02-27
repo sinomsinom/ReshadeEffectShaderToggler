@@ -13,6 +13,9 @@ using namespace std;
 using namespace reshade::api;
 using namespace ShaderToggler;
 
+struct CommandListDataContainer;
+struct DeviceDataContainer;
+
 namespace ConstantFeedback {
     struct BufferCopy
     {
@@ -93,9 +96,7 @@ namespace ConstantFeedback {
         size_t GetConstantBufferSize(const ToggleGroup* group);
         static const ToggleGroup* CheckDescriptors(command_list* commandList, ShaderManager& pixelShaderManager, ShaderManager& vertexShaderManager, uint32_t psShaderHash, uint32_t vsShaderHash);
         void ReloadConstantVariables(effect_runtime* runtime);
-
-        void OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update,
-            ShaderManager& pixelShaderManager, ShaderManager& vertexShaderManager);
+        void UpdateConstants(command_list* cmd_list);
         virtual void OnInitResource(device* device, const resource_desc& desc, const subresource_data* initData, resource_usage usage, reshade::api::resource handle);
         virtual void OnDestroyResource(device* device, resource res);
 
@@ -131,5 +132,7 @@ namespace ConstantFeedback {
 
         bool CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& target);
         void CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list);
+    private:
+        bool UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, const ToggleGroup* group, uint32_t index);
     };
 }

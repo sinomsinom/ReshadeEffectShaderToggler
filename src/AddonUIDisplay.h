@@ -297,18 +297,22 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_DOWN), runtime))
     {
         instance.GetPixelShaderManager()->huntPreviousShader(false);
+        instance.UpdateToggleGroupsForShaderHashes();
     }
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_UP), runtime))
     {
         instance.GetPixelShaderManager()->huntNextShader(false);
+        instance.UpdateToggleGroupsForShaderHashes();
     }
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_DOWN), runtime))
     {
         instance.GetPixelShaderManager()->huntPreviousShader(true);
+        instance.UpdateToggleGroupsForShaderHashes();
     }
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_UP), runtime))
     {
         instance.GetPixelShaderManager()->huntNextShader(true);
+        instance.UpdateToggleGroupsForShaderHashes();
     }
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARK), runtime))
     {
@@ -317,18 +321,22 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_DOWN), runtime))
     {
         instance.GetVertexShaderManager()->huntPreviousShader(false);
+        instance.UpdateToggleGroupsForShaderHashes();
     }
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_UP), runtime))
     {
         instance.GetVertexShaderManager()->huntNextShader(false);
+        instance.UpdateToggleGroupsForShaderHashes();
     }
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_DOWN), runtime))
     {
         instance.GetVertexShaderManager()->huntPreviousShader(true);
+        instance.UpdateToggleGroupsForShaderHashes();
     }
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_UP), runtime))
     {
         instance.GetVertexShaderManager()->huntNextShader(true);
+        instance.UpdateToggleGroupsForShaderHashes();
     }
     if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARK), runtime))
     {

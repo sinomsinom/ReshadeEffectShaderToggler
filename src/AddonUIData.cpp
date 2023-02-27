@@ -95,6 +95,22 @@ void AddonUIData::UpdateToggleGroupsForShaderHashes()
 
     for (auto& group : _toggleGroups)
     {
+        // Only consider the currently hunted hash for the group being edited
+        if (group.second.getId() == _toggleGroupIdShaderEditing && (_pixelShaderManager->isInHuntingMode() || _vertexShaderManager->isInHuntingMode()))
+        {
+            if (_pixelShaderManager->isInHuntingMode())
+            {
+                _pixelShaderHashToToggleGroups[_pixelShaderManager->getActiveHuntedShaderHash()].push_back(&group.second);
+            }
+
+            if (_vertexShaderManager->isInHuntingMode())
+            {
+                _pixelShaderHashToToggleGroups[_vertexShaderManager->getActiveHuntedShaderHash()].push_back(&group.second);
+            }
+
+            continue;
+        }
+
         for (const auto& h : group.second.getPixelShaderHashes())
         {
             _pixelShaderHashToToggleGroups[h].push_back(&group.second);
@@ -280,6 +296,8 @@ void AddonUIData::StartShaderEditing(ToggleGroup& groupEditing)
 
     // after copying them to the managers, we can now clear the group's shader.
     groupEditing.clearHashes();
+
+    UpdateToggleGroupsForShaderHashes();
 }
 
 

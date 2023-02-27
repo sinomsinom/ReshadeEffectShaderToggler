@@ -12,6 +12,8 @@ struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataC
     uint32_t activeVertexShaderHash;
     unordered_map<string, int32_t> techniquesToRender;
     unordered_map<string, int32_t> bindingsToUpdate;
+    unordered_map<const ToggleGroup*, int32_t> psConstantBuffersToUpdate;
+    unordered_map<const ToggleGroup*, int32_t> vsConstantBuffersToUpdate;
     vector<vector<resource_view>> active_rtv_history = vector<vector<resource_view>>(10);
     unordered_set < pair<string, int32_t>,
         decltype([](const pair<string, int32_t>& v) {

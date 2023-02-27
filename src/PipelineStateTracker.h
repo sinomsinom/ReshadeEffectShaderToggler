@@ -17,8 +17,9 @@ namespace StateTracker
         bind_render_target,
         bind_viewport,
         bind_scissor_rect,
-        bind_descriptors,
+        bind_descriptor_sets,
         bind_pipeline_states,
+        push_descriptors,
         push_constants,
         render_pass
     };
@@ -115,7 +116,22 @@ namespace StateTracker
         }
     };
 
-    struct BindDescriptorsState : PipelineBinding<PipelineBindingTypes::bind_descriptors> {
+    struct PushDescriptorsState : PipelineBinding<PipelineBindingTypes::push_descriptors> {
+        pipeline_layout current_layout[2];
+        vector<vector<buffer_range>> current_descriptors[2]; // consider only CBs for now
+
+        void Reset()
+        {
+            callIndex = 0;
+            cmd_list = nullptr;
+            current_layout[0] = { 0 };
+            current_layout[1] = { 0 };
+            current_descriptors[0].clear();
+            current_descriptors[1].clear();
+        }
+    };
+
+    struct BindDescriptorSetsState : PipelineBinding<PipelineBindingTypes::bind_descriptor_sets> {
         pipeline_layout current_layout[2];
         vector<descriptor_set> current_sets[2];
         unordered_map<uint64_t, vector<bool>> transient_mask;
@@ -190,7 +206,11 @@ namespace StateTracker
         void OnBindScissorRects(command_list* cmd_list, uint32_t first, uint32_t count, const rect* rects);
         void OnBindViewports(command_list* cmd_list, uint32_t first, uint32_t count, const viewport* viewports);
         void OnBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_set* sets);
+        void OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update);
         void OnBindPipeline(command_list* commandList, pipeline_stage stages, pipeline pipelineHandle);
+
+        const PushDescriptorsState const* GetPushDescriptorState() { return &_pushDescriptorsState;  }
+        void ClearPushDescriptorState(pipeline_stage);
 
         bool IsInRenderPass();
 
@@ -200,7 +220,8 @@ namespace StateTracker
 
         uint32_t _callIndex = 0;
         BindRenderTargetsState _renderTargetState;
-        BindDescriptorsState _descriptorsState;
+        BindDescriptorSetsState _descriptorSetsState;
+        PushDescriptorsState _pushDescriptorsState;
         BindViewportsState _viewportsState;
         BindScissorRectsState _scissorRectsState;
         BindPipelineStatesStates _pipelineStatesState;
