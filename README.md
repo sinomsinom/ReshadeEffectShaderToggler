@@ -1,5 +1,5 @@
 # ReshadeEffectShaderToggler
-Reshade 5.2+ addon to apply Reshade effects to render targets bound before specific, user-configurable, groups of shaders are 
+Reshade 5.7+ addon to apply Reshade effects to render targets bound before specific, user-configurable, groups of shaders are 
 encountered within a game's rendering pipeline.
 
 It's mainly for 64bit reshade. There's a 32bit version in the releases, but it's not actively maintained/tested. 
@@ -75,6 +75,8 @@ To re-use this information the next time you run the game, click the Save toggle
 located in the same folder as `ReshadeEffectShaderToggler.addon`.
 
 ## Credits
+* [Sinom](https://github.com/sinomsinom)<br/>
+    Contributor
 * [Frans Bouma](https://github.com/FransBouma)<br/>
     Original ShaderToggler
 * [crosire](https://github.com/crosire)<br/>
