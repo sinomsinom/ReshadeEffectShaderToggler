@@ -53,8 +53,6 @@ static void DisplayConstantSettings(ToggleGroup* group)
         }
     }
 
-    //ImGui::NewLine();
-
     ImGui::Text("Binding #: %u", group->getDescriptorIndex());
 
     ImGui::SameLine();

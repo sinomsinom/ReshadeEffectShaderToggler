@@ -35,66 +35,9 @@ uint8_t* ConstantHandlerBase::GetConstantBuffer(const ToggleGroup* group)
     return nullptr;
 }
 
-const unordered_set<uint64_t>& ConstantHandlerBase::GetConstantBuffers()
-{
-    return constantBuffers;
-}
-
 unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* ConstantHandlerBase::GetRESTVariables()
 {
     return &restVariables;
-}
-
-const ToggleGroup* ConstantHandlerBase::CheckDescriptors(command_list* commandList, ShaderManager& pixelShaderManager, ShaderManager& vertexShaderManager,
-    uint32_t psShaderHash, uint32_t vsShaderHash)
-{
-    if (nullptr == commandList)
-    {
-        return nullptr;
-    }
-
-    CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
-    DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
-
-    //uint32_t psShaderHash = pixelShaderManager.getShaderHash(commandListData.activePixelShaderPipeline);
-    //uint32_t vsShaderHash = vertexShaderManager.getShaderHash(commandListData.activeVertexShaderPipeline);
-
-    vector<const ToggleGroup*> tGroups;
-
-    //if (deviceData.groups == nullptr)
-    //    return nullptr;
-
-    if (deviceData.huntedGroup != nullptr && (pixelShaderManager.isBlockedShader(psShaderHash) || vertexShaderManager.isBlockedShader(vsShaderHash)))
-    {
-        if (deviceData.huntedGroup->getExtractConstants())
-        {
-            return deviceData.huntedGroup;
-        }
-    }
-
-    if (commandListData.blockedPixelShaderGroups != nullptr)
-    {
-        for (auto group : *commandListData.blockedPixelShaderGroups)
-        {
-            if (group->isActive() && group->getExtractConstants())
-            {
-                return group;
-            }
-        }
-    }
-
-    if (commandListData.blockedVertexShaderGroups != nullptr)
-    {
-        for (auto group : *commandListData.blockedVertexShaderGroups)
-        {
-            if (group->isActive() && group->getExtractConstants())
-            {
-                return group;
-            }
-        }
-    }
-
-    return nullptr;
 }
 
 void ConstantHandlerBase::ReloadConstantVariables(effect_runtime* runtime)
@@ -380,7 +323,6 @@ void ConstantHandlerBase::RemoveGroup(const ToggleGroup* group, device* dev)
 
 const uint8_t* ConstantHandlerBase::GetHostConstantBuffer(uint64_t resourceHandle)
 {
-    shared_lock<shared_mutex> lock(deviceHostMutex);
     const auto& ret = deviceToHostConstantBuffer.find(resourceHandle);
     if (ret != deviceToHostConstantBuffer.end())
     {
@@ -416,9 +358,6 @@ void ConstantHandlerBase::OnInitResource(device* device, const resource_desc& de
 
     if (desc.heap == memory_heap::cpu_to_gpu && static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
     {
-        std::unique_lock<shared_mutex> colock(constbuffer_mutex);
-        constantBuffers.emplace(handle.handle);
-
         CreateHostConstantBuffer(device, handle, desc.buffer.size);
         if (initData != nullptr && initData->data != nullptr)
         {
@@ -432,9 +371,6 @@ void ConstantHandlerBase::OnDestroyResource(device* device, resource res)
     resource_desc desc = device->get_resource_desc(res);
     if (desc.heap == memory_heap::cpu_to_gpu && static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
     {
-        std::unique_lock<shared_mutex> colock(constbuffer_mutex);
-        constantBuffers.erase(res.handle);
-
         DeleteHostConstantBuffer(res);
     }
 }

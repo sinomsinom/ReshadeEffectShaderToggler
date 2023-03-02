@@ -94,15 +94,12 @@ namespace ConstantFeedback {
         virtual void RemoveGroup(const ToggleGroup*, device* dev);
         uint8_t* GetConstantBuffer(const ToggleGroup* group);
         size_t GetConstantBufferSize(const ToggleGroup* group);
-        static const ToggleGroup* CheckDescriptors(command_list* commandList, ShaderManager& pixelShaderManager, ShaderManager& vertexShaderManager, uint32_t psShaderHash, uint32_t vsShaderHash);
         void ReloadConstantVariables(effect_runtime* runtime);
         void UpdateConstants(command_list* cmd_list);
         virtual void OnInitResource(device* device, const resource_desc& desc, const subresource_data* initData, resource_usage usage, reshade::api::resource handle);
         virtual void OnDestroyResource(device* device, resource res);
 
         void ApplyConstantValues(effect_runtime* runtime, const ToggleGroup*, const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants);
-
-        const unordered_set<uint64_t>& GetConstantBuffers();
 
         unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables();
 
@@ -120,7 +117,6 @@ namespace ConstantFeedback {
         unordered_map<const ToggleGroup*, size_t> groupBufferSize;
 
         unordered_set<uint64_t> constantBuffers;
-        shared_mutex constbuffer_mutex;
         static unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>> restVariables;
         static char charBuffer[CHAR_BUFFER_SIZE];
 
@@ -128,7 +124,6 @@ namespace ConstantFeedback {
         unordered_map<uint64_t, vector<uint8_t>> deviceToHostConstantBuffer;
 
         shared_mutex deviceHostMutex;
-        shared_mutex blah;
 
         bool CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& target);
         void CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list);

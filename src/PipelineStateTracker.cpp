@@ -292,13 +292,16 @@ void PipelineStateTracker::OnBindPipelineStates(command_list* cmd_list, uint32_t
     }
 }
 
-void PipelineStateTracker::OnBindPipeline(command_list* commandList, pipeline_stage stages, pipeline pipelineHandle)
+void PipelineStateTracker::OnBindPipeline(command_list* cmd_list, pipeline_stage stages, pipeline pipelineHandle)
 {
+    if (cmd_list->get_device()->get_api() != device_api::d3d12 && cmd_list->get_device()->get_api() != device_api::vulkan)
+        return;
+
     _pipelineState.callIndex = _callIndex;
     _callIndex++;
     _pipelineState.pipeline = pipelineHandle;
     _pipelineState.stages = stages;
-    _pipelineState.cmd_list = commandList;
+    _pipelineState.cmd_list = cmd_list;
 }
 
 bool PipelineStateTracker::IsInRenderPass()

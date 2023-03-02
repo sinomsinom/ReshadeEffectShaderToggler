@@ -29,9 +29,6 @@
 // OR TORT(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /////////////////////////////////////////////////////////////////////////
-#define IMGUI_DISABLE_INCLUDE_IMCONFIG_H
-#define ImTextureID unsigned long long // Change ImGui texture ID type to that of a 'reshade::api::resource_view' handle
-
 #include <imgui.h>
 #include <reshade.hpp>
 #include <vector>
@@ -60,6 +57,12 @@ using namespace StateTracker;
 
 extern "C" __declspec(dllexport) const char* NAME = "Reshade Effect Shader Toggler";
 extern "C" __declspec(dllexport) const char* DESCRIPTION = "Addon which allows you to define groups of shaders to render Reshade effects on.";
+
+extern void register_addon_depth();
+extern void unregister_addon_depth();
+extern void draw_settings_overlay(effect_runtime* runtime);
+extern void on_begin_render_effects(effect_runtime* runtime, command_list* cmd_list, resource_view, resource_view);
+extern void on_finish_render_effects(effect_runtime* runtime, command_list* cmd_list, resource_view, resource_view);
 
 constexpr auto MAX_EFFECT_HANDLES = 128;
 constexpr auto REST_VAR_ANNOTATION = "source";
@@ -216,7 +219,6 @@ static bool hasSRGB(reshade::api::format value)
     case format::r8g8b8a8_typeless:
     case format::r8g8b8a8_unorm:
     case format::r8g8b8a8_unorm_srgb:
-    case format::r8g8b8x8_typeless:
     case format::r8g8b8x8_unorm:
     case format::r8g8b8x8_unorm_srgb:
     case format::b8g8r8a8_typeless:
@@ -298,6 +300,7 @@ static bool RenderRemainingEffects(effect_runtime* runtime)
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
     resource_view active_rtv = { 0 };
     resource_view active_rtv_srgb = { 0 };
+    bool rendered = false;
 
     if (s_backBufferView.contains(runtime->get_current_back_buffer().handle))
     {
@@ -305,26 +308,36 @@ static bool RenderRemainingEffects(effect_runtime* runtime)
         active_rtv_srgb = s_backBufferView.at(runtime->get_current_back_buffer().handle).second;
     }
 
-    if (deviceData.current_runtime == nullptr || active_rtv == 0) {
+    if (deviceData.current_runtime == nullptr || active_rtv == 0 || commandListData.techniquesToRender.size() == 0) {
         return false;
     }
 
-    runtime->render_effects(cmd_list, static_cast<resource_view>(0), static_cast<resource_view>(0));
+    if (deviceData.rendered_effects)
+    {
+        on_begin_render_effects(deviceData.current_runtime, runtime->get_command_queue()->get_immediate_command_list(), { 0 }, { 0 });
 
-    bool rendered = false;
-    enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &active_rtv, &active_rtv_srgb, &rendered](effect_runtime* runtime, effect_technique technique, string& name) {
-        if (deviceData.allEnabledTechniques.contains(name) && !deviceData.allEnabledTechniques[name])
-        {
-            resource res = runtime->get_device()->get_resource_from_view(active_rtv);
-            resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
+        enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &active_rtv, &active_rtv_srgb, &rendered](effect_runtime* runtime, effect_technique technique, string& name) {
+            if (deviceData.allEnabledTechniques.contains(name) && !deviceData.allEnabledTechniques[name])
+            {
+                resource res = runtime->get_device()->get_resource_from_view(active_rtv);
+                resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
 
-            runtime->render_technique(technique, cmd_list, active_rtv, active_rtv_srgb);
+                runtime->render_technique(technique, cmd_list, active_rtv, active_rtv_srgb);
 
-            deviceData.allEnabledTechniques[name] = true;
-            rendered = true;
-        }
-        });
+                deviceData.allEnabledTechniques[name] = true;
+                rendered = true;
+            }
+            });
 
+        on_finish_render_effects(deviceData.current_runtime, runtime->get_command_queue()->get_immediate_command_list(), { 0 }, { 0 });
+    }
+    else
+    {
+        deviceData.current_runtime->render_effects(runtime->get_command_queue()->get_immediate_command_list(),
+            active_rtv, active_rtv_srgb);
+        rendered = true;
+    }
+    
     return rendered;
 }
 
@@ -551,19 +564,19 @@ static bool CreateTextureBinding(effect_runtime* runtime, resource* res, resourc
         resource_desc(frame_width, frame_height, 1, 1, format_to_typeless(format), 1, memory_heap::gpu_only, resource_usage::copy_dest | resource_usage::shader_resource | resource_usage::render_target),
         nullptr, resource_usage::shader_resource, res))
     {
-        reshade::log_message(ERROR, "Failed to create texture binding resource!");
+        reshade::log_message(reshade::log_level::error, "Failed to create texture binding resource!");
         return false;
     }
 
     if (!runtime->get_device()->create_resource_view(*res, resource_usage::shader_resource, resource_view_desc(format_to_default_typed(format, 0)), srv))
     {
-        reshade::log_message(ERROR, "Failed to create texture binding resource view!");
+        reshade::log_message(reshade::log_level::error, "Failed to create texture binding resource view!");
         return false;
     }
 
     if (!runtime->get_device()->create_resource_view(*res, resource_usage::render_target, resource_view_desc(format_to_default_typed(format, 0)), rtv))
     {
-        reshade::log_message(ERROR, "Failed to create texture binding resource view!");
+        reshade::log_message(reshade::log_level::error, "Failed to create texture binding resource view!");
         return false;
     }
 
@@ -1039,8 +1052,9 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
         return;
     }
 
-
     deviceData.current_runtime->render_effects(cmd_list, static_cast<resource_view>(0), static_cast<resource_view>(0));
+
+    on_begin_render_effects(deviceData.current_runtime, cmd_list, { 0 }, { 0 });
 
     std::unique_lock<std::shared_mutex> dev_mutex(render_mutex);
     enumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &rendered](effect_runtime* runtime, effect_technique technique, string& name) {
@@ -1069,9 +1083,7 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 
             deviceData.rendered_effects = true;
 
-            //runtime->invoke_reshade_begin_effects(cmd_list, view_non_srgb, view_srgb);
             runtime->render_technique(technique, cmd_list, view_non_srgb, view_srgb);
-            //runtime->invoke_reshade_finish_effects(cmd_list, view_non_srgb, view_srgb);
 
             resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
             g_addonUIData.cFormat = resDesc.texture.format;
@@ -1081,6 +1093,8 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
         }
     });
     dev_mutex.unlock();
+
+    on_finish_render_effects(deviceData.current_runtime, cmd_list, { 0 }, { 0 });
 
     for (auto& tech : commandListData.immediateActionSet)
     {
@@ -1098,7 +1112,7 @@ static void RenderEffects(command_list* cmd_list, bool inc = false)
 
     commandListData.immediateActionSet.clear();
 
-    if (rendered && (device->get_api() == device_api::d3d12 || device->get_api() == device_api::vulkan))
+    if (rendered)
     {
         std::shared_lock<std::shared_mutex> dev_mutex(pipeline_layout_mutex);
         commandListData.stateTracker.ReApplyState(cmd_list, deviceData.transient_mask);
@@ -1336,33 +1350,18 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect* so
         return;
     }
 
-    if (queue == deviceData.current_runtime->get_command_queue())
-    {
-        effect_runtime* runtime = deviceData.current_runtime;
+    effect_runtime* runtime = deviceData.current_runtime;
 
-        if (deviceData.current_runtime->get_effects_state() && deviceData.rendered_effects)
+    if (queue == runtime->get_command_queue())
+    {
+        if (runtime->get_effects_state())
         {
             RenderRemainingEffects(runtime);
-        }
-        else if (deviceData.current_runtime->get_effects_state() && !deviceData.rendered_effects)
-        {
-            // Draw effect to the backbuffer views we created instead, otherwise reshade is gonna nope out
-            resource_view active_rtv = { 0 };
-            resource_view active_rtv_srgb = { 0 };
-
-            if (s_backBufferView.contains(runtime->get_current_back_buffer().handle))
-            {
-                active_rtv = s_backBufferView.at(runtime->get_current_back_buffer().handle).first;
-                active_rtv_srgb = s_backBufferView.at(runtime->get_current_back_buffer().handle).second;
-            }
-            deviceData.current_runtime->get_command_queue()->get_immediate_command_list()->bind_render_targets_and_depth_stencil(0, nullptr);
-            deviceData.current_runtime->render_effects(runtime->get_command_queue()->get_immediate_command_list(),
-                active_rtv, active_rtv_srgb);
         }
     }
 
     if (dev->get_api() != device_api::d3d12 && dev->get_api() != device_api::vulkan)
-        onResetCommandList(deviceData.current_runtime->get_command_queue()->get_immediate_command_list());
+        onResetCommandList(runtime->get_command_queue()->get_immediate_command_list());
 }
 
 static void onReshadePresent(effect_runtime* runtime)
@@ -1416,6 +1415,10 @@ static void onUnmapBufferRegion(device* device, resource resource)
 static void displaySettings(effect_runtime* runtime)
 {
     DisplaySettings(g_addonUIData, runtime);
+    if (ImGui::CollapsingHeader("Depth", ImGuiTreeNodeFlags_None))
+    {
+        draw_settings_overlay(runtime);
+    }
 }
 
 
@@ -1469,6 +1472,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         {
             return FALSE;
         }
+
+        register_addon_depth();
 
         g_dllPath = getModulePath(hModule);
 
@@ -1553,6 +1558,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 
         reshade::unregister_overlay(nullptr, &displaySettings);
         reshade::unregister_addon(hModule);
+
+        unregister_addon_depth();
         break;
     }
 
