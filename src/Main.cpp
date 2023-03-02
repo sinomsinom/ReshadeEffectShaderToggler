@@ -308,7 +308,7 @@ static bool RenderRemainingEffects(effect_runtime* runtime)
         active_rtv_srgb = s_backBufferView.at(runtime->get_current_back_buffer().handle).second;
     }
 
-    if (deviceData.current_runtime == nullptr || active_rtv == 0 || commandListData.techniquesToRender.size() == 0) {
+    if (deviceData.current_runtime == nullptr || active_rtv == 0) {
         return false;
     }
 

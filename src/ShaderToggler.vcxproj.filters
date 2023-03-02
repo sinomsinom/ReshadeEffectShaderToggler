@@ -122,6 +122,9 @@
     <ClCompile Include="ConstantManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\deps\reshade\examples\09-depth\generic_depth.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="ShaderToggler.rc">
