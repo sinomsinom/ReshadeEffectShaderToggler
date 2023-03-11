@@ -282,7 +282,6 @@ void ConstantHandlerBase::CopyToScratchpad(const ToggleGroup* group, device* dev
 
     uint64_t size = targetBufferDesc.buffer.size;
 
-    shared_lock<shared_mutex> lock(deviceHostMutex);
     const uint8_t* hostbuf = GetHostConstantBuffer(currentBufferRange.buffer.handle);
     if (hostbuf != nullptr)
     {
@@ -323,6 +322,7 @@ void ConstantHandlerBase::RemoveGroup(const ToggleGroup* group, device* dev)
 
 const uint8_t* ConstantHandlerBase::GetHostConstantBuffer(uint64_t resourceHandle)
 {
+    shared_lock<shared_mutex> lock(deviceHostMutex);
     const auto& ret = deviceToHostConstantBuffer.find(resourceHandle);
     if (ret != deviceToHostConstantBuffer.end())
     {
