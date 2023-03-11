@@ -199,10 +199,6 @@ static bool isSRGB(reshade::api::format value)
     case format::r8g8b8x8_unorm_srgb:
     case format::b8g8r8a8_unorm_srgb:
     case format::b8g8r8x8_unorm_srgb:
-    case format::bc1_unorm_srgb:
-    case format::bc2_unorm_srgb:
-    case format::bc3_unorm_srgb:
-    case format::bc7_unorm_srgb:
         return true;
     default:
         return false;
@@ -227,18 +223,6 @@ static bool hasSRGB(reshade::api::format value)
     case format::b8g8r8x8_typeless:
     case format::b8g8r8x8_unorm:
     case format::b8g8r8x8_unorm_srgb:
-    case format::bc1_typeless:
-    case format::bc1_unorm:
-    case format::bc1_unorm_srgb:
-    case format::bc2_typeless:
-    case format::bc2_unorm:
-    case format::bc2_unorm_srgb:
-    case format::bc3_typeless:
-    case format::bc3_unorm:
-    case format::bc3_unorm_srgb:
-    case format::bc7_typeless:
-    case format::bc7_unorm:
-    case format::bc7_unorm_srgb:
         return true;
     default:
         return false;
@@ -386,11 +370,11 @@ static bool onCreateResource(device* device, resource_desc& desc, subresource_da
     {
         if (hasSRGB(desc.texture.format)) {
             std::unique_lock<shared_mutex> lock(resource_mutex);
-    
+        
             s_resourceFormatTransient.emplace(&desc, desc.texture.format);
-    
+        
             desc.texture.format = format_to_typeless(desc.texture.format);
-    
+
             return true;
         }
     }
@@ -413,24 +397,24 @@ static void onInitResource(device* device, const resource_desc& desc, const subr
             reshade::api::format orgFormat = s_resourceFormatTransient.at(&desc);
             s_resourceFormat.emplace(handle.handle, orgFormat);
             s_resourceFormatTransient.erase(&desc);
-    
+        
             resource_view view_non_srgb = { 0 };
             resource_view view_srgb = { 0 };
-    
+            
             reshade::api::format format_non_srgb = format_to_default_typed(desc.texture.format);
             reshade::api::format format_srgb = format_to_default_typed(desc.texture.format, 1);
-    
+            
             if (!isSRGB(orgFormat))
             {
                 format_non_srgb = orgFormat;
             }
-    
+            
             device->create_resource_view(handle, resource_usage::render_target,
                 resource_view_desc(format_non_srgb), &view_non_srgb);
-    
+            
             device->create_resource_view(handle, resource_usage::render_target,
                 resource_view_desc(format_srgb), &view_srgb);
-    
+            
             s_sRGBResourceViews.emplace(handle.handle, make_pair(view_non_srgb, view_srgb));
         }
     }
@@ -476,18 +460,26 @@ static bool onCreateResourceView(device* device, resource resource, resource_usa
     std::shared_lock<shared_mutex> lock(resource_mutex);
     if (s_resourceFormat.contains(resource.handle))
     {
-        desc.format = s_resourceFormat.at(resource.handle);
+        // Set original resource format in case the game uses that as a basis for creating it's views
+        if (desc.format == format_to_typeless(desc.format) && format_to_typeless(desc.format) != format_to_default_typed(desc.format) ||
+            desc.format == reshade::api::format::unknown) {
 
-        if (desc.type == resource_view_type::unknown)
-        {
-            desc.type = texture_desc.texture.depth_or_layers > 1 ? resource_view_type::texture_2d_array : resource_view_type::texture_2d;
-            desc.texture.first_level = 0;
-            desc.texture.level_count = (usage_type == resource_usage::shader_resource) ? UINT32_MAX : 1;
-            desc.texture.first_layer = 0;
-            desc.texture.layer_count = (usage_type == resource_usage::shader_resource) ? UINT32_MAX : 1;
+            reshade::api::format rFormat = s_resourceFormat.at(resource.handle);
+            
+            // The game may try to re-use the format setting of a previous resource that we had already set to typeless. Try default format in that case.
+            desc.format = format_to_typeless(rFormat) == rFormat ? format_to_default_typed(rFormat) : rFormat;
+
+            if (desc.type == resource_view_type::unknown)
+            {
+                desc.type = texture_desc.texture.depth_or_layers > 1 ? resource_view_type::texture_2d_array : resource_view_type::texture_2d;
+                desc.texture.first_level = 0;
+                desc.texture.level_count = (usage_type == resource_usage::shader_resource) ? UINT32_MAX : 1;
+                desc.texture.first_layer = 0;
+                desc.texture.layer_count = (usage_type == resource_usage::shader_resource) ? UINT32_MAX : 1;
+            }
+
+            return true;
         }
-    
-        return true;
     }
 
     return false;
