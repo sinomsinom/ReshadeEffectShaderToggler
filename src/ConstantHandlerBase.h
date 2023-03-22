@@ -96,6 +96,7 @@ namespace ConstantFeedback {
         size_t GetConstantBufferSize(const ToggleGroup* group);
         void ReloadConstantVariables(effect_runtime* runtime);
         void UpdateConstants(command_list* cmd_list);
+        void ClearConstantVariables();
         virtual void OnInitResource(device* device, const resource_desc& desc, const subresource_data* initData, resource_usage usage, reshade::api::resource handle);
         virtual void OnDestroyResource(device* device, resource res);
 

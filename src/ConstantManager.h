@@ -10,7 +10,8 @@ namespace ConstantFeedback
     {
         Copy_None,
         Copy_Memcpy,
-        Copy_FFXIV //actually only works with ConstantHandlerType::FFXIV, but shhhhh
+        Copy_FFXIV, //actually only works with ConstantHandlerType::FFXIV, but shhhhh
+        Copy_NierReplicant
     };
 
     enum ConstantHandlerType

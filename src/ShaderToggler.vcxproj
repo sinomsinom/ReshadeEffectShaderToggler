@@ -179,6 +179,7 @@
     <ClInclude Include="ConstantCopyBase.h" />
     <ClInclude Include="ConstantCopyDefinitions.h" />
     <ClInclude Include="ConstantCopyFFXIV.h" />
+    <ClInclude Include="ConstantCopyNierReplicant.h" />
     <ClInclude Include="ConstantHandlerFFXIV.h" />
     <ClInclude Include="ConstantHandlerNestedMapping.h" />
     <ClInclude Include="ConstantHandlerSingularMapping.h" />
@@ -189,7 +190,9 @@
     <ClInclude Include="KeyData.h" />
     <ClInclude Include="PipelinePrivateData.h" />
     <ClInclude Include="PipelineStateTracker.h" />
+    <ClInclude Include="RenderingManager.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="ResourceManager.h" />
     <ClInclude Include="ShaderManager.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="ToggleGroup.h" />
@@ -200,6 +203,7 @@
     <ClCompile Include="CDataFile.cpp" />
     <ClCompile Include="ConstantCopyBase.cpp" />
     <ClCompile Include="ConstantCopyFFXIV.cpp" />
+    <ClCompile Include="ConstantCopyNierReplicant.cpp" />
     <ClCompile Include="ConstantHandlerFFXIV.cpp" />
     <ClCompile Include="ConstantHandlerNestedMapping.cpp" />
     <ClCompile Include="ConstantHandlerSingularMapping.cpp" />
@@ -208,6 +212,8 @@
     <ClCompile Include="ConstantManager.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="PipelineStateTracker.cpp" />
+    <ClCompile Include="RenderingManager.cpp" />
+    <ClCompile Include="ResourceManager.cpp" />
     <ClCompile Include="ShaderManager.cpp" />
     <ClCompile Include="ToggleGroup.cpp" />
   </ItemGroup>

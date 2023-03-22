@@ -60,8 +60,10 @@ namespace AddonImGui
         VERTEX_SHADER_MARK,
         VERTEX_SHADER_MARKED_DOWN,
         VERTEX_SHADER_MARKED_UP,
-        HISTORY_DOWN,
-        HISTORY_UP
+        INVOCATION_DOWN,
+        INVOCATION_UP,
+        DESCRIPTOR_DOWN,
+        DESCRIPTOR_UP
     };
 
     static const char* KeybindNames[] = {
@@ -75,8 +77,10 @@ namespace AddonImGui
         "VERTEX_SHADER_MARK",
         "VERTEX_SHADER_MARKED_DOWN",
         "VERTEX_SHADER_MARKED_UP",
-        "HISTORY_DOWN",
-        "HISTORY_UP",
+        "INVOCATION_DOWN",
+        "INVOCATION_UP",
+        "DESCRIPTOR_DOWN",
+        "DESCRIPTOR_UP"
     };
 
     class AddonUIData
@@ -87,7 +91,8 @@ namespace AddonImGui
         ConstantHandlerBase* _constantHandler;
         atomic_uint32_t* _activeCollectorFrameCounter;
         vector<string>* _allTechniques;
-        atomic_int _historyIndexSelection = 0;
+        atomic_uint _invocationLocation = 0;
+        atomic_uint _descriptorIndex = 0;
         atomic_int _toggleGroupIdShaderEditing = -1;
         atomic_int _toggleGroupIdEffectEditing = -1;
         atomic_int _toggleGroupIdConstantEditing = -1;
@@ -99,6 +104,7 @@ namespace AddonImGui
         uint32_t _keyBindings[ARRAYSIZE(KeybindNames)];
         string _constHookType = "none";
         string _constHookCopyType = "singular";
+        bool _attemptSRGBCorrection = false;
         std::filesystem::path _basePath;
     public:
         AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandlerBase* constants, atomic_uint32_t* activeCollectorFrameCounter,
@@ -124,7 +130,8 @@ namespace AddonImGui
         atomic_int& GetToggleGroupIdShaderEditing() { return _toggleGroupIdShaderEditing; }
         atomic_int& GetToggleGroupIdEffectEditing() { return _toggleGroupIdEffectEditing; }
         atomic_int& GetToggleGroupIdConstantEditing() { return _toggleGroupIdConstantEditing; }
-        atomic_int& GetHistoryIndex() { return _historyIndexSelection; }
+        atomic_uint& GetInvocationLocation() { return _invocationLocation; }
+        atomic_uint& GetDescriptorIndex() { return _descriptorIndex; }
         const vector<string>* GetAllTechniques() const;
         int* StartValueFramecountCollectionPhase() { return &_startValueFramecountCollectionPhase; }
         float* OverlayOpacity() { return &_overlayOpacity; }
@@ -136,6 +143,7 @@ namespace AddonImGui
         uint32_t GetKeybinding(Keybind keybind);
         const string& GetConstHookType() { return _constHookType; }
         const string& GetConstHookCopyType()  { return _constHookCopyType; }
+        bool GetAttemptSRGBCorrection() { return _attemptSRGBCorrection; }
         void SetKeybinding(Keybind keybind, uint32_t keys);
         const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables() { return _constantHandler->GetRESTVariables(); };
         reshade::api::format cFormat;

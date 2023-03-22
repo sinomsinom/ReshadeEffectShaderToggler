@@ -39,7 +39,7 @@ namespace StateTracker
         PipelineBindingTypes GetType() override { return T; }
     };
 
-    struct BindRenderTargetsState : PipelineBinding<PipelineBindingTypes::bind_render_target> {
+    struct __declspec(novtable) BindRenderTargetsState final : PipelineBinding<PipelineBindingTypes::bind_render_target> {
         uint32_t count;
         vector<resource_view> rtvs;
         resource_view dsv;
@@ -54,7 +54,7 @@ namespace StateTracker
         }
     };
 
-    struct RenderPassState : PipelineBinding<PipelineBindingTypes::render_pass> {
+    struct __declspec(novtable) RenderPassState final : PipelineBinding<PipelineBindingTypes::render_pass> {
         uint32_t count;
         vector<render_pass_render_target_desc> rtvs;
         render_pass_depth_stencil_desc dsv;
@@ -69,7 +69,7 @@ namespace StateTracker
         }
     };
 
-    struct BindViewportsState : PipelineBinding<PipelineBindingTypes::bind_viewport> {
+    struct __declspec(novtable) BindViewportsState final : PipelineBinding<PipelineBindingTypes::bind_viewport> {
         uint32_t first;
         uint32_t count;
         vector<viewport> viewports;
@@ -84,7 +84,7 @@ namespace StateTracker
         }
     };
 
-    struct BindScissorRectsState : PipelineBinding<PipelineBindingTypes::bind_scissor_rect> {
+    struct __declspec(novtable) BindScissorRectsState final : PipelineBinding<PipelineBindingTypes::bind_scissor_rect> {
         uint32_t first;
         uint32_t count;
         vector<rect> rects;
@@ -99,7 +99,7 @@ namespace StateTracker
         }
     };
 
-    struct PushConstantsState : PipelineBinding<PipelineBindingTypes::push_constants> {
+    struct __declspec(novtable) PushConstantsState final : PipelineBinding<PipelineBindingTypes::push_constants> {
         uint32_t layout_param;
         uint32_t first;
         uint32_t count;
@@ -116,9 +116,10 @@ namespace StateTracker
         }
     };
 
-    struct PushDescriptorsState : PipelineBinding<PipelineBindingTypes::push_descriptors> {
+    struct __declspec(novtable) PushDescriptorsState final : PipelineBinding<PipelineBindingTypes::push_descriptors> {
         pipeline_layout current_layout[2];
         vector<vector<buffer_range>> current_descriptors[2]; // consider only CBs for now
+        vector<vector<resource_view>> current_srv[2];
 
         void Reset()
         {
@@ -128,10 +129,12 @@ namespace StateTracker
             current_layout[1] = { 0 };
             current_descriptors[0].clear();
             current_descriptors[1].clear();
+            current_srv[0].clear();
+            current_srv[1].clear();
         }
     };
 
-    struct BindDescriptorSetsState : PipelineBinding<PipelineBindingTypes::bind_descriptor_sets> {
+    struct __declspec(novtable) BindDescriptorSetsState final : PipelineBinding<PipelineBindingTypes::bind_descriptor_sets> {
         pipeline_layout current_layout[2];
         vector<descriptor_set> current_sets[2];
         unordered_map<uint64_t, vector<bool>> transient_mask;
@@ -148,7 +151,7 @@ namespace StateTracker
         }
     };
 
-    struct BindPipelineStatesState : PipelineBinding<PipelineBindingTypes::bind_pipeline_states> {
+    struct __declspec(novtable) BindPipelineStatesState final : PipelineBinding<PipelineBindingTypes::bind_pipeline_states> {
         uint32_t value;
         bool valuesSet;
         dynamic_state state;
@@ -168,7 +171,7 @@ namespace StateTracker
         }
     };
 
-    struct BindPipelineStatesStates {
+    struct __declspec(novtable) BindPipelineStatesStates final {
         BindPipelineStatesState states[2] = { BindPipelineStatesState(dynamic_state::blend_constant), BindPipelineStatesState(dynamic_state::primitive_topology) };
 
         void Reset()
@@ -178,7 +181,7 @@ namespace StateTracker
         }
     };
 
-    struct BindPipelineState : PipelineBinding<PipelineBindingTypes::bind_pipeline> {
+    struct __declspec(novtable) BindPipelineState final : PipelineBinding<PipelineBindingTypes::bind_pipeline> {
         pipeline_stage stages;
         pipeline pipeline;
 
@@ -191,7 +194,7 @@ namespace StateTracker
         }
     };
 
-    class PipelineStateTracker
+    class __declspec(novtable) PipelineStateTracker final
     {
     public:
         PipelineStateTracker();
@@ -209,7 +212,9 @@ namespace StateTracker
         void OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update);
         void OnBindPipeline(command_list* commandList, pipeline_stage stages, pipeline pipelineHandle);
 
-        const PushDescriptorsState const* GetPushDescriptorState() { return &_pushDescriptorsState;  }
+        const PushDescriptorsState* GetPushDescriptorState() { return &_pushDescriptorsState;  }
+        const vector<resource_view>& GetBoundRenderTargetViews();
+
         void ClearPushDescriptorState(pipeline_stage);
 
         bool IsInRenderPass();

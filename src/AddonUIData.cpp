@@ -53,8 +53,10 @@ AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* verte
     _keyBindings[Keybind::VERTEX_SHADER_MARK] = VK_NUMPAD6;
     _keyBindings[Keybind::VERTEX_SHADER_MARKED_DOWN] = VK_NUMPAD4 | (VK_CONTROL << 8);
     _keyBindings[Keybind::VERTEX_SHADER_MARKED_UP] = VK_NUMPAD5 | (VK_CONTROL << 8);
-    _keyBindings[Keybind::HISTORY_DOWN] = VK_NUMPAD7;
-    _keyBindings[Keybind::HISTORY_UP] = VK_NUMPAD8;
+    _keyBindings[Keybind::INVOCATION_DOWN] = VK_NUMPAD7;
+    _keyBindings[Keybind::INVOCATION_UP] = VK_NUMPAD8;
+    _keyBindings[Keybind::DESCRIPTOR_DOWN] = VK_SUBTRACT;
+    _keyBindings[Keybind::DESCRIPTOR_UP] = VK_ADD;
 }
 
 
@@ -105,7 +107,7 @@ void AddonUIData::UpdateToggleGroupsForShaderHashes()
 
             if (_vertexShaderManager->isInHuntingMode())
             {
-                _pixelShaderHashToToggleGroups[_vertexShaderManager->getActiveHuntedShaderHash()].push_back(&group.second);
+                _vertexShaderHashToToggleGroups[_vertexShaderManager->getActiveHuntedShaderHash()].push_back(&group.second);
             }
 
             continue;
@@ -168,6 +170,8 @@ void AddonUIData::LoadShaderTogglerIniFile(const std::string& fileName)
         // not there
         return;
     }
+
+    _attemptSRGBCorrection = iniFile.GetBool("AttemptSRGBCorrection", "General");
 
     _constHookType = iniFile.GetValue("ConstantBufferHookType", "General");
     if (_constHookType.size() <= 0)
@@ -232,6 +236,8 @@ void AddonUIData::SaveShaderTogglerIniFile(const std::string& fileName)
     // format: first section with # of groups, then per group a section with pixel and vertex shaders, as well as their name and key value.
     // groups are stored with "Group" + group counter, starting with 0.
     CDataFile iniFile;
+
+    iniFile.SetBool("AttemptSRGBCorrection", _attemptSRGBCorrection, "", "General");
 
     iniFile.SetValue("ConstantBufferHookType", _constHookType, "", "General");
     iniFile.SetValue("ConstantBufferHookCopyType", _constHookCopyType, "", "General");

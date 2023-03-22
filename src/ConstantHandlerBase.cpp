@@ -50,8 +50,6 @@ void ConstantHandlerBase::ReloadConstantVariables(effect_runtime* runtime)
             return;
         }
 
-        string id(charBuffer);
-
         reshade::api::format format;
         uint32_t rows;
         uint32_t columns;
@@ -101,6 +99,7 @@ void ConstantHandlerBase::ReloadConstantVariables(effect_runtime* runtime)
             return;
         }
 
+        string id(charBuffer);
         const auto& vars = restVariables.find(id);
         
         if (vars == restVariables.end())
@@ -112,6 +111,11 @@ void ConstantHandlerBase::ReloadConstantVariables(effect_runtime* runtime)
             get<1>(vars->second).push_back(variable);
         }
         });
+}
+
+void ConstantHandlerBase::ClearConstantVariables()
+{
+    restVariables.clear();
 }
 
 bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, const ToggleGroup* group, uint32_t index)
@@ -154,46 +158,43 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list)
     DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
 
     if (deviceData.current_runtime == nullptr ||
-        (commandListData.psConstantBuffersToUpdate.size() == 0 && commandListData.psConstantBuffersToUpdate.size() == 0)) {
+        (commandListData.ps.constantBuffersToUpdate.size() == 0 && commandListData.vs.constantBuffersToUpdate.size() == 0)) {
         return;
     }
 
     vector<const ToggleGroup*> psRemovalList;
-    for (const auto& cb : commandListData.psConstantBuffersToUpdate)
-    {
-        commandListData.psConstantBuffersToUpdate.at(cb.first)--;
-
-        if (cb.second < 0 && !deviceData.constantsUpdated.contains(cb.first))
-        {
-            if (UpdateConstantEntries(cmd_list, commandListData, deviceData, cb.first, 0))
-            {
-                psRemovalList.push_back(cb.first);
-            }
-        }
-    }
-
     vector<const ToggleGroup*> vsRemovalList;
-    for (const auto& cb : commandListData.vsConstantBuffersToUpdate)
-    {
-        commandListData.vsConstantBuffersToUpdate.at(cb.first)--;
 
-        if (cb.second < 0 && !deviceData.constantsUpdated.contains(cb.first))
+    for (const auto& cb : commandListData.ps.constantBuffersToUpdate)
+    {
+        if (!deviceData.constantsUpdated.contains(cb))
         {
-            if (UpdateConstantEntries(cmd_list, commandListData, deviceData, cb.first, 1))
+            if (UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 0))
             {
-                vsRemovalList.push_back(cb.first);
+                psRemovalList.push_back(cb);
             }
         }
     }
 
-    for (auto& g : psRemovalList)
+    for (const auto& cb : commandListData.vs.constantBuffersToUpdate)
     {
-        commandListData.psConstantBuffersToUpdate.erase(g);
+        if (!deviceData.constantsUpdated.contains(cb))
+        {
+            if (UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 1))
+            {
+                vsRemovalList.push_back(cb);
+            }
+        }
     }
 
-    for (auto& g : vsRemovalList)
+    for (const auto& g : psRemovalList)
     {
-        commandListData.vsConstantBuffersToUpdate.erase(g);
+        commandListData.ps.constantBuffersToUpdate.erase(g);
+    }
+
+    for (const auto& g : vsRemovalList)
+    {
+        commandListData.vs.constantBuffersToUpdate.erase(g);
     }
 }
 

@@ -124,16 +124,7 @@ void PipelineStateTracker::OnBindRenderTargetsAndDepthStencil(command_list* cmd_
     _renderTargetState.cmd_list = cmd_list;
     _renderTargetState.count = count;
     _renderTargetState.dsv = dsv;
-    _renderTargetState.rtvs.clear();
-
-    if (_renderTargetState.rtvs.size() != count) {
-        _renderTargetState.rtvs.resize(count);
-    }
-
-    for (int i = 0; i < count; i++)
-    {
-        _renderTargetState.rtvs[i] = rtvs[i];
-    }
+    _renderTargetState.rtvs.assign(rtvs, rtvs + count);
 }
 
 void PipelineStateTracker::OnBeginRenderPass(command_list* cmd_list, uint32_t count, const render_pass_render_target_desc* rts, const render_pass_depth_stencil_desc* ds)
@@ -191,7 +182,7 @@ void PipelineStateTracker::OnBindDescriptorSets(command_list* cmd_list, shader_s
 void PipelineStateTracker::OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
 {
     // only consider pixel and vertex shader CBs for now
-    if (update.type != descriptor_type::constant_buffer ||
+    if ((update.type != descriptor_type::constant_buffer && update.type != descriptor_type::shader_resource_view) ||
         !(static_cast<uint32_t>(stages) & (static_cast<uint32_t>(shader_stage::pixel) | static_cast<uint32_t>(shader_stage::vertex))))
     {
         return;
@@ -206,21 +197,25 @@ void PipelineStateTracker::OnPushDescriptors(command_list* cmd_list, shader_stag
 
     _pushDescriptorsState.current_layout[stage_index] = layout;
 
-    if (_pushDescriptorsState.current_descriptors[stage_index].size() < layout_param + 1)
+    if (update.type == descriptor_type::constant_buffer)
     {
-        _pushDescriptorsState.current_descriptors[stage_index].resize(layout_param + 1);
+        if (_pushDescriptorsState.current_descriptors[stage_index].size() < layout_param + 1)
+        {
+            _pushDescriptorsState.current_descriptors[stage_index].resize(layout_param + 1);
+        }
+
+        const buffer_range* buffer = static_cast<const reshade::api::buffer_range*>(update.descriptors);
+        _pushDescriptorsState.current_descriptors[stage_index][layout_param].assign(buffer, buffer + update.count);
     }
-
-    if (_pushDescriptorsState.current_descriptors[stage_index][layout_param].size() < update.binding + update.count)
+    else if (update.type == descriptor_type::shader_resource_view)
     {
-        _pushDescriptorsState.current_descriptors[stage_index][layout_param].resize(update.binding + update.count);
-    }
+        if (_pushDescriptorsState.current_srv[stage_index].size() < layout_param + 1)
+        {
+            _pushDescriptorsState.current_srv[stage_index].resize(layout_param + 1);
+        }
 
-    const buffer_range* buffer = static_cast<const reshade::api::buffer_range*>(update.descriptors);
-
-    for (size_t i = 0; i < update.count; ++i)
-    {
-        _pushDescriptorsState.current_descriptors[stage_index][layout_param][update.binding + i] = buffer[i];
+        const resource_view* buffer = static_cast<const reshade::api::resource_view*>(update.descriptors);
+        _pushDescriptorsState.current_srv[stage_index][layout_param].assign(buffer, buffer + update.count);
     }
 }
 
@@ -320,6 +315,11 @@ void PipelineStateTracker::ClearPushDescriptorState(pipeline_stage stage = pipel
     {
         _pushDescriptorsState.current_descriptors[1].clear();
     }
+}
+
+const vector<resource_view>& PipelineStateTracker::GetBoundRenderTargetViews()
+{
+    return _renderTargetState.rtvs;
 }
 
 void PipelineStateTracker::Reset()

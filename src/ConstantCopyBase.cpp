@@ -61,3 +61,6 @@ template sig_memcpy* ConstantCopyBase::InstallApiHook(LPCWSTR pszModule, LPCSTR 
 
 template sig_ffxiv_cbload* ConstantCopyBase::InstallHook(void* target, sig_ffxiv_cbload* callback);
 template sig_ffxiv_cbload* ConstantCopyBase::InstallApiHook(LPCWSTR pszModule, LPCSTR pszProcName, sig_ffxiv_cbload* callback);
+
+template sig_nier_replicant_cbload* ConstantCopyBase::InstallHook(void* target, sig_nier_replicant_cbload* callback);
+template sig_nier_replicant_cbload* ConstantCopyBase::InstallApiHook(LPCWSTR pszModule, LPCSTR pszProcName, sig_nier_replicant_cbload* callback);

@@ -17,13 +17,13 @@ using namespace sigmatch_literals;
 static const sigmatch::signature ffxiv_cbload = "4C 89 44 24 ?? 56 57 41 57"_sig;
 
 namespace ConstantFeedback {
-    class ConstantCopyFFXIV : public virtual ConstantCopyBase {
+    class ConstantCopyFFXIV final : public virtual ConstantCopyBase {
     public:
         ConstantCopyFFXIV();
         ~ConstantCopyFFXIV();
 
-        bool Init();
-        bool UnInit();
+        bool Init() final;
+        bool UnInit() final;
 
         bool Hook(sig_ffxiv_cbload** original, sig_ffxiv_cbload* detour);
         bool Unhook();

@@ -79,14 +79,12 @@ namespace ShaderToggler
         void setPreferredTechniques(std::unordered_set<std::string> techniques) { _preferredTechniques = techniques; }
         std::unordered_set<uint32_t> getPixelShaderHashes() const { return _pixelShaderHashes; }
         std::unordered_set<uint32_t> getVertexShaderHashes() const { return _vertexShaderHashes; }
-        void setHistoryIndex(int32_t index) { _historyIndex = index; }
-        int32_t getHistoryIndex() const { return _historyIndex; }
+        void setInvocationLocation(uint32_t location) { _invocationLocation = location; }
+        uint32_t getInvocationLocation() const { return _invocationLocation; }
         void setSlotIndex(uint32_t index) { _slotIndex = index; }
         uint32_t getSlotIndex() const { return _slotIndex; }
         void setDescriptorIndex(uint32_t index) { _descIndex = index; }
         uint32_t getDescriptorIndex() const { return _descIndex; }
-        //void setConstantBufferPipelineStage(pipeline_stage stage) { _constantBufferStage = stage; }
-        //pipeline_stage getConstantBufferPipelineStage() const { return _constantBufferStage; }
         bool isProvidingTextureBinding() const { return _isProvidingTextureBinding; }
         void setProvidingTextureBinding(bool isProvidingTextureBinding) { _isProvidingTextureBinding = isProvidingTextureBinding; }
         const std::string& getTextureBindingName() const { return _textureBindingName; }
@@ -95,6 +93,12 @@ namespace ShaderToggler
         void setAllowAllTechniques(bool allowAllTechniques) { _allowAllTechniques = allowAllTechniques; }
         bool getExtractConstants() const { return _extractConstants; }
         void setExtractConstant(bool extract) { _extractConstants = extract; }
+        bool getExtractResourceViews() const { return _extractResourceViews; }
+        void setExtractResourceViews(bool extract) { _extractResourceViews = extract; }
+        void setSRVSlotIndex(uint32_t index) { _srvSlotIndex = index; }
+        uint32_t getSRVSlotIndex() const { return _srvSlotIndex; }
+        void setSRVDescriptorIndex(uint32_t index) { _srvDescIndex = index; }
+        uint32_t getSRVDescriptorIndex() const { return _srvDescIndex; }
         bool getHasTechniqueExceptions() const { return _hasTechniqueExceptions; }
         void setHasTechniqueExceptions(bool exceptions) { _hasTechniqueExceptions = exceptions; }
         const std::unordered_map<string, tuple<uintptr_t, bool>>& GetVarOffsetMapping() const { return _varOffsetMapping; }
@@ -112,15 +116,17 @@ namespace ShaderToggler
         uint32_t _keybind;
         std::unordered_set<uint32_t> _vertexShaderHashes;
         std::unordered_set<uint32_t> _pixelShaderHashes;
-        int32_t _historyIndex;
+        uint32_t _invocationLocation;
         uint32_t _slotIndex = 0;
         uint32_t _descIndex = 0;
-        //pipeline_stage _constantBufferStage = pipeline_stage::pixel_shader;
+        uint32_t _srvSlotIndex = 0;
+        uint32_t _srvDescIndex = 0;
         bool _isActive;				// true means the group is actively toggled (so the hashes have to be hidden.
         bool _isEditing;			// true means the group is actively edited (name, key)
         bool _allowAllTechniques;	// true means all techniques are allowed, regardless of preferred techniques.
         bool _isProvidingTextureBinding;
         bool _extractConstants;
+        bool _extractResourceViews;
         bool _hasTechniqueExceptions; // _preferredTechniques are handled as exception to _allowAllTechniques
         std::string _textureBindingName;
         std::unordered_set<std::string> _preferredTechniques;

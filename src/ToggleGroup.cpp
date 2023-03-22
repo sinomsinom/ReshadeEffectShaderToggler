@@ -170,18 +170,22 @@ namespace ShaderToggler
 
             firstElement = false;
         }
+        iniFile.SetUInt("InvocationLocation", _invocationLocation, "", sectionRoot);
+
         iniFile.SetValue("Techniques", ss.str(), "", sectionRoot);
         iniFile.SetBool("AllowAllTechniques", _allowAllTechniques, "", sectionRoot);
         iniFile.SetBool("TechniqueExceptions", _hasTechniqueExceptions, "", sectionRoot);
-
-        iniFile.SetInt("HistoryIndex", _historyIndex, "", sectionRoot);
-        iniFile.SetUInt("PipelineSlot", _slotIndex, "", sectionRoot);
-        iniFile.SetUInt("DescriptorIndex", _descIndex, "", sectionRoot);
 
         iniFile.SetBool("ProvideTextureBinding", _isProvidingTextureBinding, "", sectionRoot);
         iniFile.SetValue("TextureBindingName", _textureBindingName, "", sectionRoot);
 
         iniFile.SetBool("ExtractConstants", _extractConstants, "", sectionRoot);
+        iniFile.SetUInt("ConstantPipelineSlot", _slotIndex, "", sectionRoot);
+        iniFile.SetUInt("ConstantDescriptorIndex", _descIndex, "", sectionRoot);
+
+        iniFile.SetBool("ExtractSRVs", _extractResourceViews, "", sectionRoot);
+        iniFile.SetUInt("SRVPipelineSlot", _srvSlotIndex, "", sectionRoot);
+        iniFile.SetUInt("SRVDescriptorIndex", _srvDescIndex, "", sectionRoot);
     }
 
 
@@ -266,6 +270,16 @@ namespace ShaderToggler
 
         _isActive = iniFile.GetBool("Active", sectionRoot);
 
+        const int32_t invocationLocation = iniFile.GetUInt("InvocationLocation", sectionRoot);
+        if (invocationLocation != UINT_MAX)
+        {
+            _invocationLocation = invocationLocation;
+        }
+        else
+        {
+            _invocationLocation = 0;
+        }
+
         std::string techniques = iniFile.GetString("Techniques", sectionRoot);
         if (techniques.size() > 0) {
             std::stringstream ss(techniques);
@@ -281,17 +295,12 @@ namespace ShaderToggler
         _allowAllTechniques = iniFile.GetBool("AllowAllTechniques", sectionRoot);
         _hasTechniqueExceptions = iniFile.GetBool("TechniqueExceptions", sectionRoot);
 
-        const int32_t historyIndex = iniFile.GetInt("HistoryIndex", sectionRoot);
-        if (historyIndex > INT_MIN)
-        {
-            _historyIndex = historyIndex;
-        }
-        else
-        {
-            _historyIndex = 0;
-        }
+        _isProvidingTextureBinding = iniFile.GetBool("ProvideTextureBinding", sectionRoot);
+        _textureBindingName = iniFile.GetString("TextureBindingName", sectionRoot);
 
-        uint32_t slotIndex = iniFile.GetUInt("PipelineSlot", sectionRoot);
+        _extractConstants = iniFile.GetBool("ExtractConstants", sectionRoot);
+
+        uint32_t slotIndex = iniFile.GetUInt("ConstantPipelineSlot", sectionRoot);
         if (slotIndex != UINT_MAX)
         {
             _slotIndex = slotIndex;
@@ -301,7 +310,7 @@ namespace ShaderToggler
             _slotIndex = 2;
         }
 
-        uint32_t descIndex = iniFile.GetUInt("DescriptorIndex", sectionRoot);
+        uint32_t descIndex = iniFile.GetUInt("ConstantDescriptorIndex", sectionRoot);
         if (descIndex != UINT_MAX)
         {
             _descIndex = descIndex;
@@ -311,10 +320,26 @@ namespace ShaderToggler
             _descIndex = 0;
         }
 
-        _isProvidingTextureBinding = iniFile.GetBool("ProvideTextureBinding", sectionRoot);
-        _textureBindingName = iniFile.GetString("TextureBindingName", sectionRoot);
+        _extractResourceViews = iniFile.GetBool("ExtractSRVs", sectionRoot);
 
-        _extractConstants = iniFile.GetBool("ExtractConstants", sectionRoot);
+        uint32_t srvSlotIndex = iniFile.GetUInt("SRVPipelineSlot", sectionRoot);
+        if (srvSlotIndex != UINT_MAX)
+        {
+            _srvSlotIndex = srvSlotIndex;
+        }
+        else
+        {
+            _srvSlotIndex = 1;
+        }
+
+        uint32_t srvDescIndex = iniFile.GetUInt("SRVDescriptorIndex", sectionRoot);
+        if (srvDescIndex != UINT_MAX)
+        {
+            _srvDescIndex = srvDescIndex;
+        }
+        else
+        {
+            _srvDescIndex = 0;
+        }
     }
-
 }

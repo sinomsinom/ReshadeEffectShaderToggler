@@ -4,6 +4,7 @@
 #include "ConstantHandlerSingularMapping.h"
 #include "ConstantCopyMemcpy.h"
 #include "ConstantCopyFFXIV.h"
+#include "ConstantCopyNierReplicant.h"
 
 ConstantCopyType ConstantManager::ResolveConstantCopyType(const string& ctype)
 {
@@ -13,6 +14,8 @@ ConstantCopyType ConstantManager::ResolveConstantCopyType(const string& ctype)
         return ConstantCopyType::Copy_Memcpy;
     else if (ctype == "ffxiv")
         return ConstantCopyType::Copy_FFXIV;
+    else if (ctype == "nier_replicant")
+        return ConstantCopyType::Copy_NierReplicant;
     
     return ConstantCopyType::Copy_None;
 }
@@ -57,6 +60,12 @@ bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantFeedback::Cons
     {
         static ConstantCopyFFXIV constantTypeFFXIV;
         *constantCopy = &constantTypeFFXIV;
+    }
+        break;
+    case ConstantCopyType::Copy_NierReplicant:
+    {
+        static ConstantCopyNierReplicant constantTypeNierReplicant;
+        *constantCopy = &constantTypeNierReplicant;
     }
         break;
     default:

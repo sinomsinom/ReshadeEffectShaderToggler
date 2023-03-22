@@ -37,7 +37,6 @@
 #include <reshade_api_pipeline.hpp>
 #include <shared_mutex>
 #include <unordered_set>
-
 #include "CDataFile.h"
 #include "ToggleGroup.h"
 

@@ -49,7 +49,7 @@ static const vector<tuple<wstring, string>> memcpy_dynamic = {
 };
 
 namespace ConstantFeedback {
-    class ConstantCopyMemcpy : public virtual ConstantCopyBase {
+    class ConstantCopyMemcpy final : public virtual ConstantCopyBase {
     public:
         ConstantCopyMemcpy();
         ~ConstantCopyMemcpy();

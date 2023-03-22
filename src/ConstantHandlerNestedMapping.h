@@ -12,7 +12,7 @@ using namespace reshade::api;
 using namespace ShaderToggler;
 
 namespace ConstantFeedback {
-    class ConstantHandlerNestedMapping : public virtual ConstantHandlerBase
+    class ConstantHandlerNestedMapping final : public virtual ConstantHandlerBase
     {
     public:
         ConstantHandlerNestedMapping();

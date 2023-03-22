@@ -7,34 +7,51 @@
 #include "ToggleGroup.h"
 #include "PipelineStateTracker.h"
 
+struct __declspec(novtable) ShaderData final {
+    uint32_t activeShaderHash = -1;
+    std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>> bindingsToUpdate;
+    std::unordered_set<const ShaderToggler::ToggleGroup*> constantBuffersToUpdate;
+    std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>> techniquesToRender;
+    std::unordered_set<const ShaderToggler::ToggleGroup*> srvToUpdate;
+    const std::vector<ShaderToggler::ToggleGroup*>* blockedShaderGroups = nullptr;
+    uint32_t id = 0;
+
+    void Reset()
+    {
+        activeShaderHash = -1;
+        bindingsToUpdate.clear();
+        constantBuffersToUpdate.clear();
+        techniquesToRender.clear();
+        srvToUpdate.clear();
+        blockedShaderGroups = nullptr;
+    }
+};
+
 struct __declspec(uuid("222F7169-3C09-40DB-9BC9-EC53842CE537")) CommandListDataContainer {
-    uint32_t activePixelShaderHash;
-    uint32_t activeVertexShaderHash;
-    unordered_map<string, int32_t> techniquesToRender;
-    unordered_map<string, int32_t> bindingsToUpdate;
-    unordered_map<const ToggleGroup*, int32_t> psConstantBuffersToUpdate;
-    unordered_map<const ToggleGroup*, int32_t> vsConstantBuffersToUpdate;
-    vector<vector<resource_view>> active_rtv_history = vector<vector<resource_view>>(10);
-    unordered_set < pair<string, int32_t>,
-        decltype([](const pair<string, int32_t>& v) {
-        return std::hash<std::string>{}(v.first); // Don't care about history index, we'll overwrite them in case of collisions
-            }),
-        decltype([](const pair<string, int32_t>& lhs, const pair<string, int32_t>& rhs) {
-                return lhs.first == rhs.first;
-            }) > immediateActionSet;
+    uint32_t commandCheck = 0;
+    uint32_t commandQueue = 0;
     StateTracker::PipelineStateTracker stateTracker;
-    const vector<ToggleGroup*>* blockedPixelShaderGroups;
-    const vector<ToggleGroup*>* blockedVertexShaderGroups;
+    ShaderData ps;
+    ShaderData vs;
+
+    void Reset()
+    {
+        ps.Reset();
+        vs.Reset();
+        stateTracker.Reset();
+
+        commandCheck = 0;
+        commandQueue = 0;
+    }
 };
 
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
-    effect_runtime* current_runtime = nullptr;
+    reshade::api::effect_runtime* current_runtime = nullptr;
     atomic_bool rendered_effects = false;
-    unordered_map<string, bool> allEnabledTechniques;
-    unordered_map<string, tuple<resource, reshade::api::format, resource_view, resource_view>> bindingMap;
-    unordered_set<string> bindingsUpdated;
-    unordered_set<const ToggleGroup*> constantsUpdated;
-    unordered_map<uint64_t, vector<bool>> transient_mask;
-    ToggleGroup* huntedGroup = nullptr;
-    std::unordered_map<int, ToggleGroup>* groups = nullptr;
+    std::unordered_map<std::string, bool> allEnabledTechniques;
+    std::unordered_map<std::string, std::tuple<reshade::api::resource, reshade::api::format, reshade::api::resource_view, reshade::api::resource_view, uint32_t, uint32_t>> bindingMap;
+    std::unordered_set<std::string> bindingsUpdated;
+    std::unordered_set<const ShaderToggler::ToggleGroup*> constantsUpdated;
+    std::unordered_set<const ShaderToggler::ToggleGroup*> srvUpdated;
+    std::unordered_map<uint64_t, std::vector<bool>> transient_mask;
 };

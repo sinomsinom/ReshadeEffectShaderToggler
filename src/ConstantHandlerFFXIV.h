@@ -14,7 +14,7 @@ using namespace reshade::api;
 using namespace ShaderToggler;
 
 namespace ConstantFeedback {
-    class ConstantHandlerFFXIV : public virtual ConstantHandlerBase
+    class ConstantHandlerFFXIV final: public virtual ConstantHandlerBase
     {
     public:
         ConstantHandlerFFXIV();

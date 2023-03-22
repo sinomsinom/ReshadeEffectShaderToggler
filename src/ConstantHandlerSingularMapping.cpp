@@ -16,8 +16,8 @@ ConstantHandlerSingularMapping::~ConstantHandlerSingularMapping()
 
 void ConstantHandlerSingularMapping::OnMapBufferRegion(device* device, resource resource, uint64_t offset, uint64_t size, map_access access, void** data)
 {
-    if ((access == map_access::write_discard || access == map_access::write_only))
-    {
+    //if ((access == map_access::write_discard || access == map_access::write_only || access == map_access::read_write))
+    //{
         resource_desc desc = device->get_resource_desc(resource);
         uint8_t* buf = const_cast<uint8_t*>(GetHostConstantBuffer(resource.handle));
 
@@ -30,7 +30,7 @@ void ConstantHandlerSingularMapping::OnMapBufferRegion(device* device, resource 
             _bufferCopy.bufferSize = desc.buffer.size;
             _bufferCopy.hostDestination = buf;
         }
-    }
+    //}
 }
 
 void ConstantHandlerSingularMapping::OnUnmapBufferRegion(device* device, resource resource)

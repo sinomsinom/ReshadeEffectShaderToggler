@@ -36,7 +36,7 @@
 #include "AddonUIConstants.h"
 #include "KeyData.h"
 
-#define MAX_RT_HISTORY 10
+#define MAX_DESCRIPTOR_INDEX 10
 
 // From Reshade, see https://github.com/crosire/reshade/blob/main/source/imgui_widgets.cpp
 static bool key_input_box(const char* name, uint32_t* keys, const effect_runtime* runtime)
@@ -75,6 +75,14 @@ static bool key_input_box(const char* name, uint32_t* keys, const effect_runtime
 
     return false;
 }
+
+
+static constexpr const char* invocationDescription[] =
+{
+    "BEFORE DRAW",
+    "AFTER DRAW",
+    "ON RENDER TARGET CHANGE"
+};
 
 
 static void DisplayIsPartOfToggleGroup()
@@ -233,7 +241,8 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* ru
                 ImGui::Text("Editing the shaders for group: %s", editingGroupName.c_str());
                 if (tGroup != nullptr)
                 {
-                    ImGui::Text("Render target history index: %d", tGroup->getHistoryIndex());
+                    ImGui::Text("Invocation location: %s", invocationDescription[tGroup->getInvocationLocation()]);
+                    ImGui::Text("Render target index: %d", tGroup->getDescriptorIndex());
                     ImGui::Text("Render target format %d: ", (uint32_t)instance.cFormat);
                 }
             }
@@ -342,25 +351,47 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
     {
         instance.GetVertexShaderManager()->toggleMarkOnHuntedShader();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::HISTORY_DOWN), runtime))
+    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::INVOCATION_DOWN), runtime))
     {
-        if (instance.GetHistoryIndex() > -MAX_RT_HISTORY)
+        if (instance.GetInvocationLocation() > 0)
         {
-            instance.GetHistoryIndex()--;
+            instance.GetInvocationLocation()--;
             if (editGroup != nullptr)
             {
-                editGroup->setHistoryIndex(instance.GetHistoryIndex());
+                editGroup->setInvocationLocation(instance.GetInvocationLocation());
             }
         }
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::HISTORY_UP), runtime))
+    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::INVOCATION_UP), runtime))
     {
-        if (instance.GetHistoryIndex() < MAX_RT_HISTORY)
+        if (instance.GetInvocationLocation() < 2)
         {
-            instance.GetHistoryIndex()++;
+            instance.GetInvocationLocation()++;
             if (editGroup != nullptr)
             {
-                editGroup->setHistoryIndex(instance.GetHistoryIndex());
+                editGroup->setInvocationLocation(instance.GetInvocationLocation());
+            }
+        }
+    }
+    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::DESCRIPTOR_DOWN), runtime))
+    {
+        if (instance.GetDescriptorIndex() > 0)
+        {
+            instance.GetDescriptorIndex()--;
+            if (editGroup != nullptr)
+            {
+                editGroup->setDescriptorIndex(instance.GetDescriptorIndex());
+            }
+        }
+    }
+    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::DESCRIPTOR_UP), runtime))
+    {
+        if (instance.GetDescriptorIndex() < MAX_DESCRIPTOR_INDEX)
+        {
+            instance.GetDescriptorIndex()++;
+            if (editGroup != nullptr)
+            {
+                editGroup->setDescriptorIndex(instance.GetDescriptorIndex());
             }
         }
     }
@@ -516,7 +547,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
                 if (ImGui::Button("Change effects"))
                 {
                     instance.StartEffectEditing(group);
-                    instance.GetHistoryIndex() = group.getHistoryIndex();
+                    instance.GetInvocationLocation() = group.getInvocationLocation();
                 }
             }
 
@@ -633,6 +664,11 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
             std::erase_if(instance.GetToggleGroups(), [&group](const auto& item) {
                 return item.first == group.getId();
                 });
+        }
+
+        if (toRemove.size() > 0)
+        {
+            instance.UpdateToggleGroupsForShaderHashes();
         }
 
         ImGui::Separator();
