@@ -204,8 +204,17 @@ void PipelineStateTracker::OnPushDescriptors(command_list* cmd_list, shader_stag
             _pushDescriptorsState.current_descriptors[stage_index].resize(layout_param + 1);
         }
 
+        if (_pushDescriptorsState.current_descriptors[stage_index][layout_param].size() < update.binding + update.count)
+        {
+            _pushDescriptorsState.current_descriptors[stage_index][layout_param].resize(update.binding + update.count);
+        }
+
         const buffer_range* buffer = static_cast<const reshade::api::buffer_range*>(update.descriptors);
-        _pushDescriptorsState.current_descriptors[stage_index][layout_param].assign(buffer, buffer + update.count);
+
+        for (uint32_t i = 0; i < update.count; i++)
+        {
+            _pushDescriptorsState.current_descriptors[stage_index][layout_param][update.binding + i] = buffer[i];
+        }
     }
     else if (update.type == descriptor_type::shader_resource_view)
     {
@@ -214,8 +223,17 @@ void PipelineStateTracker::OnPushDescriptors(command_list* cmd_list, shader_stag
             _pushDescriptorsState.current_srv[stage_index].resize(layout_param + 1);
         }
 
+        if (_pushDescriptorsState.current_srv[stage_index][layout_param].size() < update.binding + update.count)
+        {
+            _pushDescriptorsState.current_srv[stage_index][layout_param].resize(update.binding + update.count);
+        }
+
         const resource_view* buffer = static_cast<const reshade::api::resource_view*>(update.descriptors);
-        _pushDescriptorsState.current_srv[stage_index][layout_param].assign(buffer, buffer + update.count);
+
+        for (uint32_t i = 0; i < update.count; i++)
+        {
+            _pushDescriptorsState.current_srv[stage_index][layout_param][update.binding + i] = buffer[i];
+        }
     }
 }
 
