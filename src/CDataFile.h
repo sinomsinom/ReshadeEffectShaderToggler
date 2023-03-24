@@ -183,6 +183,9 @@ public:
     // GetBool: Return the value as a bool
     bool		GetBool(t_Str szKey, t_Str szSection = t_Str(""));
 
+    // GetBoolOrDefault: Return the value as a bool or a default value if it's not found
+    bool		GetBoolOrDefault(t_Str szKey, t_Str szSection, bool defaultValue);
+
     // SetValue: Sets the value of a given key. Will create the
     // key if it is not found and AUTOCREATE_KEYS is active.
     bool		SetValue(t_Str szKey, t_Str szValue,

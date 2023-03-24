@@ -36,17 +36,23 @@
 
 namespace ShaderToggler
 {
-    ToggleGroup::ToggleGroup(std::string name, int id) : _id(id), _isActive(false), _isEditing(false), _allowAllTechniques(true),
-        _isProvidingTextureBinding(false), _textureBindingName(""), _hasTechniqueExceptions(false)
+    ToggleGroup::ToggleGroup(std::string name, int id)
     {
         _name = name.size() > 0 ? name : "Default";
+        _id = id;
+        _isActive = false;
+        _isEditing = false;
+        _allowAllTechniques = true;
+        _isProvidingTextureBinding = false;
+        _textureBindingName = "";
+        _hasTechniqueExceptions = false;
+        _extractConstants = false;
+        _extractResourceViews = false;
     }
 
 
-    ToggleGroup::ToggleGroup() : _name(""), _id(0), _isActive(false), _isEditing(false), _allowAllTechniques(true),
-        _isProvidingTextureBinding(false), _textureBindingName(""), _hasTechniqueExceptions(false)
+    ToggleGroup::ToggleGroup() : ToggleGroup("Default", 0)
     {
-
     }
 
 
@@ -178,6 +184,7 @@ namespace ShaderToggler
 
         iniFile.SetBool("ProvideTextureBinding", _isProvidingTextureBinding, "", sectionRoot);
         iniFile.SetValue("TextureBindingName", _textureBindingName, "", sectionRoot);
+        iniFile.SetBool("ClearTextureBindings", _clearBindings, "", sectionRoot);
 
         iniFile.SetBool("ExtractConstants", _extractConstants, "", sectionRoot);
         iniFile.SetUInt("ConstantPipelineSlot", _slotIndex, "", sectionRoot);
@@ -296,6 +303,7 @@ namespace ShaderToggler
         _hasTechniqueExceptions = iniFile.GetBool("TechniqueExceptions", sectionRoot);
 
         _isProvidingTextureBinding = iniFile.GetBool("ProvideTextureBinding", sectionRoot);
+        _clearBindings = iniFile.GetBoolOrDefault("ClearTextureBindings", sectionRoot, true);
         _textureBindingName = iniFile.GetString("TextureBindingName", sectionRoot);
 
         _extractConstants = iniFile.GetBool("ExtractConstants", sectionRoot);

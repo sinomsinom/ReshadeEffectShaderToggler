@@ -129,7 +129,7 @@ void RenderingManager::CheckCallForCommandList(reshade::api::command_list* comma
     r_mutex.unlock();
 }
 
-const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* runtime, const pair<string, tuple<const ToggleGroup*, bool, resource_view>>& matchObject, CommandListDataContainer& commandListData, int32_t descIndex)
+const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* runtime, const pair<string, tuple<const ToggleGroup*, bool, resource_view>>& matchObject, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action)
 {
     resource_view active_rtv = { 0 };
     device* device = runtime->get_device();
@@ -141,7 +141,7 @@ const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* run
     index = std::min(index, rtvs.size() - 1);
 
     // Only return SRVs in case of bindings
-    if(descIndex > -1 && group->getExtractResourceViews())
+    if(action & MATCH_BINDING && group->getExtractResourceViews())
     { 
         uint32_t slot_size = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex].size();
         uint32_t slot = min(group->getSRVSlotIndex(), slot_size - 1);
@@ -162,10 +162,25 @@ const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* run
     else if (rtvs.size() > 0 && runtime != nullptr && rtvs[index] != 0)
     {
         resource rs = device->get_resource_from_view(rtvs[index]);
+
         if (rs == 0)
         {
             // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
             return active_rtv;
+        }
+
+        // Make sure our target matches swap buffer dimensions when applying effects
+        if (action & MATCH_EFFECT)
+        {
+            resource_desc desc = device->get_resource_desc(rs);
+
+            uint32_t width, height;
+            runtime->get_screenshot_width_and_height(&width, &height);
+
+            if (width != desc.texture.width || height != desc.texture.height)
+            {
+                return active_rtv;
+            }
         }
 
         active_rtv = rtvs[index];
@@ -272,6 +287,43 @@ bool RenderingManager::_RenderEffects(
     return rendered;
 }
 
+void RenderingManager::_QueueOrDequeue(
+    effect_runtime* runtime,
+    CommandListDataContainer& commandListData,
+    std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& queue,
+    unordered_set<string>& immediateQueue,
+    uint32_t callLocation,
+    uint32_t layoutIndex,
+    uint32_t action)
+{
+    for (auto it = queue.begin(); it != queue.end();)
+    {
+        // Set views during draw call since we can be sure the correct ones are bound at that point
+        if (!callLocation)
+        {
+            resource_view active_rtv = GetCurrentResourceView(runtime, *it, commandListData, layoutIndex, action);
+
+            if (active_rtv != 0)
+            {
+                std::get<2>(it->second) = active_rtv;
+            }
+            else
+            {
+                it = queue.erase(it);
+                continue;
+            }
+        }
+
+        // Queue updates depending on the place their supposed to be called at
+        if (std::get<2>(it->second) != 0 && (!callLocation && !std::get<1>(it->second) || callLocation & std::get<1>(it->second)))
+        {
+            immediateQueue.insert(it->first);
+        }
+
+        it++;
+    }
+}
+
 void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocation, uint32_t invocation)
 {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
@@ -296,38 +348,12 @@ void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocati
 
     if (invocation & MATCH_EFFECT_PS)
     {
-        for (auto& tech : commandListData.ps.techniquesToRender)
-        {
-            // Set views during draw call since we can be sure the correct ones are bound at that point
-            if (!callLocation)
-            {
-                resource_view active_rtv = GetCurrentResourceView(deviceData.current_runtime, tech, commandListData, -1);
-                std::get<2>(tech.second) = active_rtv;
-            }
-
-            // Queue updates depending on the place their supposed to be called at
-            if (std::get<2>(tech.second) != 0 && (!callLocation && !std::get<1>(tech.second) || callLocation & std::get<1>(tech.second)))
-            {
-                psToRenderNames.insert(tech.first);
-            }
-        }
+        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.ps.techniquesToRender, psToRenderNames, callLocation, 0, MATCH_EFFECT);
     }
 
     if (invocation & MATCH_EFFECT_VS)
     {
-        for (auto& tech : commandListData.vs.techniquesToRender)
-        {
-            if (!callLocation)
-            {
-                resource_view active_rtv = GetCurrentResourceView(deviceData.current_runtime, tech, commandListData, -1);
-                std::get<2>(tech.second) = active_rtv;
-            }
-
-            if (std::get<2>(tech.second) != 0 && (!callLocation && !std::get<1>(tech.second) || callLocation & std::get<1>(tech.second)))
-            {
-                vsToRenderNames.insert(tech.first);
-            }
-        }
+        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.vs.techniquesToRender, vsToRenderNames, callLocation, 1, MATCH_EFFECT);
     }
 
     bool rendered = false;
@@ -362,6 +388,7 @@ void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocati
 
     if (rendered)
     {
+        // TODO: ???
         //std::shared_lock<std::shared_mutex> dev_mutex(pipeline_layout_mutex);
         commandListData.stateTracker.ReApplyState(cmd_list, deviceData.transient_mask);
     }
@@ -380,9 +407,12 @@ void RenderingManager::InitTextureBingings(effect_runtime* runtime)
             resource_view srv = {};
             resource_view rtv = {};
 
-            std::unique_lock<shared_mutex> lock(binding_mutex);
-            data.bindingMap[group.second.getTextureBindingName()] = std::make_tuple(res, format::unknown, srv, rtv, 0, 0);
-            runtime->update_texture_bindings(group.second.getTextureBindingName().c_str(), srv);
+            if (CreateTextureBinding(runtime, &res, &srv, &rtv, reshade::api::format::r8g8b8a8_unorm))
+            {
+                std::unique_lock<shared_mutex> lock(binding_mutex);
+                data.bindingMap[group.second.getTextureBindingName()] = std::make_tuple(res, format::unknown, srv, rtv, 0, 0, group.second.getClearBindings());
+                runtime->update_texture_bindings(group.second.getTextureBindingName().c_str(), srv);
+            }
         }
     }
 }
@@ -401,18 +431,18 @@ void RenderingManager::DisposeTextureBindings(effect_runtime* runtime)
     data.bindingMap.clear();
 }
 
-bool RenderingManager::CreateTextureBinding(effect_runtime* runtime, resource* res, resource_view* srv, resource_view* rtv, const resource_desc& desc)
+bool RenderingManager::_CreateTextureBinding(reshade::api::effect_runtime* runtime,
+    reshade::api::resource* res,
+    reshade::api::resource_view* srv,
+    reshade::api::resource_view* rtv,
+    reshade::api::format format,
+    uint32_t width,
+    uint32_t height)
 {
-    reshade::api::format format = desc.texture.format;
-
-    uint32_t frame_width, frame_height;
-    frame_height = desc.texture.height;
-    frame_width = desc.texture.width;
-
     runtime->get_command_queue()->wait_idle();
 
     if (!runtime->get_device()->create_resource(
-        resource_desc(frame_width, frame_height, 1, 1, format_to_typeless(format), 1, memory_heap::gpu_only, resource_usage::copy_dest | resource_usage::shader_resource | resource_usage::render_target),
+        resource_desc(width, height, 1, 1, format_to_typeless(format), 1, memory_heap::gpu_only, resource_usage::copy_dest | resource_usage::shader_resource | resource_usage::render_target),
         nullptr, resource_usage::shader_resource, res))
     {
         reshade::log_message(reshade::log_level::error, "Failed to create texture binding resource!");
@@ -434,6 +464,24 @@ bool RenderingManager::CreateTextureBinding(effect_runtime* runtime, resource* r
     return true;
 }
 
+bool RenderingManager::CreateTextureBinding(effect_runtime* runtime, resource* res, resource_view* srv, resource_view* rtv, const resource_desc& desc)
+{
+    reshade::api::format format = desc.texture.format;
+
+    uint32_t frame_width, frame_height;
+    frame_height = desc.texture.height;
+    frame_width = desc.texture.width;
+
+    return _CreateTextureBinding(runtime, res, srv, rtv, format, frame_width, frame_height);
+}
+
+bool RenderingManager::CreateTextureBinding(effect_runtime* runtime, resource* res, resource_view* srv, resource_view* rtv, reshade::api::format format)
+{
+    uint32_t frame_width, frame_height;
+    runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
+
+    return _CreateTextureBinding(runtime, res, srv, rtv, format, frame_width, frame_height);
+}
 
 void RenderingManager::DestroyTextureBinding(effect_runtime* runtime, const string& binding)
 {
@@ -444,7 +492,8 @@ void RenderingManager::DestroyTextureBinding(effect_runtime* runtime, const stri
         resource res = { 0 };
         resource_view srv = { 0 };
         resource_view rtv = { 0 };
-        reshade::api::format rformat = std::get<1>(data.bindingMap[binding]);
+        bool reset = std::get<6>(data.bindingMap.at(binding));
+        reshade::api::format rformat = std::get<1>(data.bindingMap.at(binding));
 
         runtime->get_command_queue()->wait_idle();
 
@@ -467,7 +516,7 @@ void RenderingManager::DestroyTextureBinding(effect_runtime* runtime, const stri
         }
 
         runtime->update_texture_bindings(binding.c_str(), resource_view{ 0 }, resource_view{ 0 });
-        data.bindingMap[binding] = std::make_tuple(resource{ 0 }, rformat, resource_view{ 0 }, resource_view{ 0 }, 0, 0);
+        data.bindingMap[binding] = std::make_tuple(resource{ 0 }, rformat, resource_view{ 0 }, resource_view{ 0 }, 0, 0, reset);
     }
 }
 
@@ -480,10 +529,11 @@ uint32_t RenderingManager::UpdateTextureBinding(effect_runtime* runtime, const s
     {
         reshade::api::format oldFormat = std::get<1>(data.bindingMap[binding]);
         reshade::api::format format = desc.texture.format;
-        uint32_t oldWidth = std::get<4>(data.bindingMap[binding]);
+        uint32_t oldWidth = std::get<4>(data.bindingMap.at(binding));
         uint32_t width = desc.texture.width;
-        uint32_t oldHeight = std::get<4>(data.bindingMap[binding]);
+        uint32_t oldHeight = std::get<5>(data.bindingMap.at(binding));
         uint32_t height = desc.texture.height;
+        bool reset = std::get<6>(data.bindingMap.at(binding));
 
         if (format != oldFormat || oldWidth != width || oldHeight != height)
         {
@@ -495,7 +545,7 @@ uint32_t RenderingManager::UpdateTextureBinding(effect_runtime* runtime, const s
 
             if (CreateTextureBinding(runtime, &res, &srv, &rtv, desc))
             {
-                data.bindingMap[binding] = std::make_tuple(res, format, srv, rtv, desc.texture.width, desc.texture.height);
+                data.bindingMap[binding] = std::make_tuple(res, format, srv, rtv, desc.texture.width, desc.texture.height, reset);
                 runtime->update_texture_bindings(binding.c_str(), srv);
             }
             else
@@ -583,38 +633,12 @@ void RenderingManager::UpdateTextureBindings(command_list* cmd_list, uint32_t ca
 
     if (invocation & MATCH_BINDING_PS)
     {
-        for (auto& tech : commandListData.ps.bindingsToUpdate)
-        {
-            // Set views during draw call since we can be sure the correct ones are bound at that point
-            if (!callLocation)
-            {
-                resource_view active_rtv = GetCurrentResourceView(deviceData.current_runtime, tech, commandListData, 0);
-                std::get<2>(tech.second) = active_rtv;
-            }
-
-            // Queue updates depending on the place their supposed to be called at
-            if (std::get<2>(tech.second) != 0 && (!callLocation && !std::get<1>(tech.second) || callLocation & std::get<1>(tech.second)))
-            {
-                psToUpdateBindings.insert(tech.first);
-            }
-        }
+        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.ps.bindingsToUpdate, psToUpdateBindings, callLocation, 0, MATCH_BINDING);
     }
 
     if (invocation & MATCH_BINDING_VS)
     {
-        for (auto& tech : commandListData.vs.bindingsToUpdate)
-        {
-            if (!callLocation)
-            {
-                resource_view active_rtv = GetCurrentResourceView(deviceData.current_runtime, tech, commandListData, 1);
-                std::get<2>(tech.second) = active_rtv;
-            }
-
-            if (std::get<2>(tech.second) != 0 && (!callLocation && !std::get<1>(tech.second) || callLocation & std::get<1>(tech.second)))
-            {
-                vsToUpdateBindings.insert(tech.first);
-            }
-        }
+        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.vs.bindingsToUpdate, vsToUpdateBindings, callLocation, 1, MATCH_BINDING);
     }
 
     if (psToUpdateBindings.size() == 0 && vsToUpdateBindings.size() == 0)
@@ -644,5 +668,33 @@ void RenderingManager::UpdateTextureBindings(command_list* cmd_list, uint32_t ca
     for (auto& g : vsRemovalList)
     {
         commandListData.vs.bindingsToUpdate.erase(g);
+    }
+}
+
+void RenderingManager::ClearUnmatchedTextureBindings(reshade::api::command_list* cmd_list)
+{
+    DeviceDataContainer& data = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
+
+    std::shared_lock<shared_mutex> mtx(binding_mutex);
+    if (data.bindingMap.size() == 0)
+    {
+        return;
+    }
+
+    static const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    for (auto& binding : data.bindingMap)
+    {
+        if (data.bindingsUpdated.contains(binding.first) || !std::get<6>(binding.second))
+        {
+            continue;
+        }
+
+        resource_view rtv = std::get<3>(binding.second);
+
+        if (rtv != 0)
+        {
+            cmd_list->clear_render_target_view(rtv, clearColor);
+        }
     }
 }

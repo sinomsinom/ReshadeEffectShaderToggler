@@ -89,6 +89,8 @@ namespace ShaderToggler
         void setProvidingTextureBinding(bool isProvidingTextureBinding) { _isProvidingTextureBinding = isProvidingTextureBinding; }
         const std::string& getTextureBindingName() const { return _textureBindingName; }
         void setTextureBindingName(std::string textureBindingName) { _textureBindingName = textureBindingName; }
+        bool getClearBindings() { return _clearBindings; }
+        void setClearBindings(bool clear) { _clearBindings = clear; }
         bool getAllowAllTechniques() const { return _allowAllTechniques; }
         void setAllowAllTechniques(bool allowAllTechniques) { _allowAllTechniques = allowAllTechniques; }
         bool getExtractConstants() const { return _extractConstants; }
@@ -127,6 +129,7 @@ namespace ShaderToggler
         bool _isProvidingTextureBinding;
         bool _extractConstants;
         bool _extractResourceViews;
+        bool _clearBindings;
         bool _hasTechniqueExceptions; // _preferredTechniques are handled as exception to _allowAllTechniques
         std::string _textureBindingName;
         std::unordered_set<std::string> _preferredTechniques;

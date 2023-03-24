@@ -489,6 +489,30 @@ bool CDataFile::GetBool(t_Str szKey, t_Str szSection)
     return bValue;
 }
 
+// GetBool
+// Returns the key value as a bool type. Returns false if the key is
+// not found.
+bool CDataFile::GetBoolOrDefault(t_Str szKey, t_Str szSection, bool defaultValue)
+{
+    bool bValue = defaultValue;
+    t_Str szValue = GetValue(szKey, szSection);
+
+    if (szValue.find("1") == 0
+        || CompareNoCase(szValue, "true") == 0
+        || CompareNoCase(szValue, "yes") == 0)
+    {
+        bValue = true;
+    }
+    else if (szValue.find("0") == 0
+        || CompareNoCase(szValue, "false") == 0
+        || CompareNoCase(szValue, "no") == 0)
+    {
+        bValue = false;
+    }
+
+    return bValue;
+}
+
 // DeleteSection
 // Delete a specific section. Returns false if the section cannot be 
 // found or true when sucessfully deleted.

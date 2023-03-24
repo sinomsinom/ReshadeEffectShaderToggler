@@ -48,16 +48,18 @@ namespace Rendering
         RenderingManager(AddonImGui::AddonUIData& data, ResourceManager& rManager);
         ~RenderingManager();
 
-        const reshade::api::resource_view GetCurrentResourceView(reshade::api::effect_runtime* runtime, const std::pair<std::string, std::tuple<const ShaderToggler::ToggleGroup*, bool, reshade::api::resource_view>>& matchObject, CommandListDataContainer& commandListData, int32_t descIndex);
+        const reshade::api::resource_view GetCurrentResourceView(reshade::api::effect_runtime* runtime, const std::pair<std::string, std::tuple<const ShaderToggler::ToggleGroup*, bool, reshade::api::resource_view>>& matchObject, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action);
         void RenderEffects(reshade::api::command_list* cmd_list, uint32_t callLocation = CALL_DRAW, uint32_t invocation = MATCH_NONE);
         bool RenderRemainingEffects(reshade::api::effect_runtime* runtime);
 
         bool CreateTextureBinding(reshade::api::effect_runtime* runtime, reshade::api::resource* res, reshade::api::resource_view* srv, reshade::api::resource_view* rtv, const resource_desc& desc);
+        bool CreateTextureBinding(reshade::api::effect_runtime* runtime, reshade::api::resource* res, reshade::api::resource_view* srv, reshade::api::resource_view* rtv, reshade::api::format format);
         uint32_t UpdateTextureBinding(reshade::api::effect_runtime* runtime, const std::string& binding, const resource_desc& desc);
         void DestroyTextureBinding(reshade::api::effect_runtime* runtime, const std::string& binding);
         void InitTextureBingings(reshade::api::effect_runtime* runtime);
         void DisposeTextureBindings(reshade::api::effect_runtime* runtime);
         void UpdateTextureBindings(reshade::api::command_list* cmd_list, uint32_t callLocation = CALL_DRAW, uint32_t invocation = MATCH_NONE);
+        void ClearUnmatchedTextureBindings(reshade::api::command_list* cmd_list);
 
         void _CheckCallForCommandList(ShaderData& sData, CommandListDataContainer& commandListData, const DeviceDataContainer& deviceData);
         void CheckCallForCommandList(reshade::api::command_list* commandList, uint32_t psShaderHash, uint32_t vsShaderHash);
@@ -75,6 +77,21 @@ namespace Rendering
             const unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& bindingsToUpdate,
             std::vector<std::string>& removalList,
             const std::unordered_set<std::string>& toUpdateBindings);
+        bool _CreateTextureBinding(reshade::api::effect_runtime* runtime,
+            reshade::api::resource* res,
+            reshade::api::resource_view* srv,
+            reshade::api::resource_view* rtv,
+            reshade::api::format format,
+            uint32_t width,
+            uint32_t height);
+        void _QueueOrDequeue(
+            effect_runtime* runtime,
+            CommandListDataContainer& commandListData,
+            std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& queue,
+            unordered_set<string>& immediateQueue,
+            uint32_t callLocation,
+            uint32_t layoutIndex,
+            uint32_t action);
 
         AddonImGui::AddonUIData& uiData;
         ResourceManager& resourceManager;

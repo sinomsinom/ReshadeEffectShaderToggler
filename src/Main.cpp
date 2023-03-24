@@ -503,6 +503,7 @@ static void onPresent(command_queue* queue, swapchain* swapchain, const rect* so
         if (runtime->get_effects_state())
         {
             renderingManager.RenderRemainingEffects(runtime);
+            renderingManager.ClearUnmatchedTextureBindings(runtime->get_command_queue()->get_immediate_command_list());
         }
     }
 
