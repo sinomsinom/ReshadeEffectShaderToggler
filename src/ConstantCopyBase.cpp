@@ -1,7 +1,6 @@
 #include "ConstantCopyBase.h"
 
 using namespace ConstantFeedback;
-
 ConstantHandlerBase* ConstantCopyBase::_constHandler = nullptr;
 
 ConstantCopyBase::ConstantCopyBase()
@@ -32,35 +31,3 @@ std::string ConstantCopyBase::GetExecutableName()
 
     return std::string();
 }
-
-template<typename T>
-T* ConstantCopyBase::InstallHook(void* target, T* callback)
-{
-    void* original_function = nullptr;
-
-    if (MH_CreateHook(target, reinterpret_cast<void*>(callback), &original_function) != MH_OK)
-        return nullptr;
-
-    return reinterpret_cast<T*>(original_function);
-}
-
-template<typename T>
-T* ConstantCopyBase::InstallApiHook(LPCWSTR pszModule, LPCSTR pszProcName, T* callback)
-{
-    void* original_function = nullptr;
-
-    if (MH_CreateHookApi(pszModule, pszProcName, reinterpret_cast<void*>(callback), &original_function) != MH_OK)
-        return nullptr;
-
-    return reinterpret_cast<T*>(original_function);
-}
-
-// Template instances
-template sig_memcpy* ConstantCopyBase::InstallHook(void* target, sig_memcpy* callback);
-template sig_memcpy* ConstantCopyBase::InstallApiHook(LPCWSTR pszModule, LPCSTR pszProcName, sig_memcpy* callback);
-
-template sig_ffxiv_cbload* ConstantCopyBase::InstallHook(void* target, sig_ffxiv_cbload* callback);
-template sig_ffxiv_cbload* ConstantCopyBase::InstallApiHook(LPCWSTR pszModule, LPCSTR pszProcName, sig_ffxiv_cbload* callback);
-
-template sig_nier_replicant_cbload* ConstantCopyBase::InstallHook(void* target, sig_nier_replicant_cbload* callback);
-template sig_nier_replicant_cbload* ConstantCopyBase::InstallApiHook(LPCWSTR pszModule, LPCSTR pszProcName, sig_nier_replicant_cbload* callback);

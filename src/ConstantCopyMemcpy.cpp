@@ -1,8 +1,6 @@
 #include <cstring>
 #include <MinHook.h>
-#include <reshade.hpp>
 #include "ConstantCopyMemcpy.h"
-#include "PipelinePrivateData.h"
 
 using namespace ConstantFeedback;
 
@@ -19,7 +17,7 @@ ConstantCopyMemcpy::~ConstantCopyMemcpy()
 
 bool ConstantCopyMemcpy::Init()
 {
-    return Hook(&org_memcpy, detour_memcpy);
+    return Hook(&org_memcpy, detour_memcpy, ""_sig);
 }
 
 bool ConstantCopyMemcpy::UnInit()
@@ -41,7 +39,7 @@ bool ConstantCopyMemcpy::HookStatic(sig_memcpy** original, sig_memcpy* detour)
 
         for (const std::byte* address : result.matches()) {
             void* adr = static_cast<void*>(const_cast<std::byte*>(address));
-            *original = InstallHook<sig_memcpy>(adr, detour);
+            *original = InstallHook(adr, detour);
 
             // Assume signature is unique
             if (*original != nullptr)
@@ -70,7 +68,7 @@ bool ConstantCopyMemcpy::HookDynamic(sig_memcpy** original, sig_memcpy* detour)
     return false;
 }
 
-bool ConstantCopyMemcpy::Hook(sig_memcpy** original, sig_memcpy* detour)
+bool ConstantCopyMemcpy::Hook(sig_memcpy** original, sig_memcpy* detour, const sigmatch::signature& sig)
 {
     // Try hooking statically linked memcpy first, then look into dynamically linked ones
     if (HookStatic(original, detour) || HookDynamic(original, detour))

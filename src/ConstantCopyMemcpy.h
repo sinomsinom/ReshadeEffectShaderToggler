@@ -8,8 +8,7 @@
 #include <shared_mutex>
 #include <sigmatch.hpp>
 #include "ConstantCopyDefinitions.h"
-#include "ToggleGroup.h"
-#include "ConstantCopyBase.h"
+#include "ConstantCopyT.h"
 
 using namespace std;
 using namespace reshade::api;
@@ -49,16 +48,16 @@ static const vector<tuple<wstring, string>> memcpy_dynamic = {
 };
 
 namespace ConstantFeedback {
-    class ConstantCopyMemcpy final : public virtual ConstantCopyBase {
+    class ConstantCopyMemcpy final : public virtual ConstantCopyT<sig_memcpy>{
     public:
         ConstantCopyMemcpy();
         ~ConstantCopyMemcpy();
 
-        bool Init();
-        bool UnInit();
+        bool Init() override;
+        bool UnInit() override;
 
-        bool Hook(sig_memcpy** original, sig_memcpy* detour);
-        bool Unhook();
+        bool Hook(sig_memcpy** original, sig_memcpy* detour, const sigmatch::signature& sig) override;
+        bool Unhook() override;
 
     private:
         bool HookStatic(sig_memcpy** original, sig_memcpy* detour);

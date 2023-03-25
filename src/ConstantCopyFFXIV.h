@@ -6,27 +6,22 @@
 #include <unordered_map>
 #include <vector>
 #include <shared_mutex>
-#include <sigmatch.hpp>
 #include "ConstantCopyDefinitions.h"
 #include "ConstantHandlerFFXIV.h"
-#include "ToggleGroup.h"
-#include "ConstantCopyBase.h"
+#include "ConstantCopyT.h"
 
 using namespace sigmatch_literals;
 
 static const sigmatch::signature ffxiv_cbload = "4C 89 44 24 ?? 56 57 41 57"_sig;
 
 namespace ConstantFeedback {
-    class ConstantCopyFFXIV final : public virtual ConstantCopyBase {
+    class ConstantCopyFFXIV final : public virtual ConstantCopyT<sig_ffxiv_cbload>{
     public:
         ConstantCopyFFXIV();
         ~ConstantCopyFFXIV();
 
-        bool Init() final;
-        bool UnInit() final;
-
-        bool Hook(sig_ffxiv_cbload** original, sig_ffxiv_cbload* detour);
-        bool Unhook();
+        bool Init() override final;
+        bool UnInit() override final;
 
     private:
         static sig_ffxiv_cbload* org_ffxiv_cbload;

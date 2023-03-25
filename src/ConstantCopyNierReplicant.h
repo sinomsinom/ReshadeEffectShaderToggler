@@ -13,24 +13,20 @@
 #include <sigmatch.hpp>
 #include "ConstantCopyDefinitions.h"
 #include "ConstantHandlerFFXIV.h"
-#include "ToggleGroup.h"
-#include "ConstantCopyBase.h"
+#include "ConstantCopyT.h"
 
 using namespace sigmatch_literals;
 
 static const sigmatch::signature nier_replicant_cbload = "48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC 40 80 B9 ?? ?? ?? ?? 00 48 8B F2 41 8B F8"_sig;
 
 namespace ConstantFeedback {
-    class ConstantCopyNierReplicant final : public virtual ConstantCopyBase {
+    class ConstantCopyNierReplicant final : public virtual ConstantCopyT<sig_nier_replicant_cbload>{
     public:
         ConstantCopyNierReplicant();
         ~ConstantCopyNierReplicant();
 
-        bool Init() final;
-        bool UnInit() final;
-
-        bool Hook(sig_nier_replicant_cbload** original, sig_nier_replicant_cbload* detour);
-        bool Unhook();
+        bool Init() override final;
+        bool UnInit() override final;
 
     private:
         static sig_nier_replicant_cbload* org_nier_replicant_cbload;

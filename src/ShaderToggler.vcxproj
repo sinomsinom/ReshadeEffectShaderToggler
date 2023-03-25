@@ -180,6 +180,7 @@
     <ClInclude Include="ConstantCopyDefinitions.h" />
     <ClInclude Include="ConstantCopyFFXIV.h" />
     <ClInclude Include="ConstantCopyNierReplicant.h" />
+    <ClInclude Include="ConstantCopyT.h" />
     <ClInclude Include="ConstantHandlerFFXIV.h" />
     <ClInclude Include="ConstantHandlerNestedMapping.h" />
     <ClInclude Include="ConstantHandlerSingularMapping.h" />
@@ -204,6 +205,7 @@
     <ClCompile Include="ConstantCopyBase.cpp" />
     <ClCompile Include="ConstantCopyFFXIV.cpp" />
     <ClCompile Include="ConstantCopyNierReplicant.cpp" />
+    <ClCompile Include="ConstantCopyT.cpp" />
     <ClCompile Include="ConstantHandlerFFXIV.cpp" />
     <ClCompile Include="ConstantHandlerNestedMapping.cpp" />
     <ClCompile Include="ConstantHandlerSingularMapping.cpp" />

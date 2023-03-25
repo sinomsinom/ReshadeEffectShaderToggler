@@ -87,6 +87,9 @@
     <ClInclude Include="ConstantCopyNierReplicant.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ConstantCopyT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -141,6 +144,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ConstantCopyNierReplicant.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ConstantCopyT.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
