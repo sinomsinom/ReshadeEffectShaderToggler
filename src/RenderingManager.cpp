@@ -143,13 +143,13 @@ const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* run
     // Only return SRVs in case of bindings
     if(action & MATCH_BINDING && group->getExtractResourceViews())
     { 
-        uint32_t slot_size = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex].size();
+        uint32_t slot_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex].size());
         uint32_t slot = min(group->getSRVSlotIndex(), slot_size - 1);
 
         if (slot_size == 0)
             return active_rtv;
 
-        uint32_t desc_size = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot].size();
+        uint32_t desc_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot].size());
         uint32_t desc = min(group->getSRVDescriptorIndex(), desc_size - 1);
 
         if (desc_size == 0)

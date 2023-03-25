@@ -6,7 +6,12 @@
 #include <reshade_api_pipeline.hpp>
 #include <unordered_map>
 #include <MinHook.h>
+
+#pragma warning(push)
+#pragma warning(disable : 4005)
 #include <sigmatch.hpp>
+#pragma warning(pop)
+
 #include "ConstantCopyDefinitions.h"
 #include "ToggleGroup.h"
 #include "ConstantCopyBase.h"

@@ -10,7 +10,6 @@
 #include <unordered_map>
 #include <vector>
 #include <shared_mutex>
-#include <sigmatch.hpp>
 #include "ConstantCopyDefinitions.h"
 #include "ConstantHandlerFFXIV.h"
 #include "ConstantCopyT.h"
