@@ -45,26 +45,26 @@ using namespace std;
 // of report.
 enum e_DebugLevel
 {
-	// detailed programmatic informational messages used as an aid in
-	// troubleshooting problems by programmers
-	E_DEBUG = 0,
-	// brief informative messages to use as an aid in troubleshooting
-	// problems by production support and programmers
-	E_INFO,
-	// messages intended to notify help desk, production support and
-	// programmers of possible issues with respect to the running application
-	E_WARN,
-	// messages that detail a programmatic error, these are typically
-	// messages intended for help desk, production support, programmers and
-	// occasionally users
-	E_ERROR,
-	// severe messages that are programmatic violations that will usually
-	// result in application failure. These messages are intended for help
-	// desk, production support, programmers and possibly users
-	E_FATAL,
-	// notice that all processing should be stopped immediately after the
-	// log is written.
-	E_CRITICAL
+    // detailed programmatic informational messages used as an aid in
+    // troubleshooting problems by programmers
+    E_DEBUG = 0,
+    // brief informative messages to use as an aid in troubleshooting
+    // problems by production support and programmers
+    E_INFO,
+    // messages intended to notify help desk, production support and
+    // programmers of possible issues with respect to the running application
+    E_WARN,
+    // messages that detail a programmatic error, these are typically
+    // messages intended for help desk, production support, programmers and
+    // occasionally users
+    E_ERROR,
+    // severe messages that are programmatic violations that will usually
+    // result in application failure. These messages are intended for help
+    // desk, production support, programmers and possibly users
+    E_FATAL,
+    // notice that all processing should be stopped immediately after the
+    // log is written.
+    E_CRITICAL
 };
 
 
@@ -84,7 +84,7 @@ const t_Str CommentIndicators = t_Str(";#");
 // ability of CDataFile to read/write to .ini files.  Also, note that the
 // first character in this constant is the one that is used when writing the
 // values to the file. (EqualIndicators[0])
-const t_Str EqualIndicators   = t_Str("=:"); 
+const t_Str EqualIndicators = t_Str("=:");
 
 // WhiteSpace
 // This constant contains the characters that the Trim() function removes from
@@ -97,16 +97,16 @@ const t_Str WhiteSpace = t_Str(" \t\n\r");
 // must PRECEDE the key on the line in the config file.
 typedef struct st_key
 {
-	t_Str		szKey;
-	t_Str		szValue;
-	t_Str		szComment;
+    t_Str		szKey;
+    t_Str		szValue;
+    t_Str		szComment;
 
-	st_key()
-	{
-		szKey = t_Str("");
-		szValue = t_Str("");
-		szComment = t_Str("");
-	}
+    st_key()
+    {
+        szKey = t_Str("");
+        szValue = t_Str("");
+        szComment = t_Str("");
+    }
 
 } t_Key;
 
@@ -119,16 +119,16 @@ typedef KeyList::iterator KeyItor;
 // comments must precede the section.
 typedef struct st_section
 {
-	t_Str		szName;
-	t_Str		szComment;
-	KeyList		Keys;
+    t_Str		szName;
+    t_Str		szComment;
+    KeyList		Keys;
 
-	st_section()
-	{
-		szName = t_Str("");
-		szComment = t_Str("");
-		Keys.clear();
-	}
+    st_section()
+    {
+        szName = t_Str("");
+        szComment = t_Str("");
+        Keys.clear();
+    }
 
 } t_Section;
 
@@ -139,7 +139,7 @@ typedef SectionList::iterator SectionItor;
 
 /// General Purpose Utility Functions ///////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////
-void	Report(e_DebugLevel DebugLevel, const char *fmt, ...);
+void	Report(e_DebugLevel DebugLevel, const char* fmt, ...);
 t_Str	GetNextWord(t_Str& CommandLine);
 int		CompareNoCase(t_Str str1, t_Str str2);
 void	Trim(t_Str& szStr);
@@ -153,129 +153,132 @@ int		WriteLn(fstream& stream, const char* fmt, ...);
 // CDataFile
 class CDataFile
 {
-// Methods
+    // Methods
 public:
-				// Constructors & Destructors
-				/////////////////////////////////////////////////////////////////
-				CDataFile();
-				CDataFile(t_Str szFileName);
-	virtual		~CDataFile();
+    // Constructors & Destructors
+    /////////////////////////////////////////////////////////////////
+    CDataFile();
+    CDataFile(t_Str szFileName);
+    virtual		~CDataFile();
 
-				// File handling methods
-				/////////////////////////////////////////////////////////////////
-	bool		Load(t_Str szFileName);
-	bool		Save();
+    // File handling methods
+    /////////////////////////////////////////////////////////////////
+    bool		Load(t_Str szFileName);
+    bool		Save();
 
-				// Data handling methods
-				/////////////////////////////////////////////////////////////////
+    // Data handling methods
+    /////////////////////////////////////////////////////////////////
 
-				// GetValue: Our default access method. Returns the raw t_Str value
-				// Note that this returns keys specific to the given section only.
-	t_Str		GetValue(t_Str szKey, t_Str szSection = t_Str("")); 
-				// GetString: Returns the value as a t_Str
-	t_Str		GetString(t_Str szKey, t_Str szSection = t_Str("")); 
-				// GetFloat: Return the value as a float
-	float		GetFloat(t_Str szKey, t_Str szSection = t_Str(""));
-				// GetInt: Return the value as an int
-	int			GetInt(t_Str szKey, t_Str szSection = t_Str(""));
-				// GetUInt: Return the value as an int
-	uint32_t	GetUInt(t_Str szKey, t_Str szSection = t_Str(""));
-				// GetBool: Return the value as a bool
-	bool		GetBool(t_Str szKey, t_Str szSection = t_Str(""));
+    // GetValue: Our default access method. Returns the raw t_Str value
+    // Note that this returns keys specific to the given section only.
+    t_Str		GetValue(t_Str szKey, t_Str szSection = t_Str(""));
+    // GetString: Returns the value as a t_Str
+    t_Str		GetString(t_Str szKey, t_Str szSection = t_Str(""));
+    // GetFloat: Return the value as a float
+    float		GetFloat(t_Str szKey, t_Str szSection = t_Str(""));
+    // GetInt: Return the value as an int
+    int			GetInt(t_Str szKey, t_Str szSection = t_Str(""));
+    // GetUInt: Return the value as an int
+    uint32_t	GetUInt(t_Str szKey, t_Str szSection = t_Str(""));
+    // GetBool: Return the value as a bool
+    bool		GetBool(t_Str szKey, t_Str szSection = t_Str(""));
 
-				// SetValue: Sets the value of a given key. Will create the
-				// key if it is not found and AUTOCREATE_KEYS is active.
-	bool		SetValue(t_Str szKey, t_Str szValue, 
-						 t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    // GetBoolOrDefault: Return the value as a bool or a default value if it's not found
+    bool		GetBoolOrDefault(t_Str szKey, t_Str szSection, bool defaultValue);
 
-				// SetFloat: Sets the value of a given key. Will create the
-				// key if it is not found and AUTOCREATE_KEYS is active.
-	bool		SetFloat(t_Str szKey, float fValue, 
-						 t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    // SetValue: Sets the value of a given key. Will create the
+    // key if it is not found and AUTOCREATE_KEYS is active.
+    bool		SetValue(t_Str szKey, t_Str szValue,
+        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
 
-				// SetInt: Sets the value of a given key. Will create the
-				// key if it is not found and AUTOCREATE_KEYS is active.
-	bool		SetInt(t_Str szKey, int nValue, 
-						 t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    // SetFloat: Sets the value of a given key. Will create the
+    // key if it is not found and AUTOCREATE_KEYS is active.
+    bool		SetFloat(t_Str szKey, float fValue,
+        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
 
-				// SetUInt: Sets the value of a given key. Will create the
-				// key if it is not found and AUTOCREATE_KEYS is active.
-	bool		SetUInt(t_Str szKey, uint32_t nValue, 
-						 t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    // SetInt: Sets the value of a given key. Will create the
+    // key if it is not found and AUTOCREATE_KEYS is active.
+    bool		SetInt(t_Str szKey, int nValue,
+        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
 
-				// SetBool: Sets the value of a given key. Will create the
-				// key if it is not found and AUTOCREATE_KEYS is active.
-	bool		SetBool(t_Str szKey, bool bValue, 
-						 t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    // SetUInt: Sets the value of a given key. Will create the
+    // key if it is not found and AUTOCREATE_KEYS is active.
+    bool		SetUInt(t_Str szKey, uint32_t nValue,
+        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
 
-				// Sets the comment for a given key.
-	bool		SetKeyComment(t_Str szKey, t_Str szComment, t_Str szSection = t_Str(""));
+    // SetBool: Sets the value of a given key. Will create the
+    // key if it is not found and AUTOCREATE_KEYS is active.
+    bool		SetBool(t_Str szKey, bool bValue,
+        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
 
-				// Sets the comment for a given section
-	bool		SetSectionComment(t_Str szSection, t_Str szComment);
+    // Sets the comment for a given key.
+    bool		SetKeyComment(t_Str szKey, t_Str szComment, t_Str szSection = t_Str(""));
 
-				// DeleteKey: Deletes a given key from a specific section
-	bool		DeleteKey(t_Str szKey, t_Str szFromSection = t_Str(""));
+    // Sets the comment for a given section
+    bool		SetSectionComment(t_Str szSection, t_Str szComment);
 
-				// DeleteSection: Deletes a given section.
-	bool		DeleteSection(t_Str szSection);
-				
-				// Key/Section handling methods
-				/////////////////////////////////////////////////////////////////
+    // DeleteKey: Deletes a given key from a specific section
+    bool		DeleteKey(t_Str szKey, t_Str szFromSection = t_Str(""));
 
-				// CreateKey: Creates a new key in the requested section. The
-	            // Section will be created if it does not exist and the 
-				// AUTOCREATE_SECTIONS bit is set.
-	bool		CreateKey(t_Str szKey, t_Str szValue, 
-		                  t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
-				// CreateSection: Creates the new section if it does not allready
-				// exist. Section is created with no keys.
-	bool		CreateSection(t_Str szSection, t_Str szComment = t_Str(""));
-				// CreateSection: Creates the new section if it does not allready
-				// exist, and copies the keys passed into it into the new section.
-	bool		CreateSection(t_Str szSection, t_Str szComment, KeyList Keys);
+    // DeleteSection: Deletes a given section.
+    bool		DeleteSection(t_Str szSection);
 
-				// Utility Methods
-				/////////////////////////////////////////////////////////////////
-				// SectionCount: Returns the number of valid sections in the database.
-	int			SectionCount();
-				// KeyCount: Returns the total number of keys, across all sections.
-	int			KeyCount();
-				// Clear: Initializes the member variables to their default states
-	void		Clear();
-				// SetFileName: For use when creating the object by hand
-				// initializes the file name so that it can be later saved.
-	void		SetFileName(t_Str szFileName);
-				// CommentStr
-				// Parses a string into a proper comment token/comment.
-	t_Str		CommentStr(t_Str szComment);				
+    // Key/Section handling methods
+    /////////////////////////////////////////////////////////////////
+
+    // CreateKey: Creates a new key in the requested section. The
+    // Section will be created if it does not exist and the 
+    // AUTOCREATE_SECTIONS bit is set.
+    bool		CreateKey(t_Str szKey, t_Str szValue,
+        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    // CreateSection: Creates the new section if it does not allready
+    // exist. Section is created with no keys.
+    bool		CreateSection(t_Str szSection, t_Str szComment = t_Str(""));
+    // CreateSection: Creates the new section if it does not allready
+    // exist, and copies the keys passed into it into the new section.
+    bool		CreateSection(t_Str szSection, t_Str szComment, KeyList Keys);
+
+    // Utility Methods
+    /////////////////////////////////////////////////////////////////
+    // SectionCount: Returns the number of valid sections in the database.
+    int			SectionCount();
+    // KeyCount: Returns the total number of keys, across all sections.
+    int			KeyCount();
+    // Clear: Initializes the member variables to their default states
+    void		Clear();
+    // SetFileName: For use when creating the object by hand
+    // initializes the file name so that it can be later saved.
+    void		SetFileName(t_Str szFileName);
+    // CommentStr
+    // Parses a string into a proper comment token/comment.
+    t_Str		CommentStr(t_Str szComment);
 
 
 protected:
-				// Note: I've tried to insulate the end user from the internal
-				// data structures as much as possible. This is by design. Doing
-				// so has caused some performance issues (multiple calls to a
-				// GetSection() function that would otherwise not be necessary,etc).
-				// But, I believe that doing so will provide a safer, more stable
-				// environment. You'll notice that nothing returns a reference,
-				// to modify the data values, you have to call member functions.
-				// think carefully before changing this.
+    // Note: I've tried to insulate the end user from the internal
+    // data structures as much as possible. This is by design. Doing
+    // so has caused some performance issues (multiple calls to a
+    // GetSection() function that would otherwise not be necessary,etc).
+    // But, I believe that doing so will provide a safer, more stable
+    // environment. You'll notice that nothing returns a reference,
+    // to modify the data values, you have to call member functions.
+    // think carefully before changing this.
 
-				// GetKey: Returns the requested key (if found) from the requested
-				// Section. Returns NULL otherwise.
-	t_Key*		GetKey(t_Str szKey, t_Str szSection);
-				// GetSection: Returns the requested section (if found), NULL otherwise.
-	t_Section*	GetSection(t_Str szSection);
+    // GetKey: Returns the requested key (if found) from the requested
+    // Section. Returns NULL otherwise.
+    t_Key* GetKey(t_Str szKey, t_Str szSection);
+    // GetSection: Returns the requested section (if found), NULL otherwise.
+    t_Section* GetSection(t_Str szSection);
 
 
-// Data
+    // Data
 public:
-	long		m_Flags;		// Our settings flags.
+    long		m_Flags;		// Our settings flags.
 
 protected:
-	SectionList	m_Sections;		// Our list of sections
-	t_Str		m_szFileName;	// The filename to write to
-	bool		m_bDirty;		// Tracks whether or not data has changed.
+    SectionList	m_Sections;		// Our list of sections
+    t_Str		m_szFileName;	// The filename to write to
+    bool		m_bDirty;		// Tracks whether or not data has changed.
 };
 
 
