@@ -32,6 +32,7 @@
 #include <imgui.h>
 #include <reshade.hpp>
 #include <vector>
+#include <format>
 #include <unordered_map>
 #include <set>
 #include <functional>
@@ -142,6 +143,18 @@ static void onResetCommandList(command_list* commandList)
 {
     CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
     commandListData.Reset();
+}
+
+
+void onInitSwapchain(reshade::api::swapchain* swapchain)
+{
+    resourceManager.OnInitSwapchain(swapchain);
+}
+
+
+static void onDestroySwapchain(reshade::api::swapchain* swapchain)
+{
+    resourceManager.OnDestroySwapchain(swapchain);
 }
 
 
@@ -654,6 +667,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         g_addonUIData.SetBasePath(g_dllPath.parent_path());
         g_addonUIData.LoadShaderTogglerIniFile();
         InitHooks();
+        reshade::register_event<reshade::addon_event::init_swapchain>(onInitSwapchain);
+        reshade::register_event<reshade::addon_event::destroy_swapchain>(onDestroySwapchain);
         reshade::register_event<reshade::addon_event::init_resource>(onInitResource);
         reshade::register_event<reshade::addon_event::create_resource>(onCreateResource);
         reshade::register_event<reshade::addon_event::map_buffer_region>(onMapBufferRegion);
@@ -692,6 +707,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         break;
     case DLL_PROCESS_DETACH:
         UnInitHooks();
+        reshade::unregister_event<reshade::addon_event::init_swapchain>(onInitSwapchain);
+        reshade::unregister_event<reshade::addon_event::destroy_swapchain>(onDestroySwapchain);
         reshade::unregister_event<reshade::addon_event::reshade_present>(onReshadePresent);
         reshade::unregister_event<reshade::addon_event::map_buffer_region>(onMapBufferRegion);
         reshade::unregister_event<reshade::addon_event::unmap_buffer_region>(onUnmapBufferRegion);

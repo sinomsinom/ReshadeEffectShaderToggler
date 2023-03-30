@@ -123,6 +123,7 @@ namespace ShaderToggler
 
         inline uint32_t safeGetShaderHash(uint64_t pipelineHandle)
         {
+            std::shared_lock lock(_hashHandlesMutex);
             const auto& it = _handleToShaderHash.find(pipelineHandle);
 
             return it == _handleToShaderHash.end() ? 0 : it->second;

@@ -1,3 +1,4 @@
+#include <format>
 #include "ResourceManager.h"
 
 using namespace Rendering;
@@ -43,7 +44,7 @@ bool ResourceManager::_HasSRGB(reshade::api::format value)
     return false;
 }
 
-void ResourceManager::InitBackbuffer(effect_runtime* runtime)
+void ResourceManager::InitBackbuffer(swapchain* runtime)
 {
     // Create backbuffer resource views
     device* dev = runtime->get_device();
@@ -59,37 +60,79 @@ void ResourceManager::InitBackbuffer(effect_runtime* runtime)
         reshade::api::format viewFormat = desc.texture.format;
         reshade::api::format viewFormatSRGB = desc.texture.format;
 
+        resource res = { 0 };
+
         if (_HasSRGB(desc.texture.format))
         {
-            if (_IsSRGB(desc.texture.format))
-            {
-                viewFormat = format_to_default_typed(desc.texture.format);
-            }
-            else
-            {
-                viewFormatSRGB = format_to_default_typed(desc.texture.format, 1);
-            }
+            reshade::api::format resFormat = format_to_typeless(desc.texture.format);
+            runtime->get_device()->create_resource(
+                resource_desc(desc.texture.width, desc.texture.height, 1, 1, resFormat, 1,
+                    memory_heap::gpu_only, resource_usage::copy_dest | resource_usage::copy_source | resource_usage::shader_resource | resource_usage::render_target),
+                nullptr, resource_usage::copy_dest, &res);
+
+            //if (_IsSRGB(desc.texture.format))
+            //{
+                viewFormat = format_to_default_typed(resFormat);
+            //}
+            //else
+            //{
+                viewFormatSRGB = format_to_default_typed(resFormat, 1);
+            //}
         }
 
-        dev->create_resource_view(backBuffer, resource_usage::render_target,
+        res = res == 0 ? backBuffer : res;
+
+        dev->create_resource_view(res, resource_usage::render_target,
             resource_view_desc(viewFormat), &backBufferView);
-        dev->create_resource_view(backBuffer, resource_usage::render_target,
+        dev->create_resource_view(res, resource_usage::render_target,
             resource_view_desc(viewFormatSRGB), &backBufferViewSRGB);
 
-        s_backBufferView[backBuffer.handle] = make_pair(backBufferView, backBufferViewSRGB);
+        s_backBufferView[backBuffer.handle] = make_tuple(backBuffer, res, backBufferView, backBufferViewSRGB);
+        _swapChainToResourceHandles[runtime].push_back(backBuffer.handle);
+
     }
 }
 
-void ResourceManager::ClearBackbuffer(reshade::api::effect_runtime* runtime)
+void ResourceManager::ClearBackbuffer(reshade::api::swapchain* runtime)
 {
-    for (auto& view : s_backBufferView) {
-        if (view.second.first != 0)
-            runtime->get_device()->destroy_resource_view(view.second.first);
-        if (view.second.second != 0)
-            runtime->get_device()->destroy_resource_view(view.second.second);
+    const auto& swapBufferRTVhandles = _swapChainToResourceHandles.find(runtime);
+
+    if (swapBufferRTVhandles == _swapChainToResourceHandles.end())
+        return;
+
+    for (const auto handle : swapBufferRTVhandles->second)
+    {
+        const auto& swapBufferRTVhandle = s_backBufferView.find(handle);
+
+        if (swapBufferRTVhandle == s_backBufferView.end())
+            continue;
+
+        if (get<2>(swapBufferRTVhandle->second) != 0)
+            runtime->get_device()->destroy_resource_view(get<2>(swapBufferRTVhandle->second));
+        if (get<3>(swapBufferRTVhandle->second) != 0)
+            runtime->get_device()->destroy_resource_view(get<3>(swapBufferRTVhandle->second));
+        if (get<1>(swapBufferRTVhandle->second) != 0)
+            runtime->get_device()->destroy_resource(get<1>(swapBufferRTVhandle->second));
+
+        s_backBufferView.erase(handle);
     }
 
-    s_backBufferView.clear();
+    _swapChainToResourceHandles.erase(runtime);
+}
+
+bool ResourceManager::OnCreateSwapchain(reshade::api::swapchain_desc& desc, void* hwnd)
+{
+    return false;
+}
+
+void ResourceManager::OnInitSwapchain(reshade::api::swapchain* swapchain)
+{
+    InitBackbuffer(swapchain);
+}
+
+void ResourceManager::OnDestroySwapchain(reshade::api::swapchain* swapchain)
+{
+    ClearBackbuffer(swapchain);
 }
 
 bool ResourceManager::OnCreateResource(device* device, resource_desc& desc, subresource_data* initial_data, resource_usage initial_state)
@@ -130,10 +173,10 @@ void ResourceManager::OnInitResource(device* device, const resource_desc& desc, 
             reshade::api::format format_non_srgb = format_to_default_typed(desc.texture.format);
             reshade::api::format format_srgb = format_to_default_typed(desc.texture.format, 1);
 
-            if (!_IsSRGB(orgFormat))
-            {
-                format_non_srgb = orgFormat;
-            }
+            //if (!_IsSRGB(orgFormat))
+            //{
+            //    format_non_srgb = orgFormat;
+            //}
 
             device->create_resource_view(handle, resource_usage::render_target,
                 resource_view_desc(format_non_srgb), &view_non_srgb);
@@ -201,6 +244,11 @@ bool ResourceManager::OnCreateResourceView(device* device, resource resource, re
     return false;
 }
 
+bool ResourceManager::IsBackbufferHandle(uint64_t handler)
+{
+    return s_backBufferView.contains(handler);
+}
+
 void ResourceManager::SetResourceViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view)
 {
     const auto& it = s_sRGBResourceViews.find(handle);
@@ -208,15 +256,27 @@ void ResourceManager::SetResourceViewHandles(uint64_t handle, reshade::api::reso
     {
         *non_srgb_view = it->second.first;
         *srgb_view = it->second.second;
+        return;
     }
 }
 
-void ResourceManager::SetBackbufferViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view)
+const std::tuple<reshade::api::resource, reshade::api::resource, reshade::api::resource_view, reshade::api::resource_view>* ResourceManager::GetBackbufferViewData(uint64_t handle)
 {
     const auto& it = s_backBufferView.find(handle);
     if (it != s_backBufferView.end())
     {
-        *non_srgb_view = it->second.first;
-        *srgb_view = it->second.second;
+        return &(it->second);
     }
+
+    return nullptr;
 }
+
+//void ResourceManager::SetBackbufferViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view)
+//{
+//    const auto& it = s_backBufferView.find(handle);
+//    if (it != s_backBufferView.end())
+//    {
+//        *non_srgb_view = it->second.first;
+//        *srgb_view = it->second.second;
+//    }
+//}
