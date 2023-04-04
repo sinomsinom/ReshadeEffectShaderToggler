@@ -5,6 +5,7 @@
 using namespace ConstantFeedback;
 
 sig_memcpy* ConstantCopyMemcpy::org_memcpy = nullptr;
+ConstantCopyMemcpy* ConstantCopyMemcpy::_instance = nullptr;
 
 ConstantCopyMemcpy::ConstantCopyMemcpy()
 {
@@ -91,8 +92,7 @@ bool ConstantCopyMemcpy::Unhook()
 
 void* __fastcall ConstantCopyMemcpy::detour_memcpy(void* dest, void* src, size_t size)
 {
-    if (_constHandler != nullptr)
-        _constHandler->OnMemcpy(dest, src, size);
+    _instance->OnMemcpy(dest, src, size);
 
     return org_memcpy(dest, src, size);
 }

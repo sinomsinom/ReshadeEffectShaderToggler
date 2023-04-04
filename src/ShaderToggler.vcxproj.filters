@@ -51,13 +51,7 @@
     <ClInclude Include="ConstantHandlerBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ConstantHandlerSingularMapping.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ConstantCopyBase.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ConstantHandlerNestedMapping.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PipelineStateTracker.h">
@@ -70,9 +64,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ConstantCopyFFXIV.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ConstantHandlerFFXIV.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ConstantManager.h">
@@ -88,6 +79,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ConstantCopyT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ConstantCopyMemcpySingular.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ConstantCopyMemcpyNested.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -113,22 +110,13 @@
     <ClCompile Include="ConstantHandlerBase.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ConstantHandlerSingularMapping.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ConstantCopyBase.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ConstantHandlerNestedMapping.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="PipelineStateTracker.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ConstantCopyFFXIV.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ConstantHandlerFFXIV.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ConstantManager.cpp">
@@ -147,6 +135,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ConstantCopyT.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ConstantCopyMemcpySingular.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ConstantCopyMemcpyNested.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

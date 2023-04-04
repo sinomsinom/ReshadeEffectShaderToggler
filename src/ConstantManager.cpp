@@ -1,8 +1,7 @@
 #include "ConstantManager.h"
-#include "ConstantHandlerFFXIV.h"
-#include "ConstantHandlerNestedMapping.h"
-#include "ConstantHandlerSingularMapping.h"
-#include "ConstantCopyMemcpy.h"
+#include "ConstantHandlerBase.h"
+#include "ConstantCopyMemcpySingular.h"
+#include "ConstantCopyMemcpyNested.h"
 #include "ConstantCopyFFXIV.h"
 #include "ConstantCopyNierReplicant.h"
 
@@ -10,8 +9,10 @@ ConstantCopyType ConstantManager::ResolveConstantCopyType(const string& ctype)
 {
     if (ctype == "none")
         return ConstantCopyType::Copy_None;
-    else if (ctype == "memcpy")
-        return ConstantCopyType::Copy_Memcpy;
+    else if (ctype == "memcpy_singular")
+        return ConstantCopyType::Copy_MemcpySingular;
+    else if (ctype == "memcpy_nested")
+        return ConstantCopyType::Copy_MemcpyNested;
     else if (ctype == "ffxiv")
         return ConstantCopyType::Copy_FFXIV;
     else if (ctype == "nier_replicant")
@@ -22,14 +23,10 @@ ConstantCopyType ConstantManager::ResolveConstantCopyType(const string& ctype)
 
 ConstantHandlerType ConstantManager::ResolveConstantHandlerType(const string& htype)
 {
-    if (htype == "singular")
-        return ConstantHandlerType::Handler_Singular;
-    else if (htype == "nested")
-        return ConstantHandlerType::Handler_Nested;
-    else if (htype == "ffxiv")
-        return ConstantHandlerType::Handler_FFXIV;
+    if (htype == "default")
+        return ConstantHandlerType::Handler_Default;
 
-    return ConstantHandlerType::Handler_Nested;
+    return ConstantHandlerType::Handler_Default;
 }
 
 bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantFeedback::ConstantCopyBase** constantCopy, ConstantFeedback::ConstantHandlerBase** constantHandler)
@@ -50,10 +47,16 @@ bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantFeedback::Cons
         *constantCopy = nullptr;
     }
         break;
-    case ConstantCopyType::Copy_Memcpy:
+    case ConstantCopyType::Copy_MemcpySingular:
     {
-        static ConstantCopyMemcpy constantTypeMemcpy;
-        *constantCopy = &constantTypeMemcpy;
+        static ConstantCopyMemcpySingular constantTypeMemcpySingular;
+        *constantCopy = &constantTypeMemcpySingular;
+    }
+        break;
+    case ConstantCopyType::Copy_MemcpyNested:
+    {
+        static ConstantCopyMemcpyNested constantTypeMemcpyNested;
+        *constantCopy = &constantTypeMemcpyNested;
     }
         break;
     case ConstantCopyType::Copy_FFXIV:
@@ -74,34 +77,11 @@ bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantFeedback::Cons
 
     if (*constantCopy != nullptr && (*constantCopy)->Init())
     {
-        switch (ResolveConstantHandlerType(hookCopyType))
-        {
-        case ConstantHandlerType::Handler_Singular:
-        {
-            static ConstantHandlerSingularMapping constantUnnestedMap;
-            *constantHandler = &constantUnnestedMap;
-        }
-            break;
-        case ConstantHandlerType::Handler_Nested:
-        {
-            static ConstantHandlerNestedMapping constantNestedMap;
-            *constantHandler = &constantNestedMap;
-        }
-            break;
-        case ConstantHandlerType::Handler_FFXIV:
-        {
-            static ConstantHandlerFFXIV constantHandlerFFXIV;
-            *constantHandler = &constantHandlerFFXIV;
-        }
-            break;
-        default:
-        {
-            static ConstantHandlerNestedMapping constantNestedMap;
-            *constantHandler = &constantNestedMap;
-        }
-        }
+        // No need for separate ones for now
+        static ConstantHandlerBase constantBase;
+        *constantHandler = &constantBase;
 
-        ConstantCopyBase::SetConstantHandler(*constantHandler);
+        ConstantHandlerBase::SetConstantCopy(*constantCopy);
         data.SetConstantHandler(*constantHandler);
 
         return true;

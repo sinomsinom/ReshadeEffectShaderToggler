@@ -9,16 +9,15 @@ namespace ConstantFeedback
     enum ConstantCopyType
     {
         Copy_None,
-        Copy_Memcpy,
+        Copy_MemcpySingular,
+        Copy_MemcpyNested,
         Copy_FFXIV, //actually only works with ConstantHandlerType::FFXIV, but shhhhh
         Copy_NierReplicant
     };
 
     enum ConstantHandlerType
     {
-        Handler_Singular,
-        Handler_Nested,
-        Handler_FFXIV
+        Handler_Default,
     };
 
     class ConstantManager

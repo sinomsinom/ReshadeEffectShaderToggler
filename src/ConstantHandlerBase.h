@@ -8,6 +8,7 @@
 #include <shared_mutex>
 #include "ToggleGroup.h"
 #include "ShaderManager.h"
+#include "ConstantCopyBase.h"
 
 using namespace std;
 using namespace reshade::api;
@@ -17,16 +18,6 @@ struct CommandListDataContainer;
 struct DeviceDataContainer;
 
 namespace ConstantFeedback {
-    struct BufferCopy
-    {
-        uint64_t resource = 0;
-        void* destination = nullptr;
-        uint8_t* hostDestination = nullptr;
-        uint64_t offset = 0;
-        uint64_t size = 0;
-        uint64_t bufferSize = 0;
-    };
-
     enum class constant_type
     {
         type_unknown = 0,
@@ -85,46 +76,34 @@ namespace ConstantFeedback {
 
     static constexpr size_t CHAR_BUFFER_SIZE = 256;
 
-    class ConstantHandlerBase {
+    class ConstantHandlerBase final {
     public:
         ConstantHandlerBase();
         ~ConstantHandlerBase();
 
-        virtual void SetBufferRange(const ToggleGroup* group, buffer_range range, device* dev, command_list* cmd_list);
-        virtual void RemoveGroup(const ToggleGroup*, device* dev);
+        void SetBufferRange(const ToggleGroup* group, buffer_range range, device* dev, command_list* cmd_list);
+        void RemoveGroup(const ToggleGroup*, device* dev);
         uint8_t* GetConstantBuffer(const ToggleGroup* group);
         size_t GetConstantBufferSize(const ToggleGroup* group);
         void ReloadConstantVariables(effect_runtime* runtime);
         void UpdateConstants(command_list* cmd_list);
         void ClearConstantVariables();
-        virtual void OnInitResource(device* device, const resource_desc& desc, const subresource_data* initData, resource_usage usage, reshade::api::resource handle);
-        virtual void OnDestroyResource(device* device, resource res);
-
         void ApplyConstantValues(effect_runtime* runtime, const ToggleGroup*, const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants);
 
         unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables();
 
-        const uint8_t* GetHostConstantBuffer(uint64_t resourceHandle);
-        void CreateHostConstantBuffer(device* dev, resource resource, size_t size);
-        void DeleteHostConstantBuffer(resource resource);
-        inline void SetHostConstantBuffer(const uint64_t handle, const void* buffer, size_t size, uintptr_t offset, uint64_t bufferSize);
-
-        virtual void OnMapBufferRegion(device* device, resource resource, uint64_t offset, uint64_t size, map_access access, void** data) = 0;
-        virtual void OnUnmapBufferRegion(device* device, resource resource) = 0;
-        virtual void OnMemcpy(void* dest, void* src, size_t size) = 0;
+        static void SetConstantCopy(ConstantCopyBase* constantHandler);
     protected:
         unordered_map<const ToggleGroup*, vector<uint8_t>> groupBufferContent;
         unordered_map<const ToggleGroup*, vector<uint8_t>> groupPrevBufferContent;
         unordered_map<const ToggleGroup*, size_t> groupBufferSize;
 
-        unordered_set<uint64_t> constantBuffers;
         static unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>> restVariables;
         static char charBuffer[CHAR_BUFFER_SIZE];
 
         unordered_map<const ToggleGroup*, buffer_range> groupBufferRanges;
-        unordered_map<uint64_t, vector<uint8_t>> deviceToHostConstantBuffer;
 
-        shared_mutex deviceHostMutex;
+        static ConstantCopyBase* _constCopy;
 
         bool CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& target);
         void CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list);

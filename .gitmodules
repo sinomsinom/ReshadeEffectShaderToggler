@@ -8,3 +8,6 @@
 	path = deps/reshade
 	url = https://github.com/4lex4nder/reshade.git
 	branch = addon
+[submodule "deps/robin-map"]
+	path = deps/robin-map
+	url = https://github.com/Tessil/robin-map.git

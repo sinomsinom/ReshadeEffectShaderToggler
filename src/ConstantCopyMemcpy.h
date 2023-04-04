@@ -47,16 +47,32 @@ static const vector<tuple<wstring, string>> memcpy_dynamic = {
 };
 
 namespace ConstantFeedback {
-    class ConstantCopyMemcpy final : public virtual ConstantCopyT<sig_memcpy>{
+    struct BufferCopy
+    {
+        uint64_t resource = 0;
+        void* destination = nullptr;
+        uint8_t* hostDestination = nullptr;
+        uint64_t offset = 0;
+        uint64_t size = 0;
+        uint64_t bufferSize = 0;
+    };
+
+
+    class ConstantCopyMemcpy : public virtual ConstantCopyT<sig_memcpy>{
     public:
         ConstantCopyMemcpy();
         ~ConstantCopyMemcpy();
 
-        bool Init() override;
-        bool UnInit() override;
+        bool Init() override final;
+        bool UnInit() override final;
 
-        bool Hook(sig_memcpy** original, sig_memcpy* detour, const sigmatch::signature& sig) override;
-        bool Unhook() override;
+        bool Hook(sig_memcpy** original, sig_memcpy* detour, const sigmatch::signature& sig) override final;
+        bool Unhook() override final;
+
+        virtual void OnMemcpy(void* dest, void* src, size_t size) = 0;
+
+    protected:
+        static ConstantCopyMemcpy* _instance;
 
     private:
         bool HookStatic(sig_memcpy** original, sig_memcpy* detour);

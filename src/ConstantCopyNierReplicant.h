@@ -11,7 +11,6 @@
 #include <vector>
 #include <shared_mutex>
 #include "ConstantCopyDefinitions.h"
-#include "ConstantHandlerFFXIV.h"
 #include "ConstantCopyT.h"
 
 using namespace sigmatch_literals;
@@ -27,8 +26,13 @@ namespace ConstantFeedback {
         bool Init() override final;
         bool UnInit() override final;
 
+        void OnMapBufferRegion(reshade::api::device * device, reshade::api::resource resource, uint64_t offset, uint64_t size, reshade::api::map_access access, void** data) override final;
+        void OnUnmapBufferRegion(reshade::api::device* device, reshade::api::resource resource) override final;
     private:
         static sig_nier_replicant_cbload* org_nier_replicant_cbload;
         static void __fastcall detour_nier_replicant_cbload(intptr_t p1, intptr_t* p2, uintptr_t p3);
+
+        static void* Origin;
+        static size_t Size;
     };
 }

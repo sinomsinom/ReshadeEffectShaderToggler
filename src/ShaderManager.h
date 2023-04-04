@@ -37,6 +37,7 @@
 #include <reshade_api_pipeline.hpp>
 #include <shared_mutex>
 #include <unordered_set>
+#include <tsl/robin_map.h>
 #include "CDataFile.h"
 #include "ToggleGroup.h"
 
@@ -133,7 +134,8 @@ namespace ShaderToggler
         void setActiveHuntedShaderHandle();
 
         std::unordered_set<uint32_t> _shaderHashes;				// all shader hashes added through init pipeline
-        std::unordered_map<uint64_t, uint32_t> _handleToShaderHash;		// pipeline handle per shader hash. Handle is removed when a pipeline is destroyed.
+        //std::unordered_map<uint64_t, uint32_t> _handleToShaderHash;		// pipeline handle per shader hash. Handle is removed when a pipeline is destroyed.
+        tsl::robin_map<uint64_t, uint32_t> _handleToShaderHash;
         std::unordered_set<uint32_t> _collectedActiveShaderHashes;	// shader hashes bound to pipeline handles which were collected during the collection phase after hunting was enabled, which are the pipeline handles active during the last X frames
         std::unordered_set<uint32_t> _markedShaderHashes;		// the hashes for shaders which are currently marked.
 

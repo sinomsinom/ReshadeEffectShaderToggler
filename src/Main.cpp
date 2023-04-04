@@ -168,8 +168,8 @@ static void onInitResource(device* device, const resource_desc& desc, const subr
 {
     resourceManager.OnInitResource(device, desc, initData, usage, handle);
     
-    if (constantHandler != nullptr)
-        constantHandler->OnInitResource(device, desc, initData, usage, handle);
+    if (constantCopy != nullptr)
+        constantCopy->OnInitResource(device, desc, initData, usage, handle);
 }
 
 
@@ -177,8 +177,8 @@ static void onDestroyResource(device* device, resource res)
 {
     resourceManager.OnDestroyResource(device, res);
     
-    if (constantHandler != nullptr)
-        constantHandler->OnDestroyResource(device, res);
+    if (constantCopy != nullptr)
+        constantCopy->OnDestroyResource(device, res);
 }
 
 
@@ -203,6 +203,11 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
             data.allEnabledTechniques.emplace(name, false);
         }
         });
+
+    if (constantHandler != nullptr && runtime->get_effects_state())
+    {
+        constantHandler->ReloadConstantVariables(runtime);
+    }
 }
 
 
@@ -301,8 +306,8 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         return;
     }
 
-    const uint32_t handleHasPixelShaderAttached = g_pixelShaderManager.safeGetShaderHash(pipelineHandle.handle);
-    const uint32_t handleHasVertexShaderAttached = g_vertexShaderManager.safeGetShaderHash(pipelineHandle.handle);
+    const uint32_t handleHasPixelShaderAttached = (uint32_t)(stages & pipeline_stage::pixel_shader) ? g_pixelShaderManager.safeGetShaderHash(pipelineHandle.handle) : 0;
+    const uint32_t handleHasVertexShaderAttached = (uint32_t)(stages & pipeline_stage::vertex_shader) ? g_vertexShaderManager.safeGetShaderHash(pipelineHandle.handle) : 0;
     if (!handleHasPixelShaderAttached && !handleHasVertexShaderAttached)
     {
         // draw call with unknown handle, don't collect it
@@ -537,11 +542,6 @@ static void onReshadePresent(effect_runtime* runtime)
         });
     deviceData.bindingsUpdated.clear();
     deviceData.constantsUpdated.clear();
-    
-    if (constantHandler != nullptr && runtime->get_effects_state())
-    {
-        constantHandler->ReloadConstantVariables(runtime);
-    }
 
     CheckHotkeys(g_addonUIData, runtime);
 }
@@ -549,15 +549,15 @@ static void onReshadePresent(effect_runtime* runtime)
 
 static void onMapBufferRegion(device* device, resource resource, uint64_t offset, uint64_t size, map_access access, void** data)
 {
-    if (constantHandler != nullptr)
-        constantHandler->OnMapBufferRegion(device, resource, offset, size, access, data);
+    if (constantCopy != nullptr)
+        constantCopy->OnMapBufferRegion(device, resource, offset, size, access, data);
 }
 
 
 static void onUnmapBufferRegion(device* device, resource resource)
 {
-    if (constantHandler != nullptr)
-        constantHandler->OnUnmapBufferRegion(device, resource);
+    if (constantCopy != nullptr)
+        constantCopy->OnUnmapBufferRegion(device, resource);
 }
 
 
