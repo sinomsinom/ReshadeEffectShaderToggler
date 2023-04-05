@@ -17,8 +17,8 @@
 #include <vector>
 #include <fstream>
 #include <string>
+#include <filesystem>
 
-using namespace std;
 
 // Globally defined structures, defines, & types
 //////////////////////////////////////////////////////////////////////////////////
@@ -26,18 +26,18 @@ using namespace std;
 // AUTOCREATE_SECTIONS
 // When set, this define will cause SetValue() to create a new section, if
 // the requested section does not allready exist.
-#define AUTOCREATE_SECTIONS     (1L<<1)
+constexpr auto AUTOCREATE_SECTIONS = (1L<<1);
 
 // AUOTCREATE_KEYS
 // When set, this define causes SetValue() to create a new key, if the
 // requested key does not allready exist.
-#define AUTOCREATE_KEYS         (1L<<2)
+constexpr auto AUTOCREATE_KEYS = (1L<<2);
 
 // MAX_BUFFER_LEN
 // Used simply as a max size of some internal buffers. Determines the maximum
 // length of a line that will be read from or written to the file or the
 // report output.
-#define MAX_BUFFER_LEN				512
+constexpr auto MAX_BUFFER_LEN = 512;
 
 
 // eDebugLevel
@@ -68,14 +68,13 @@ enum e_DebugLevel
 };
 
 
-typedef std::string t_Str;
 
 // CommentIndicators
 // This constant contains the characters that we check for to determine if a 
 // line is a comment or not. Note that the first character in this constant is
 // the one used when writing comments to disk (if the comment does not allready
 // contain an indicator)
-const t_Str CommentIndicators = t_Str(";#");
+const std::string CommentIndicators = ";#";
 
 // EqualIndicators
 // This constant contains the characters that we check against to determine if
@@ -84,66 +83,105 @@ const t_Str CommentIndicators = t_Str(";#");
 // ability of CDataFile to read/write to .ini files.  Also, note that the
 // first character in this constant is the one that is used when writing the
 // values to the file. (EqualIndicators[0])
-const t_Str EqualIndicators = t_Str("=:");
+constexpr std::string EqualIndicators = "=:";
 
 // WhiteSpace
 // This constant contains the characters that the Trim() function removes from
-// the head and tail of strings.
-const t_Str WhiteSpace = t_Str(" \t\n\r");
+// the head and tail of std::strings.
+constexpr std::string WhiteSpace = " \t\n\r";
 
 // st_key
 // This structure stores the definition of a key. A key is a named identifier
 // that is associated with a value. It may or may not have a comment.  All comments
 // must PRECEDE the key on the line in the config file.
-typedef struct st_key
+struct t_Key
 {
-    t_Str		szKey;
-    t_Str		szValue;
-    t_Str		szComment;
+    std::string		szKey;
+    std::string		szValue;
+    std::string		szComment;
 
-    st_key()
-    {
-        szKey = t_Str("");
-        szValue = t_Str("");
-        szComment = t_Str("");
-    }
+    t_Key(std::string_view key, std::string_view value, std::string_view comment) :
+        szKey(key),
+        szValue(value),
+        szComment(comment) 
+    {};
 
-} t_Key;
+    t_Key() :
+        szKey(""),
+        szValue(""),
+        szComment("")
+    {};
 
-typedef std::vector<t_Key> KeyList;
-typedef KeyList::iterator KeyItor;
+};
 
 // st_section
 // This structure stores the definition of a section. A section contains any number
 // of keys (see st_keys), and may or may not have a comment. Like keys, all
 // comments must precede the section.
-typedef struct st_section
+struct t_Section
 {
-    t_Str		szName;
-    t_Str		szComment;
-    KeyList		Keys;
+    std::string		    szName;
+    std::string		    szComment;
+    std::vector<t_Key>	Keys;
 
-    st_section()
-    {
-        szName = t_Str("");
-        szComment = t_Str("");
-        Keys.clear();
-    }
+    t_Section(std::string_view name, std::string_view comment, std::vector<t_Key>&& keys = {}) :
+        szName(name),
+        szComment(comment),
+        Keys(std::move(keys)) 
+    {};
 
-} t_Section;
+    t_Section() :
+        szName(""),
+        szComment(""),
+        Keys()
+    {}
 
-typedef std::vector<t_Section> SectionList;
-typedef SectionList::iterator SectionItor;
-
-
+};
 
 /// General Purpose Utility Functions ///////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////
-void	Report(e_DebugLevel DebugLevel, const char* fmt, ...);
-t_Str	GetNextWord(t_Str& CommandLine);
-int		CompareNoCase(t_Str str1, t_Str str2);
-void	Trim(t_Str& szStr);
-int		WriteLn(fstream& stream, const char* fmt, ...);
+template<class... Args>
+void Report(e_DebugLevel DebugLevel, const std::format_string<Args...> fmt, Args&&... args) 
+{
+    std::string szMsg = std::format(fmt, std::forward<Args>(args)...);
+
+    switch (DebugLevel) {
+    case e_DebugLevel::E_DEBUG:
+        szMsg = "<debug> " + szMsg;
+        break;
+    case e_DebugLevel::E_INFO:
+        szMsg = "<info> " + szMsg;
+        break;
+    case e_DebugLevel::E_WARN:
+        szMsg = "<warn> " + szMsg;
+        break;
+    case e_DebugLevel::E_ERROR:
+        szMsg = "<error> " + szMsg;
+        break;
+    case e_DebugLevel::E_FATAL:
+        szMsg = "<fatal> " + szMsg;
+        break;
+    case e_DebugLevel::E_CRITICAL:
+        szMsg = "<critical> " + szMsg;
+        break;
+    }
+
+    std::cout << szMsg << '\n';
+}
+std::string         GetNextWord(std::string& CommandLine);
+bool                CompareNoCase(std::string_view lhs, std::string_view rhs);
+std::string_view    Trim(std::string_view szStr);
+template<class... Args>
+size_t              WriteLn(std::fstream& stream, const std::format_string<Args...> fmt, Args&&... args)
+{
+    std::string buf = std::format(fmt, std::forward<Args>(args)...);
+
+    if (buf.back() != '\n')
+        buf.push_back('\n');
+
+    stream.write(buf.data(), buf.size());
+    return buf.size();
+}
 
 
 /// Class Definitions ///////////////////////////////////////////////////////////
@@ -157,71 +195,69 @@ class CDataFile
 public:
     // Constructors & Destructors
     /////////////////////////////////////////////////////////////////
-    CDataFile();
-    CDataFile(t_Str szFileName);
+    CDataFile(bool saveOnClose);
+    CDataFile(const std::filesystem::path& filePath, bool saveOnClose);
     virtual		~CDataFile();
 
     // File handling methods
     /////////////////////////////////////////////////////////////////
-    bool		Load(t_Str szFileName);
+    bool		Load(const std::filesystem::path& filePath);
     bool		Save();
 
     // Data handling methods
     /////////////////////////////////////////////////////////////////
 
-    // GetValue: Our default access method. Returns the raw t_Str value
+    // GetValue: Our default access method. Returns the raw std::string value
     // Note that this returns keys specific to the given section only.
-    t_Str		GetValue(t_Str szKey, t_Str szSection = t_Str(""));
-    // GetString: Returns the value as a t_Str
-    t_Str		GetString(t_Str szKey, t_Str szSection = t_Str(""));
-    // GetFloat: Return the value as a float
-    float		GetFloat(t_Str szKey, t_Str szSection = t_Str(""));
-    // GetInt: Return the value as an int
-    int			GetInt(t_Str szKey, t_Str szSection = t_Str(""));
-    // GetUInt: Return the value as an int
-    uint32_t	GetUInt(t_Str szKey, t_Str szSection = t_Str(""));
-    // GetBool: Return the value as a bool
-    bool		GetBool(t_Str szKey, t_Str szSection = t_Str(""));
-
-    // GetBoolOrDefault: Return the value as a bool or a default value if it's not found
-    bool		GetBoolOrDefault(t_Str szKey, t_Str szSection, bool defaultValue);
+    [[nodiscard]] std::optional<std::string>	GetValue(std::string_view szKey, std::string_view szSection = "");
+    // GetString: Returns the value as a string
+    [[nodiscard]] std::optional<std::string>	GetString(std::string_view szKey, std::string_view szSection = "");
+    // GetFloat: Returns the value as a float
+    [[nodiscard]] std::optional<float>	        GetFloat(std::string_view szKey, std::string_view szSection = "");
+    // GetInt: Returns the value as an int
+    [[nodiscard]] std::optional<int32_t>	    GetInt(std::string_view szKey, std::string_view szSection = "");
+    // GetUInt: Returns the value as an int
+    [[nodiscard]] std::optional<uint32_t>	    GetUInt(std::string_view szKey, std::string_view szSection = "");
+    // GetBool: Returns the value as a bool
+    [[nodiscard]] std::optional<bool>		    GetBool(std::string_view szKey, std::string_view szSection = "");
 
     // SetValue: Sets the value of a given key. Will create the
     // key if it is not found and AUTOCREATE_KEYS is active.
-    bool		SetValue(t_Str szKey, t_Str szValue,
-        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    bool		SetValue(std::string_view szKey, std::string_view szValue,
+        std::string_view szComment = "", std::string_view szSection = "");
 
     // SetFloat: Sets the value of a given key. Will create the
     // key if it is not found and AUTOCREATE_KEYS is active.
-    bool		SetFloat(t_Str szKey, float fValue,
-        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    bool		SetFloat(std::string_view szKey, float fValue,
+        std::string_view szComment = "", std::string_view szSection = "");
 
     // SetInt: Sets the value of a given key. Will create the
     // key if it is not found and AUTOCREATE_KEYS is active.
-    bool		SetInt(t_Str szKey, int nValue,
-        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    bool		SetInt(std::string_view szKey, int32_t nValue,
+        std::string_view szComment = "", std::string_view szSection = "");
 
     // SetUInt: Sets the value of a given key. Will create the
     // key if it is not found and AUTOCREATE_KEYS is active.
-    bool		SetUInt(t_Str szKey, uint32_t nValue,
-        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    bool		SetUInt(std::string_view szKey, uint32_t nValue,
+        std::string_view szComment = "", std::string_view szSection = "");
+
 
     // SetBool: Sets the value of a given key. Will create the
     // key if it is not found and AUTOCREATE_KEYS is active.
-    bool		SetBool(t_Str szKey, bool bValue,
-        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    bool		SetBool(std::string_view szKey, bool bValue,
+        std::string_view szComment = "", std::string_view szSection = "");
 
     // Sets the comment for a given key.
-    bool		SetKeyComment(t_Str szKey, t_Str szComment, t_Str szSection = t_Str(""));
+    bool		SetKeyComment(std::string_view szKey, std::string_view szComment, std::string_view szSection = "");
 
     // Sets the comment for a given section
-    bool		SetSectionComment(t_Str szSection, t_Str szComment);
+    bool		SetSectionComment(std::string_view szSection, std::string_view szComment);
 
     // DeleteKey: Deletes a given key from a specific section
-    bool		DeleteKey(t_Str szKey, t_Str szFromSection = t_Str(""));
+    bool		DeleteKey(std::string_view szKey, std::string_view szFromSection = "");
 
     // DeleteSection: Deletes a given section.
-    bool		DeleteSection(t_Str szSection);
+    bool		DeleteSection(std::string_view szSection);
 
     // Key/Section handling methods
     /////////////////////////////////////////////////////////////////
@@ -229,29 +265,31 @@ public:
     // CreateKey: Creates a new key in the requested section. The
     // Section will be created if it does not exist and the 
     // AUTOCREATE_SECTIONS bit is set.
-    bool		CreateKey(t_Str szKey, t_Str szValue,
-        t_Str szComment = t_Str(""), t_Str szSection = t_Str(""));
+    bool CreateKey(std::string_view szKey, std::string_view szValue,
+        std::string_view szComment = "", std::string_view szSection = "");
     // CreateSection: Creates the new section if it does not allready
     // exist. Section is created with no keys.
-    bool		CreateSection(t_Str szSection, t_Str szComment = t_Str(""));
+    bool CreateSection(std::string_view szSection, std::string_view szComment = "");
     // CreateSection: Creates the new section if it does not allready
     // exist, and copies the keys passed into it into the new section.
-    bool		CreateSection(t_Str szSection, t_Str szComment, KeyList Keys);
+    bool CreateSection(std::string_view szSection, std::string_view szComment, std::vector<t_Key> Keys);
 
     // Utility Methods
     /////////////////////////////////////////////////////////////////
     // SectionCount: Returns the number of valid sections in the database.
-    int			SectionCount();
+    [[nodiscard]] int SectionCount();
     // KeyCount: Returns the total number of keys, across all sections.
-    int			KeyCount();
+    [[nodiscard]] int KeyCount();
     // Clear: Initializes the member variables to their default states
-    void		Clear();
+    void Clear();
     // SetFileName: For use when creating the object by hand
     // initializes the file name so that it can be later saved.
-    void		SetFileName(t_Str szFileName);
+    void SetFileName(const std::filesystem::path& filePath);
     // CommentStr
     // Parses a string into a proper comment token/comment.
-    t_Str		CommentStr(t_Str szComment);
+    [[nodiscard]] std::string CommentStr(std::string_view szComment);
+    //
+    void SetSaveOnClose(bool saveOnClose) { m_saveOnClose = saveOnClose; };
 
 
 protected:
@@ -265,10 +303,10 @@ protected:
     // think carefully before changing this.
 
     // GetKey: Returns the requested key (if found) from the requested
-    // Section. Returns NULL otherwise.
-    t_Key* GetKey(t_Str szKey, t_Str szSection);
-    // GetSection: Returns the requested section (if found), NULL otherwise.
-    t_Section* GetSection(t_Str szSection);
+    // Section. Returns nullptr otherwise.
+    [[nodiscard]] t_Key* GetKey(std::string_view szKey, std::string_view szSection);
+    // GetSection: Returns the requested section (if found), nullptr otherwise.
+    [[nodiscard]] t_Section* GetSection(std::string_view szSection);
 
 
     // Data
@@ -276,9 +314,10 @@ public:
     long		m_Flags;		// Our settings flags.
 
 protected:
-    SectionList	m_Sections;		// Our list of sections
-    t_Str		m_szFileName;	// The filename to write to
-    bool		m_bDirty;		// Tracks whether or not data has changed.
+    std::vector<t_Section>	m_Sections;	   // Our list of sections
+    std::filesystem::path	m_filePath;	   // The filename to write to
+    bool		            m_bDirty;	   // Tracks whether or not data has changed.
+    bool                    m_saveOnClose; // Whether or not the file should be saved on close.
 };
 
 

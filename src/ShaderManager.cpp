@@ -210,7 +210,7 @@ namespace ShaderToggler
                 {
                     it = _collectedActiveShaderHashes.end();
                     --it;
-                    index = _collectedActiveShaderHashes.size() - 1;
+                    index = static_cast<int>(_collectedActiveShaderHashes.size() - 1);
                 }
                 hash = *it;
                 if (_markedShaderHashes.contains(hash))
@@ -233,7 +233,7 @@ namespace ShaderToggler
         }
         if (_activeHuntedShaderIndex <= 0)
         {
-            _activeHuntedShaderIndex = _collectedActiveShaderHashes.size() - 1;
+            _activeHuntedShaderIndex = static_cast<uint32_t>(_collectedActiveShaderHashes.size() - 1);
         }
         else
         {

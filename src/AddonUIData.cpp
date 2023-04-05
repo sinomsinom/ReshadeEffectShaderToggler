@@ -38,7 +38,7 @@ using namespace AddonImGui;
 AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandlerBase* cHandler, atomic_uint32_t* activeCollectorFrameCounter,
     vector<string>* techniques):
     _pixelShaderManager(pixelShaderManager), _vertexShaderManager(vertexShaderManager), _activeCollectorFrameCounter(activeCollectorFrameCounter),
-    _allTechniques(techniques), _constantHandler(cHandler)
+    _allTechniques(techniques), _constantHandler(cHandler), _iniFile(true)
 {
     _toggleGroupIdShaderEditing = -1;
     _overlayOpacity = 0.2f;
@@ -142,6 +142,15 @@ void AddonUIData::StopHuntingMode()
     _vertexShaderManager->stopHuntingMode();
 }
 
+void AddonUIData::AutoSave()
+{
+    if (_autoSaveConfig)
+    {
+        SaveShaderTogglerIniFile();
+    }
+}
+
+
 
 /// <summary>
 /// Adds a default group with VK_CAPITAL as toggle key. Only used if there aren't any groups defined in the ini file.
@@ -163,40 +172,34 @@ void AddonUIData::LoadShaderTogglerIniFile(const std::string& fileName)
 
     reshade::log_message(reshade::log_level::info, std::format("Loading config file from \"{}\"", (_basePath / fileName).string()).c_str());
 
-    CDataFile iniFile;
-    if (!iniFile.Load((_basePath / fileName).string()))
+    if (!_iniFile.Load(_basePath / fileName))
     {
         reshade::log_message(reshade::log_level::info, std::format("Could not find config file at \"{}\"", (_basePath / fileName).string()).c_str());
         // not there
         return;
     }
 
-    _attemptSRGBCorrection = iniFile.GetBool("AttemptSRGBCorrection", "General");
+    _autoSaveConfig = _iniFile.GetBool("AutoSaveConfig", "General").value_or(false);
+    _attemptSRGBCorrection = _iniFile.GetBool("AttemptSRGBCorrection", "General").value_or(false);
 
-    _constHookType = iniFile.GetValue("ConstantBufferHookType", "General");
-    if (_constHookType.size() <= 0)
-    {
-        _constHookType = "none";
-    }
+    _constHookType = _iniFile.GetValue("ConstantBufferHookType", "General")
+        .value_or("none");
 
-    _constHookCopyType = iniFile.GetValue("ConstantBufferHookCopyType", "General");
-    if (_constHookCopyType.size() <= 0)
-    {
-        _constHookCopyType = "singular";
-    }
+    _constHookCopyType = _iniFile.GetValue("ConstantBufferHookCopyType", "General")
+        .value_or("singular");
 
     for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
     {
-        uint32_t keybinding = iniFile.GetUInt(KeybindNames[i], "Keybindings");
-        if (keybinding != UINT_MAX)
+        auto keybinding = _iniFile.GetUInt(KeybindNames[i], "Keybindings");
+        if (keybinding.has_value())
         {
-            _keyBindings[i] = keybinding;
+            _keyBindings[i] = keybinding.value();
         }
     }
 
     int groupCounter = 0;
-    const int numberOfGroups = iniFile.GetInt("AmountGroups", "General");
-    if (numberOfGroups == INT_MIN)
+    const int numberOfGroups = _iniFile.GetInt("AmountGroups", "General").value_or(-1);
+    if (numberOfGroups == -1)
     {
         // old format file?
         AddDefaultGroup();
@@ -210,19 +213,19 @@ void AddonUIData::LoadShaderTogglerIniFile(const std::string& fileName)
             _toggleGroups.emplace(group.getId(), group);
         }
     }
-    for (auto& group : _toggleGroups)
+    for (auto& [id,group] : _toggleGroups)
     {
-        group.second.loadState(iniFile, groupCounter);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
+        group.loadState(_iniFile, groupCounter);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
         groupCounter++;
 
-        for (const auto& h : group.second.getPixelShaderHashes())
+        for (const auto& h : group.getPixelShaderHashes())
         {
-            _pixelShaderHashToToggleGroups[h].push_back(&group.second);
+            _pixelShaderHashToToggleGroups[h].push_back(&group);
         }
 
-        for (const auto& h : group.second.getVertexShaderHashes())
+        for (const auto& h : group.getVertexShaderHashes())
         {
-            _vertexShaderHashToToggleGroups[h].push_back(&group.second);
+            _vertexShaderHashToToggleGroups[h].push_back(&group);
         }
     }
 }
@@ -230,35 +233,37 @@ void AddonUIData::LoadShaderTogglerIniFile(const std::string& fileName)
 
 /// <summary>
 /// Saves the currently known toggle groups with their shader hashes to the shadertoggler.ini file
+/// fileName is appeded to basePath!
 /// </summary>
 void AddonUIData::SaveShaderTogglerIniFile(const std::string& fileName)
 {
     // format: first section with # of groups, then per group a section with pixel and vertex shaders, as well as their name and key value.
     // groups are stored with "Group" + group counter, starting with 0.
-    CDataFile iniFile;
+    _iniFile.SetSaveOnClose(_autoSaveConfig);
+    _iniFile.SetBool("AutoSaveConfig", _autoSaveConfig, "", "General");
 
-    iniFile.SetBool("AttemptSRGBCorrection", _attemptSRGBCorrection, "", "General");
+    _iniFile.SetBool("AttemptSRGBCorrection", _attemptSRGBCorrection, "", "General");
 
-    iniFile.SetValue("ConstantBufferHookType", _constHookType, "", "General");
-    iniFile.SetValue("ConstantBufferHookCopyType", _constHookCopyType, "", "General");
+    _iniFile.SetValue("ConstantBufferHookType", _constHookType, "", "General");
+    _iniFile.SetValue("ConstantBufferHookCopyType", _constHookCopyType, "", "General");
 
     for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)
     {
-        uint32_t keybinding = iniFile.SetUInt(KeybindNames[i], _keyBindings[i], "", "Keybindings");
+        uint32_t keybinding = _iniFile.SetUInt(KeybindNames[i], _keyBindings[i], "", "Keybindings");
     }
 
-    iniFile.SetInt("AmountGroups", static_cast<int>(_toggleGroups.size()), "", "General");
+    _iniFile.SetInt("AmountGroups", static_cast<int>(_toggleGroups.size()), "", "General");
 
     int groupCounter = 0;
-    for (const auto& group : _toggleGroups)
+    for (const auto& [id,group] : _toggleGroups)
     {
-        group.second.saveState(iniFile, groupCounter);
+        group.saveState(_iniFile, groupCounter);
         groupCounter++;
     }
     reshade::log_message(reshade::log_level::info, std::format("Creating config file at \"{}\"", (_basePath / fileName).string()).c_str());
 
-    iniFile.SetFileName((_basePath / fileName).string());
-    iniFile.Save();
+    _iniFile.SetFileName(_basePath / fileName);
+    _iniFile.Save();
 }
 
 
@@ -351,4 +356,11 @@ uint32_t AddonUIData::GetKeybinding(Keybind keybind)
 void AddonUIData::SetKeybinding(Keybind keybind, uint32_t keys)
 {
     _keyBindings[keybind] = keys;
+    AutoSave();
 }
+
+
+void AddonUIData::SetAutoSaveConfig(bool autoSaveConfig) {
+    _autoSaveConfig = autoSaveConfig; 
+    AutoSave(); 
+};

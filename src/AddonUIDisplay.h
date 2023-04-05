@@ -412,7 +412,37 @@ static void ShowHelpMarker(const char* desc)
 }
 
 
-static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
+static void ParameterSection(AddonImGui::AddonUIData& instance)
+{
+    if (ImGui::CollapsingHeader("Shader selection parameters", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
+        ImGui::SliderFloat("Overlay opacity", instance.OverlayOpacity(), 0.0f, 1.0f);
+        ImGui::AlignTextToFramePadding();
+        ImGui::SliderInt("# of frames to collect", instance.StartValueFramecountCollectionPhase(), 10, 1000);
+        ImGui::SameLine();
+        ShowHelpMarker("This is the number of frames the addon will collect active shaders. Set this to a high number if the shader you want to mark is only used occasionally. Only shaders that are used in the frames collected can be marked.");
+        ImGui::PopItemWidth();
+    }
+}
+
+static void OptionSection(AddonImGui::AddonUIData& instance)
+{
+    if (ImGui::CollapsingHeader("General Options", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        bool autoSaveConfig = instance.IsAutoSaveConfig();
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
+        ImGui::LabelText("##SetAutoSave","Autosave config");
+        ImGui::SameLine();
+        ImGui::Checkbox("##SetAutoSave", &autoSaveConfig);
+        instance.SetAutoSaveConfig(autoSaveConfig);
+        ImGui::PopItemWidth();
+    }
+}
+
+static void InfoSection()
 {
     if (ImGui::CollapsingHeader("General info and help"))
     {
@@ -429,21 +459,10 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
         ImGui::TextUnformatted("When you're done, make sure you click 'Save all toggle groups' to preserve the groups you defined so next time you start your game they're loaded in and you can use them right away.");
         ImGui::PopTextWrapPos();
     }
+}
 
-    ImGui::AlignTextToFramePadding();
-    if (ImGui::CollapsingHeader("Shader selection parameters", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::AlignTextToFramePadding();
-        ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
-        ImGui::SliderFloat("Overlay opacity", instance.OverlayOpacity(), 0.0f, 1.0f);
-        ImGui::AlignTextToFramePadding();
-        ImGui::SliderInt("# of frames to collect", instance.StartValueFramecountCollectionPhase(), 10, 1000);
-        ImGui::SameLine();
-        ShowHelpMarker("This is the number of frames the addon will collect active shaders. Set this to a high number if the shader you want to mark is only used occasionally. Only shaders that are used in the frames collected can be marked.");
-        ImGui::PopItemWidth();
-    }
-    ImGui::Separator();
-
+static void KeybindingsSection(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
+{
     if (ImGui::CollapsingHeader("Keybindings", ImGuiTreeNodeFlags_None))
     {
         for (uint32_t i = 0; i < IM_ARRAYSIZE(AddonImGui::KeybindNames); i++)
@@ -457,7 +476,10 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
             ImGui::PopItemWidth();
         }
     }
+}
 
+static void ListOfToggleGroupsSection(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
+{
     if (ImGui::CollapsingHeader("List of Toggle Groups", ImGuiTreeNodeFlags_DefaultOpen))
     {
         if (ImGui::Button(" New "))
@@ -467,9 +489,8 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
         ImGui::Separator();
 
         std::vector<ToggleGroup> toRemove;
-        for (auto& groupKV : instance.GetToggleGroups())
+        for (auto& [groupKey, group] : instance.GetToggleGroups())
         {
-            ToggleGroup& group = groupKV.second;
 
             ImGui::PushID(group.getId());
             ImGui::AlignTextToFramePadding();
@@ -491,6 +512,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
                 {
                     instance.GetConstantHandler()->RemoveGroup(&group, runtime->get_device());
                 }
+                instance.AutoSave();
             }
 
             ImGui::SameLine();
@@ -622,13 +644,13 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
                     ImGui::EndDisabled();
                 }
                 ImGui::PopItemWidth();
-                
+
                 group.setTextureBindingName(tmpBuffer);
 
                 ImGui::SameLine(ImGui::GetWindowWidth() * 0.905f);
                 ImGui::Checkbox("##isBindingEnabled", &isBindingEnabled);
                 group.setProvidingTextureBinding(isBindingEnabled);
-                
+
                 // Key binding of group
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.7f);
                 ImGui::AlignTextToFramePadding();
@@ -645,6 +667,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
                 if (ImGui::Button("OK"))
                 {
                     group.setEditing(false);
+                    instance.AutoSave();
                 }
                 ImGui::Separator();
             }
@@ -680,4 +703,21 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
             }
         }
     }
+}
+
+static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
+{
+    //Major Section 1
+    InfoSection();
+
+    ImGui::AlignTextToFramePadding();
+    ParameterSection(instance);
+
+    OptionSection(instance);
+
+    ImGui::Separator();
+
+    KeybindingsSection(instance, runtime);
+
+    ListOfToggleGroupsSection(instance, runtime);
 }

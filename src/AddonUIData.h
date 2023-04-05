@@ -106,6 +106,9 @@ namespace AddonImGui
         string _constHookCopyType = "singular";
         bool _attemptSRGBCorrection = false;
         std::filesystem::path _basePath;
+        //std::string _selectedIni = HASH_FILE_NAME;
+        bool _autoSaveConfig = false;
+        CDataFile _iniFile;
     public:
         AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandlerBase* constants, atomic_uint32_t* activeCollectorFrameCounter,
             vector<string>* techniques);
@@ -122,6 +125,7 @@ namespace AddonImGui
         void StartConstantEditing(ToggleGroup& groupEditing);
         void EndConstantEditing();
         void StopHuntingMode();
+        void AutoSave();
         void SetBasePath(const std::filesystem::path& basePath) { _basePath = basePath; };
         std::filesystem::path GetBasePath() { return _basePath; };
         void SaveShaderTogglerIniFile(const std::string& fileName = HASH_FILE_NAME);
@@ -145,7 +149,9 @@ namespace AddonImGui
         const string& GetConstHookCopyType()  { return _constHookCopyType; }
         bool GetAttemptSRGBCorrection() { return _attemptSRGBCorrection; }
         void SetKeybinding(Keybind keybind, uint32_t keys);
-        const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables() { return _constantHandler->GetRESTVariables(); };
+        bool IsAutoSaveConfig() { return _autoSaveConfig; };
+        void SetAutoSaveConfig(bool autoSaveConfig);
+        const unordered_map<std::string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables() { return _constantHandler->GetRESTVariables(); };
         reshade::api::format cFormat;
     };
 }

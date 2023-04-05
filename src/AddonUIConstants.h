@@ -199,12 +199,12 @@ static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ToggleGroup* g
             ImGuiListClipper clipper;
 
             double clipElements = (static_cast<double>(elements) + static_cast<double>(elements) / static_cast<double>(columns)) / static_cast<double>(columns + 1);
-            clipper.Begin(ceil(clipElements));
+            clipper.Begin(static_cast<int>(ceil(clipElements)));
             while (clipper.Step())
             {
                 for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
                 {
-                    for (int i = row * (columns + 1); i < row * (columns + 1) + (columns + 1); i++)
+                    for (auto i = row * (columns + 1); i < row * (columns + 1) + (columns + 1); i++)
                     {
                         if (i % (columns + 1) == 0)
                         {

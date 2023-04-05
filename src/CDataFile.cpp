@@ -42,6 +42,9 @@
 #include <stdarg.h>
 #include <fstream>
 #include <float.h>
+#include <ranges>
+#include <optional>
+#include <format>
 
 #ifdef WIN32
 #include <windows.h>
@@ -60,28 +63,29 @@
 // CDataFile
 // Our default contstructor.  If it can load the file, it will do so and populate
 // the section list with the values from the file.
-CDataFile::CDataFile(t_Str szFileName)
+CDataFile::CDataFile(const std::filesystem::path& filePath, bool saveOnClose):
+    m_bDirty(false),
+    m_filePath(filePath),
+    m_Flags((AUTOCREATE_SECTIONS | AUTOCREATE_KEYS)),
+    m_saveOnClose(saveOnClose)
 {
-    m_bDirty = false;
-    m_szFileName = szFileName;
-    m_Flags = (AUTOCREATE_SECTIONS | AUTOCREATE_KEYS);
-    m_Sections.push_back(*(new t_Section));
+    m_Sections.emplace_back(t_Section());
 
-    Load(m_szFileName);
+    Load(m_filePath);
 }
 
-CDataFile::CDataFile()
+CDataFile::CDataFile(bool saveOnClose)
 {
     Clear();
     m_Flags = (AUTOCREATE_SECTIONS | AUTOCREATE_KEYS);
-    m_Sections.push_back(*(new t_Section));
+    m_Sections.emplace_back(t_Section());
 }
 
 // ~CDataFile
 // Saves the file if any values have changed since the last save.
 CDataFile::~CDataFile()
 {
-    if (m_bDirty)
+    if (m_bDirty && m_saveOnClose)
         Save();
 }
 
@@ -90,35 +94,37 @@ CDataFile::~CDataFile()
 void CDataFile::Clear()
 {
     m_bDirty = false;
-    m_szFileName = t_Str("");
+    m_filePath = "";
     m_Sections.clear();
 }
 
 // SetFileName
 // Set's the m_szFileName member variable. For use when creating the CDataFile
 // object by hand (-vs- loading it from a file
-void CDataFile::SetFileName(t_Str szFileName)
+void CDataFile::SetFileName(const std::filesystem::path& filePath)
 {
-    if (m_szFileName.size() != 0 && CompareNoCase(szFileName, m_szFileName) != 0)
+    const std::string filePathStr = filePath.string();
+    const std::string m_filePathStr = m_filePath.string();
+    if (!m_filePath.empty() && !CompareNoCase(filePathStr, m_filePathStr))
     {
         m_bDirty = true;
 
-        Report(E_WARN, "[CDataFile::SetFileName] The filename has changed from <%s> to <%s>.",
-            m_szFileName.c_str(), szFileName.c_str());
+        Report(E_WARN, "[CDataFile::SetFileName] The filename has changed from <{}> to <{}>.",
+            m_filePathStr, filePathStr);
     }
 
-    m_szFileName = szFileName;
+    m_filePath = filePath;
 }
 
 // Load
 // Attempts to load in the text file. If successful it will populate the 
 // Section list with the key/value pairs found in the file. Note that comments
 // are saved so that they can be rewritten to the file later.
-bool CDataFile::Load(t_Str szFileName)
+bool CDataFile::Load(const std::filesystem::path& filePath)
 {
     // We dont want to create a new file here.  If it doesn't exist, just
     // return false and report the failure.
-    fstream File(szFileName.c_str(), ios::in);
+    std::fstream File(filePath, std::ios::in);
 
     if (File.is_open())
     {
@@ -126,8 +132,8 @@ bool CDataFile::Load(t_Str szFileName)
         bool bAutoKey = (m_Flags & AUTOCREATE_KEYS) == AUTOCREATE_KEYS;
         bool bAutoSec = (m_Flags & AUTOCREATE_SECTIONS) == AUTOCREATE_SECTIONS;
 
-        t_Str szLine;
-        t_Str szComment;
+        std::string szLine;
+        std::string szComment;
         char buffer[MAX_BUFFER_LEN];
         t_Section* pSection = GetSection("");
 
@@ -141,7 +147,7 @@ bool CDataFile::Load(t_Str szFileName)
             File.getline(buffer, MAX_BUFFER_LEN);
 
             szLine = buffer;
-            Trim(szLine);
+            szLine = Trim(szLine);
 
             bDone = (File.eof() || File.bad() || File.fail());
 
@@ -158,18 +164,18 @@ bool CDataFile::Load(t_Str szFileName)
 
                     CreateSection(szLine, szComment);
                     pSection = GetSection(szLine);
-                    szComment = t_Str("");
+                    szComment = "";
                 }
                 else
                     if (szLine.size() > 0) // we have a key, add this key/value pair
                     {
-                        t_Str szKey = GetNextWord(szLine);
-                        t_Str szValue = szLine;
+                        std::string szKey = GetNextWord(szLine);
+                        std::string szValue = szLine;
 
                         if (szKey.size() > 0 && szValue.size() > 0)
                         {
                             SetValue(szKey, szValue, szComment, pSection->szName);
-                            szComment = t_Str("");
+                            szComment = "";
                         }
                     }
         }
@@ -206,52 +212,47 @@ bool CDataFile::Save()
         return false;
     }
 
-    if (m_szFileName.size() == 0)
+    if (m_filePath.empty())
     {
         Report(E_ERROR, "[CDataFile::Save] No filename has been set.");
         return false;
     }
 
-    fstream File(m_szFileName.c_str(), ios::out | ios::trunc);
+    std::fstream File(m_filePath, std::ios::out | std::ios::trunc);
 
     if (File.is_open())
     {
-        SectionItor s_pos;
-        KeyItor k_pos;
-        t_Section Section;
-        t_Key Key;
-
-        for (s_pos = m_Sections.begin(); s_pos != m_Sections.end(); s_pos++)
+        for (const auto& Section : m_Sections)
         {
-            Section = (*s_pos);
-            bool bWroteComment = false;
+            bool isComment = !Section.szComment.empty();
+            bool isSection = !Section.szName.empty();
 
-            if (Section.szComment.size() > 0)
+            if (isComment)
             {
-                bWroteComment = true;
-                WriteLn(File, "\n%s", CommentStr(Section.szComment).c_str());
+                WriteLn(File, "\n{}", CommentStr(Section.szComment));
+                //File << std::format("\n{}\n", CommentStr(Section.szComment));
             }
 
-            if (Section.szName.size() > 0)
+            if (isSection)
             {
-                WriteLn(File, "%s[%s]",
-                    bWroteComment ? "" : "\n",
-                    Section.szName.c_str());
+                WriteLn(File, "{}[{}]",
+                    isComment ? "" : "\n",
+                    Section.szName);
+                //File << std::format("{}[{}]\n", isComment ? "" : "\n", Section.szName);
             }
 
-            for (k_pos = Section.Keys.begin(); k_pos != Section.Keys.end(); k_pos++)
+            for (const auto& [key,value,comment] : Section.Keys)
             {
-                Key = (*k_pos);
-
-                if (Key.szKey.size() > 0 && Key.szValue.size() > 0)
+                if (!key.empty() && !value.empty())
                 {
-                    WriteLn(File, "%s%s%s%s%c%s",
-                        Key.szComment.size() > 0 ? "\n" : "",
-                        CommentStr(Key.szComment).c_str(),
-                        Key.szComment.size() > 0 ? "\n" : "",
-                        Key.szKey.c_str(),
+                    bool isComment = !comment.empty();
+                    WriteLn(File, "{}{}{}{}{}{}",
+                        isComment ? "\n" : "",
+                        CommentStr(comment),
+                        isComment ? "\n" : "",
+                        key,
                         EqualIndicators[0],
-                        Key.szValue.c_str());
+                        value);
                 }
             }
         }
@@ -265,27 +266,23 @@ bool CDataFile::Save()
 
     m_bDirty = false;
 
-    File.flush();
-    File.close();
-
     return true;
 }
 
 // SetKeyComment
 // Set the comment of a given key. Returns true if the key is not found.
-bool CDataFile::SetKeyComment(t_Str szKey, t_Str szComment, t_Str szSection)
+bool CDataFile::SetKeyComment(std::string_view szKey, std::string_view szComment, std::string_view szSection)
 {
-    KeyItor k_pos;
-    t_Section* pSection;
+    t_Section* pSection = GetSection(szSection);
 
-    if ((pSection = GetSection(szSection)) == NULL)
+    if (pSection == nullptr)
         return false;
 
-    for (k_pos = pSection->Keys.begin(); k_pos != pSection->Keys.end(); k_pos++)
+    for (auto& key : pSection->Keys)
     {
-        if (CompareNoCase((*k_pos).szKey, szKey) == 0)
+        if (CompareNoCase(key.szKey, szKey))
         {
-            (*k_pos).szComment = szComment;
+            key.szComment = szComment;
             m_bDirty = true;
             return true;
         }
@@ -295,18 +292,18 @@ bool CDataFile::SetKeyComment(t_Str szKey, t_Str szComment, t_Str szSection)
 
 }
 
+
 // SetSectionComment
 // Set the comment for a given section. Returns false if the section
 // was not found.
-bool CDataFile::SetSectionComment(t_Str szSection, t_Str szComment)
+bool CDataFile::SetSectionComment(std::string_view szSection, std::string_view szComment)
 {
-    SectionItor s_pos;
 
-    for (s_pos = m_Sections.begin(); s_pos != m_Sections.end(); s_pos++)
+    for (auto& section :m_Sections)
     {
-        if (CompareNoCase((*s_pos).szName, szSection) == 0)
+        if (CompareNoCase(section.szName, szSection))
         {
-            (*s_pos).szComment = szComment;
+            section.szComment = szComment;
             m_bDirty = true;
             return true;
         }
@@ -321,12 +318,12 @@ bool CDataFile::SetSectionComment(t_Str szSection, t_Str szComment)
 // Key within the given section, and if it finds it, change the keys value to
 // the new value. If it does not locate the key, it will create a new key with
 // the proper value and place it in the section requested.
-bool CDataFile::SetValue(t_Str szKey, t_Str szValue, t_Str szComment, t_Str szSection)
+bool CDataFile::SetValue(std::string_view szKey, std::string_view szValue, std::string_view szComment, std::string_view szSection)
 {
     t_Key* pKey = GetKey(szKey, szSection);
     t_Section* pSection = GetSection(szSection);
 
-    if (pSection == NULL)
+    if (pSection == nullptr)
     {
         if (!(m_Flags & AUTOCREATE_SECTIONS) || !CreateSection(szSection, ""))
             return false;
@@ -335,27 +332,21 @@ bool CDataFile::SetValue(t_Str szKey, t_Str szValue, t_Str szComment, t_Str szSe
     }
 
     // Sanity check...
-    if (pSection == NULL)
+    if (pSection == nullptr)
         return false;
 
     // if the key does not exist in that section, and the value passed 
-    // is not t_Str("") then add the new key.
-    if (pKey == NULL && szValue.size() > 0 && (m_Flags & AUTOCREATE_KEYS))
+    // is not "" then add the new key.
+    if (pKey == nullptr && !szValue.empty() && (m_Flags & AUTOCREATE_KEYS))
     {
-        pKey = new t_Key;
-
-        pKey->szKey = szKey;
-        pKey->szValue = szValue;
-        pKey->szComment = szComment;
-
         m_bDirty = true;
 
-        pSection->Keys.push_back(*pKey);
+        pSection->Keys.emplace_back(szKey, szValue, szComment);
 
         return true;
     }
 
-    if (pKey != NULL)
+    if (pKey != nullptr)
     {
         pKey->szValue = szValue;
         pKey->szComment = szComment;
@@ -369,65 +360,51 @@ bool CDataFile::SetValue(t_Str szKey, t_Str szValue, t_Str szComment, t_Str szSe
 }
 
 // SetFloat
-// Passes the given float to SetValue as a string
-bool CDataFile::SetFloat(t_Str szKey, float fValue, t_Str szComment, t_Str szSection)
+// Passes the given float to SetValue as a std::string
+bool CDataFile::SetFloat(std::string_view szKey, float fValue, std::string_view szComment, std::string_view szSection)
 {
-    char szStr[64];
-
-    _snprintf_s(szStr, 64, "%f", fValue);
-
-    return SetValue(szKey, szStr, szComment, szSection);
+    return SetValue(szKey, std::format("{}", fValue), szComment, szSection);
 }
 
 // SetInt
-// Passes the given int to SetValue as a string
-bool CDataFile::SetInt(t_Str szKey, int nValue, t_Str szComment, t_Str szSection)
+// Passes the given int to SetValue as a std::string
+bool CDataFile::SetInt(std::string_view szKey, int32_t nValue, std::string_view szComment, std::string_view szSection)
 {
-    char szStr[64];
-
-    _snprintf_s(szStr, 64, "%d", nValue);
-
-    return SetValue(szKey, szStr, szComment, szSection);
-
+    return SetValue(szKey, std::format("{:d}", nValue), szComment, szSection);
 }
 
 
 // SetUInt
-// Passes the given int to SetValue as a string
-bool CDataFile::SetUInt(t_Str szKey, uint32_t nValue, t_Str szComment, t_Str szSection)
+// Passes the given int to SetValue as a std::string
+bool CDataFile::SetUInt(std::string_view szKey, uint32_t nValue, std::string_view szComment, std::string_view szSection)
 {
-    char szStr[64];
-
-    _snprintf_s(szStr, 64, "%u", nValue);
-
-    return SetValue(szKey, szStr, szComment, szSection);
-
+    return SetValue(szKey, std::format("{:u}",nValue), szComment, szSection);
 }
 
 
 // SetBool
-// Passes the given bool to SetValue as a string
-bool CDataFile::SetBool(t_Str szKey, bool bValue, t_Str szComment, t_Str szSection)
+// Passes the given bool to SetValue as a std::string
+bool CDataFile::SetBool(std::string_view szKey, bool bValue, std::string_view szComment, std::string_view szSection)
 {
-    t_Str szValue = bValue ? "True" : "False";
-
-    return SetValue(szKey, szValue, szComment, szSection);
+    return SetValue(szKey, bValue ? "True" : "False", szComment, szSection);
 }
 
 // GetValue
-// Returns the key value as a t_Str object. A return value of
-// t_Str("") indicates that the key could not be found.
-t_Str CDataFile::GetValue(t_Str szKey, t_Str szSection)
+// Returns the key value as a std::string object. A return value of
+// "" indicates that the key could not be found.
+[[nodiscard]] std::optional<std::string> CDataFile::GetValue(std::string_view szKey, std::string_view szSection)
 {
     t_Key* pKey = GetKey(szKey, szSection);
 
-    return (pKey == NULL) ? t_Str("") : pKey->szValue;
+    if (pKey == nullptr) return nullopt;
+
+    return pKey->szValue;
 }
 
-// GetString
-// Returns the key value as a t_Str object. A return value of
-// t_Str("") indicates that the key could not be found.
-t_Str CDataFile::GetString(t_Str szKey, t_Str szSection)
+// Getstd::string
+// Returns the key value as a std::string object. A return value of
+// "" indicates that the key could not be found.
+[[nodiscard]] std::optional<std::string> CDataFile::GetString(std::string_view szKey, std::string_view szSection)
 {
     return GetValue(szKey, szSection);
 }
@@ -435,124 +412,80 @@ t_Str CDataFile::GetString(t_Str szKey, t_Str szSection)
 // GetFloat
 // Returns the key value as a float type. Returns FLT_MIN if the key is
 // not found.
-float CDataFile::GetFloat(t_Str szKey, t_Str szSection)
+[[nodiscard]] std::optional<float> CDataFile::GetFloat(std::string_view szKey, std::string_view szSection)
 {
-    t_Str szValue = GetValue(szKey, szSection);
-
-    if (szValue.size() == 0)
-        return FLT_MIN;
-
-    return (float)atof(szValue.c_str());
+    return GetValue(szKey, szSection)
+        .transform([](const std::string& str) {return static_cast<float>(stof(str)); });
 }
 
 // GetInt
 // Returns the key value as an integer type. Returns INT_MIN if the key is
 // not found.
-int	CDataFile::GetInt(t_Str szKey, t_Str szSection)
+[[nodiscard]] std::optional<int32_t> CDataFile::GetInt(std::string_view szKey, std::string_view szSection)
 {
-    t_Str szValue = GetValue(szKey, szSection);
-
-    if (szValue.size() == 0)
-        return INT_MIN;
-
-    return atoi(szValue.c_str());
+    return GetValue(szKey, szSection)
+        .transform([](const std::string& str) {return static_cast<int32_t>(std::stoi(str)); });
 }
 
 // GetUInt
 // Returns the key value as an integer type. Returns UINT_MAX if the key is
 // not found.
-uint32_t CDataFile::GetUInt(t_Str szKey, t_Str szSection)
+[[nodiscard]] std::optional<uint32_t> CDataFile::GetUInt(std::string_view szKey, std::string_view szSection)
 {
-    t_Str szValue = GetValue(szKey, szSection);
-
-    if (szValue.size() == 0)
-        return UINT_MAX;
-
-    return static_cast<uint32_t>(atoll(szValue.c_str()));
+    return GetValue(szKey, szSection)
+        .transform([](const std::string& str) { return static_cast<uint32_t>(std::stoul(str)); });
 }
 
 // GetBool
-// Returns the key value as a bool type. Returns false if the key is
+// Returns the key value as a bool type. Returns nullopt if the key is
 // not found.
-bool CDataFile::GetBool(t_Str szKey, t_Str szSection)
+[[nodiscard]] std::optional<bool> CDataFile::GetBool(std::string_view szKey, std::string_view szSection)
 {
-    bool bValue = false;
-    t_Str szValue = GetValue(szKey, szSection);
+    const auto valueOpt = GetValue(szKey, szSection);
+    if (!valueOpt.has_value()) return std::nullopt;
 
-    if (szValue.find("1") == 0
-        || CompareNoCase(szValue, "true") == 0
-        || CompareNoCase(szValue, "yes") == 0)
-    {
-        bValue = true;
-    }
+    const auto& value = valueOpt.value();
 
-    return bValue;
-}
+    if (CompareNoCase(value, "true")
+        || CompareNoCase(value, "yes")
+        || value.find("1") == 0)
+        return true;
+    if (value.find("0") == 0
+        || CompareNoCase(value, "false") == 0
+        || CompareNoCase(value, "no") == 0)
+        return false;
 
-// GetBool
-// Returns the key value as a bool type. Returns false if the key is
-// not found.
-bool CDataFile::GetBoolOrDefault(t_Str szKey, t_Str szSection, bool defaultValue)
-{
-    bool bValue = defaultValue;
-    t_Str szValue = GetValue(szKey, szSection);
-
-    if (szValue.find("1") == 0
-        || CompareNoCase(szValue, "true") == 0
-        || CompareNoCase(szValue, "yes") == 0)
-    {
-        bValue = true;
-    }
-    else if (szValue.find("0") == 0
-        || CompareNoCase(szValue, "false") == 0
-        || CompareNoCase(szValue, "no") == 0)
-    {
-        bValue = false;
-    }
-
-    return bValue;
+    return std::nullopt;
 }
 
 // DeleteSection
 // Delete a specific section. Returns false if the section cannot be 
 // found or true when sucessfully deleted.
-bool CDataFile::DeleteSection(t_Str szSection)
+bool CDataFile::DeleteSection(std::string_view szSection)
 {
-    SectionItor s_pos;
+    const auto pred = [&](const t_Section& section) {
+        return CompareNoCase(section.szName, szSection);
+    };
+    auto numErased = std::erase_if(m_Sections, pred);
 
-    for (s_pos = m_Sections.begin(); s_pos != m_Sections.end(); s_pos++)
-    {
-        if (CompareNoCase((*s_pos).szName, szSection) == 0)
-        {
-            m_Sections.erase(s_pos);
-            return true;
-        }
-    }
-
-    return false;
+    return numErased > 0;
 }
 
 // DeleteKey
 // Delete a specific key in a specific section. Returns false if the key
 // cannot be found or true when sucessfully deleted.
-bool CDataFile::DeleteKey(t_Str szKey, t_Str szFromSection)
+bool CDataFile::DeleteKey(std::string_view szKey, std::string_view szFromSection)
 {
-    KeyItor k_pos;
-    t_Section* pSection;
+    t_Section* pSection = GetSection(szFromSection);
 
-    if ((pSection = GetSection(szFromSection)) == NULL)
+    if (pSection == nullptr)
         return false;
 
-    for (k_pos = pSection->Keys.begin(); k_pos != pSection->Keys.end(); k_pos++)
-    {
-        if (CompareNoCase((*k_pos).szKey, szKey) == 0)
-        {
-            pSection->Keys.erase(k_pos);
-            return true;
-        }
-    }
+    auto pred = [&](const t_Key& key) {return CompareNoCase(key.szKey, szKey);};
+    auto numErased = std::erase_if(pSection->Keys,pred);
 
-    return false;
+
+    return numErased > 0;
 }
 
 // CreateKey
@@ -560,7 +493,7 @@ bool CDataFile::DeleteKey(t_Str szKey, t_Str szFromSection)
 // Key within the given section, and if it finds it, change the keys value to
 // the new value. If it does not locate the key, it will create a new key with
 // the proper value and place it in the section requested.
-bool CDataFile::CreateKey(t_Str szKey, t_Str szValue, t_Str szComment, t_Str szSection)
+bool CDataFile::CreateKey(std::string_view szKey, std::string_view szValue, std::string_view szComment, std::string_view szSection)
 {
     bool bAutoKey = (m_Flags & AUTOCREATE_KEYS) == AUTOCREATE_KEYS;
     bool bReturn = false;
@@ -581,21 +514,17 @@ bool CDataFile::CreateKey(t_Str szKey, t_Str szValue, t_Str szComment, t_Str szS
 // allready exists in the list or not, if not, it creates the new section and
 // assigns it the comment given in szComment.  The function returns true if
 // sucessfully created, or false otherwise. 
-bool CDataFile::CreateSection(t_Str szSection, t_Str szComment)
+bool CDataFile::CreateSection(std::string_view szSection, std::string_view szComment)
 {
     t_Section* pSection = GetSection(szSection);
 
     if (pSection)
     {
-        Report(E_INFO, "[CDataFile::CreateSection] Section <%s> allready exists. Aborting.", szSection.c_str());
+        Report(E_INFO, "[CDataFile::CreateSection] Section <{}> allready exists. Aborting.", std::string(szSection));
         return false;
     }
 
-    pSection = new t_Section;
-
-    pSection->szName = szSection;
-    pSection->szComment = szComment;
-    m_Sections.push_back(*pSection);
+    m_Sections.emplace_back(szSection, szComment);
     m_bDirty = true;
 
     return true;
@@ -607,27 +536,21 @@ bool CDataFile::CreateSection(t_Str szSection, t_Str szComment)
 // assigns it the comment given in szComment.  The function returns true if
 // sucessfully created, or false otherwise. This version accpets a KeyList 
 // and sets up the newly created Section with the keys in the list.
-bool CDataFile::CreateSection(t_Str szSection, t_Str szComment, KeyList Keys)
+bool CDataFile::CreateSection(std::string_view szSection, std::string_view szComment, std::vector<t_Key> Keys)
 {
     if (!CreateSection(szSection, szComment))
         return false;
 
     t_Section* pSection = GetSection(szSection);
 
-    if (!pSection)
+    if (pSection == nullptr)
         return false;
 
-    KeyItor k_pos;
 
     pSection->szName = szSection;
-    for (k_pos = Keys.begin(); k_pos != Keys.end(); k_pos++)
+    for(const auto& key : Keys)
     {
-        t_Key* pKey = new t_Key;
-        pKey->szComment = (*k_pos).szComment;
-        pKey->szKey = (*k_pos).szKey;
-        pKey->szValue = (*k_pos).szValue;
-
-        pSection->Keys.push_back(*pKey);
+        pSection->Keys.emplace_back(key.szComment, key.szKey, key.szValue);
     }
 
     m_Sections.push_back(*pSection);
@@ -638,20 +561,19 @@ bool CDataFile::CreateSection(t_Str szSection, t_Str szComment, KeyList Keys)
 
 // SectionCount
 // Simply returns the number of sections in the list.
-int CDataFile::SectionCount()
+[[nodiscard]] int CDataFile::SectionCount()
 {
     return static_cast<int>(m_Sections.size());
 }
 
 // KeyCount
 // Returns the total number of keys contained within all the sections.
-int CDataFile::KeyCount()
+[[nodiscard]] int CDataFile::KeyCount()
 {
     int nCounter = 0;
-    SectionItor s_pos;
 
-    for (s_pos = m_Sections.begin(); s_pos != m_Sections.end(); s_pos++)
-        nCounter += static_cast<int>((*s_pos).Keys.size());
+    for (const auto& section: m_Sections)
+        nCounter += static_cast<int>(section.Keys.size());
 
     return nCounter;
 }
@@ -663,51 +585,48 @@ int CDataFile::KeyCount()
 // GetKey
 // Given a key and section name, looks up the key and if found, returns a
 // pointer to that key, otherwise returns NULL.
-t_Key* CDataFile::GetKey(t_Str szKey, t_Str szSection)
+t_Key* CDataFile::GetKey(std::string_view szKey, std::string_view szSection)
 {
-    KeyItor k_pos;
-    t_Section* pSection;
+    t_Section* pSection = GetSection(szSection);
 
-    // Since our default section has a name value of t_Str("") this should
+    // Since our default section has a name value of "" this should
     // always return a valid section, wether or not it has any keys in it is
     // another matter.
-    if ((pSection = GetSection(szSection)) == NULL)
-        return NULL;
+    if (pSection == nullptr)
+        return nullptr;
 
-    for (k_pos = pSection->Keys.begin(); k_pos != pSection->Keys.end(); k_pos++)
+    for(auto& key : pSection->Keys)
     {
-        if (CompareNoCase((*k_pos).szKey, szKey) == 0)
-            return (t_Key*)&(*k_pos);
+        if (CompareNoCase(key.szKey, szKey))
+            return &key;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 // GetSection
 // Given a section name, locates that section in the list and returns a pointer
 // to it. If the section was not found, returns NULL
-t_Section* CDataFile::GetSection(t_Str szSection)
+t_Section* CDataFile::GetSection(std::string_view szSection)
 {
-    SectionItor s_pos;
-
-    for (s_pos = m_Sections.begin(); s_pos != m_Sections.end(); s_pos++)
+    for (auto& section: m_Sections)
     {
-        if (CompareNoCase((*s_pos).szName, szSection) == 0)
-            return (t_Section*)&(*s_pos);
+        if (CompareNoCase(section.szName, szSection))
+            return &section;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 
-t_Str CDataFile::CommentStr(t_Str szComment)
+std::string CDataFile::CommentStr(std::string_view szComment)
 {
-    t_Str szNewStr = t_Str("");
+    std::string szNewStr = "";
 
-    Trim(szComment);
+    szComment = Trim(szComment);
 
-    if (szComment.size() == 0)
-        return szComment;
+    if (szComment.empty())
+        return std::string(szComment);
 
     if (szComment.find_first_of(CommentIndicators) != 0)
     {
@@ -726,13 +645,13 @@ t_Str CDataFile::CommentStr(t_Str szComment)
 /////////////////////////////////////////////////////////////////////////////////
 
 // GetNextWord
-// Given a key +delimiter+ value string, pulls the key name from the string,
-// deletes the delimiter and alters the original string to contain the
+// Given a key +delimiter+ value std::string, pulls the key name from the std::string,
+// deletes the delimiter and alters the original std::string to contain the
 // remainder.  Returns the key
-t_Str GetNextWord(t_Str& CommandLine)
+std::string GetNextWord(std::string& CommandLine)
 {
     int nPos = static_cast<int>(CommandLine.find_first_of(EqualIndicators));
-    t_Str sWord = t_Str("");
+    std::string sWord = "";
 
     if (nPos > -1)
     {
@@ -742,125 +661,135 @@ t_Str GetNextWord(t_Str& CommandLine)
     else
     {
         sWord = CommandLine;
-        CommandLine = t_Str("");
+        CommandLine = "";
     }
 
-    Trim(sWord);
+    sWord = Trim(sWord);
     return sWord;
 }
 
 
 // CompareNoCase
-// it's amazing what features std::string lacks.  This function simply
-// does a lowercase compare against the two strings, returning 0 if they
-// match.
-int CompareNoCase(t_Str str1, t_Str str2)
+// Lowercase compare of two strings
+bool CompareNoCase(std::string_view lhs, std::string_view rhs)
 {
-#ifdef WIN32
-    return _stricmp(str1.c_str(), str2.c_str());
-#else
-    return strcasecmp(str1.c_str(), str2.c_str());
-#endif
+    auto to_lower{ std::ranges::views::transform([](char c) {return std::tolower(c); }) };
+    return std::ranges::equal(lhs | to_lower, rhs | to_lower);
 }
 
 // Trim
-// Trims whitespace from both sides of a string.
-void Trim(t_Str& szStr)
+// Trims whitespace from both sides of a std::string.
+[[nodiscard]] std::string_view Trim(std::string_view szStr)
 {
-    t_Str szTrimChars = WhiteSpace;
-
-    szTrimChars += EqualIndicators;
-    int nPos, rPos;
+    constexpr std::string szTrimChars = WhiteSpace + EqualIndicators;
 
     // trim left
-    nPos = static_cast<int>(szStr.find_first_not_of(szTrimChars));
+    size_t nPos = szStr.find_first_not_of(szTrimChars);
 
-    if (nPos > 0)
-        szStr.erase(0, nPos);
+    if (nPos != std::string_view::npos)
+        szStr.remove_prefix(nPos);
 
     // trim right and return
-    nPos = static_cast<int>(szStr.find_last_not_of(szTrimChars));
-    rPos = static_cast<int>(szStr.find_last_of(szTrimChars));
+    size_t rPos = szStr.find_last_not_of(szTrimChars);
 
-    if (rPos > nPos && rPos > -1)
-        szStr.erase(rPos, szStr.size() - rPos);
+    if (rPos != std::string_view::npos)
+        szStr.remove_suffix(szStr.size() - ++rPos);
+
+    return szStr;
 }
+
 
 // WriteLn
 // Writes the formatted output to the file stream, returning the number of
 // bytes written.
-int WriteLn(std::fstream& stream, const char* fmt, ...)
-{
-    char buf[MAX_BUFFER_LEN];
-    int nLength;
-    t_Str szMsg;
+//int WriteLn(std::fstream& stream, const char* fmt, ...)
+//{
+//    char buf[MAX_BUFFER_LEN];
+//    int nLength;
+//    std::string szMsg;
+//
+//    memset(buf, 0, MAX_BUFFER_LEN);
+//    va_list args;
+//
+//    va_start(args, fmt);
+//    nLength = _vsnprintf_s(buf, MAX_BUFFER_LEN, fmt, args);
+//    va_end(args);
+//
+//
+//    if (buf[nLength] != '\n' && buf[nLength] != '\r')
+//        buf[nLength++] = '\n';
+//
+//
+//    stream.write(buf, nLength);
+//
+//    return nLength;
+//}
 
-    memset(buf, 0, MAX_BUFFER_LEN);
-    va_list args;
-
-    va_start(args, fmt);
-    nLength = _vsnprintf_s(buf, MAX_BUFFER_LEN, fmt, args);
-    va_end(args);
-
-
-    if (buf[nLength] != '\n' && buf[nLength] != '\r')
-        buf[nLength++] = '\n';
-
-
-    stream.write(buf, nLength);
-
-    return nLength;
-}
-
-// Report
-// A simple reporting function. Outputs the report messages to stdout
-// This is a dumb'd down version of a simmilar function of mine, so if 
-// it looks like it should do more than it does, that's why...
-void Report(e_DebugLevel DebugLevel, const char* fmt, ...)
-{
-    char buf[MAX_BUFFER_LEN];
-    int nLength;
-    t_Str szMsg;
-
-    va_list args;
-
-    memset(buf, 0, MAX_BUFFER_LEN);
-
-    va_start(args, fmt);
-    nLength = _vsnprintf_s(buf, MAX_BUFFER_LEN, fmt, args);
-    va_end(args);
+//// WriteLn
+//// Writes the formatted output to the file stream, returning the number of
+//// bytes written.
+//int WriteLn(std::fstream& stream, auto&& fmt, auto&&... args)
+//{
+//    std::string buf = std::format(std::forward(fmt), std::forward<decltype(args)>(args)...);
+//    if (buf.back() != '\n')
+//        buf += '\n';
+//
+//    stream.write(buf.data(), buf.size());
+//
+//    return buf.size();
+//}
 
 
-    if (buf[nLength] != '\n' && buf[nLength] != '\r')
-        buf[nLength++] = '\n';
+//// Report
+//// A simple reporting function. Outputs the report messages to stdout
+//// This is a dumb'd down version of a simmilar function of mine, so if 
+//// it looks like it should do more than it does, that's why...
+//void Report(e_DebugLevel DebugLevel, const char* fmt, ...)
+//{
+//    char buf[MAX_BUFFER_LEN];
+//    int nLength;
+//    std::string szMsg;
+//
+//    va_list args;
+//
+//    memset(buf, 0, MAX_BUFFER_LEN);
+//
+//    va_start(args, fmt);
+//    nLength = _vsnprintf_s(buf, MAX_BUFFER_LEN, fmt, args);
+//    va_end(args);
+//
+//
+//    if (buf[nLength] != '\n' && buf[nLength] != '\r')
+//        buf[nLength++] = '\n';
+//
+//
+//    switch (DebugLevel)
+//    {
+//    case E_DEBUG:
+//        szMsg = "<debug> ";
+//        break;
+//    case E_INFO:
+//        szMsg = "<info> ";
+//        break;
+//    case E_WARN:
+//        szMsg = "<warn> ";
+//        break;
+//    case E_ERROR:
+//        szMsg = "<error> ";
+//        break;
+//    case E_FATAL:
+//        szMsg = "<fatal> ";
+//        break;
+//    case E_CRITICAL:
+//        szMsg = "<critical> ";
+//        break;
+//    }
+//
+//
+//    szMsg += buf;
+//
+//    printf(szMsg.c_str());
+//
+//}
 
-
-    switch (DebugLevel)
-    {
-    case E_DEBUG:
-        szMsg = "<debug> ";
-        break;
-    case E_INFO:
-        szMsg = "<info> ";
-        break;
-    case E_WARN:
-        szMsg = "<warn> ";
-        break;
-    case E_ERROR:
-        szMsg = "<error> ";
-        break;
-    case E_FATAL:
-        szMsg = "<fatal> ";
-        break;
-    case E_CRITICAL:
-        szMsg = "<critical> ";
-        break;
-    }
-
-
-    szMsg += buf;
-
-    printf(szMsg.c_str());
-
-}
 

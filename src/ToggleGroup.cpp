@@ -31,6 +31,7 @@
 /////////////////////////////////////////////////////////////////////////
 
 #include <sstream>
+#include <ranges>
 #include "stdafx.h"
 #include "ToggleGroup.h"
 
@@ -150,11 +151,11 @@ namespace ShaderToggler
         iniFile.SetUInt("AmountHashes", counter, "", pixelHashesCategory);
 
         counter = 0;
-        for (const auto var : _varOffsetMapping)
+        for (const auto& [var,tuple] : _varOffsetMapping)
         {
-            iniFile.SetUInt("Offset" + std::to_string(counter), std::get<0>(var.second), "", constantsCategory);
-            iniFile.SetValue("Variable" + std::to_string(counter), var.first, "", constantsCategory);
-            iniFile.SetBool("UsePreviousValue" + std::to_string(counter), std::get<1>(var.second), "", constantsCategory);
+            iniFile.SetUInt("Offset" + std::to_string(counter), static_cast<uint32_t>(std::get<0>(tuple)), "", constantsCategory);
+            iniFile.SetValue("Variable" + std::to_string(counter), var, "", constantsCategory);
+            iniFile.SetBool("UsePreviousValue" + std::to_string(counter), std::get<1>(tuple), "", constantsCategory);
             counter++;
         }
         iniFile.SetUInt("AmountConstants", counter, "", constantsCategory);
@@ -198,25 +199,24 @@ namespace ShaderToggler
 
     void ToggleGroup::loadState(CDataFile& iniFile, int groupCounter)
     {
+
+
+
         if (groupCounter < 0)
         {
-            int amount = iniFile.GetInt("AmountHashes", "PixelShaders");
+            int amount = iniFile.GetInt("AmountHashes", "PixelShaders").value_or(0);
             for (int i = 0; i < amount; i++)
             {
-                uint32_t hash = iniFile.GetUInt("ShaderHash" + std::to_string(i), "PixelShaders");
-                if (hash != UINT_MAX)
-                {
-                    _pixelShaderHashes.emplace(hash);
-                }
+                auto hash = iniFile.GetUInt("ShaderHash" + std::to_string(i), "PixelShaders");
+                if (hash.has_value())
+                    _pixelShaderHashes.emplace(hash.value());
             }
-            amount = iniFile.GetInt("AmountHashes", "VertexShaders");
+            amount = iniFile.GetInt("AmountHashes", "VertexShaders").value_or(0);
             for (int i = 0; i < amount; i++)
             {
-                uint32_t hash = iniFile.GetUInt("ShaderHash" + std::to_string(i), "VertexShaders");
-                if (hash != UINT_MAX)
-                {
-                    _vertexShaderHashes.emplace(hash);
-                }
+                auto hash = iniFile.GetUInt("ShaderHash" + std::to_string(i), "VertexShaders");
+                if (hash.has_value())
+                    _vertexShaderHashes.emplace(hash.value());
             }
 
             // done
@@ -228,126 +228,70 @@ namespace ShaderToggler
         const std::string pixelHashesCategory = sectionRoot + "_PixelShaders";
         const std::string constantsCategory = sectionRoot + "_Constants";
 
-        int amountShaders = iniFile.GetInt("AmountHashes", vertexHashesCategory);
+
+
+        int amountShaders = iniFile.GetInt("AmountHashes", vertexHashesCategory).value_or(0);
         for (int i = 0; i < amountShaders; i++)
         {
-            uint32_t hash = iniFile.GetUInt("ShaderHash" + std::to_string(i), vertexHashesCategory);
-            if (hash != UINT_MAX)
-            {
-                _vertexShaderHashes.emplace(hash);
-            }
+            auto hash = iniFile.GetUInt("ShaderHash" + std::to_string(i), vertexHashesCategory);
+            if (hash.has_value())
+                _vertexShaderHashes.emplace(hash.value());
         }
 
-        amountShaders = iniFile.GetInt("AmountHashes", pixelHashesCategory);
+        amountShaders = iniFile.GetInt("AmountHashes", pixelHashesCategory).value_or(0);
         for (int i = 0; i < amountShaders; i++)
         {
-            uint32_t hash = iniFile.GetUInt("ShaderHash" + std::to_string(i), pixelHashesCategory);
-            if (hash != UINT_MAX)
-            {
-                _pixelShaderHashes.emplace(hash);
-            }
+            auto hash = iniFile.GetUInt("ShaderHash" + std::to_string(i), pixelHashesCategory);
+            if (hash.has_value())
+                _pixelShaderHashes.emplace(hash.value());
         }
 
-        int amountConstants = iniFile.GetInt("AmountConstants", constantsCategory);
+        int amountConstants = iniFile.GetInt("AmountConstants", constantsCategory).value_or(0);
         for (int i = 0; i < amountConstants; i++)
         {
-            uint32_t offset = iniFile.GetUInt("Offset" + std::to_string(i), constantsCategory);
-            string varName = iniFile.GetString("Variable" + std::to_string(i), constantsCategory);
-            bool prevValue = iniFile.GetBool("UsePreviousValue" + std::to_string(i), constantsCategory);
-            if (offset != UINT_MAX && varName.size() > 0)
+            auto offset = iniFile.GetUInt("Offset" + std::to_string(i), constantsCategory);
+            auto varName = iniFile.GetString("Variable" + std::to_string(i), constantsCategory);
+            bool prevValue = iniFile.GetBool("UsePreviousValue" + std::to_string(i), constantsCategory).value_or(false);
+            if (offset.has_value() && varName.has_value())
             {
-                _varOffsetMapping.emplace(varName, make_tuple(offset, prevValue));
+                _varOffsetMapping.emplace(varName.value(), make_tuple(offset.value(), prevValue));
             }
         }
 
-        _name = iniFile.GetValue("Name", sectionRoot);
-        if (_name.size() <= 0)
-        {
-            _name = "Default";
-        }
-        const uint32_t toggleKeyValue = iniFile.GetUInt("ToggleKey", sectionRoot);
-        if (toggleKeyValue == UINT_MAX)
-        {
-            _keybind = VK_CAPITAL;
-        }
-        else
-        {
-            _keybind = toggleKeyValue;
-        }
+        _name = iniFile.GetValue("Name", sectionRoot).value_or("Default");
 
-        _isActive = iniFile.GetBool("Active", sectionRoot);
+        _keybind = iniFile.GetUInt("ToggleKey", sectionRoot).value_or(VK_CAPITAL);
 
-        const int32_t invocationLocation = iniFile.GetUInt("InvocationLocation", sectionRoot);
-        if (invocationLocation != UINT_MAX)
+        _isActive = iniFile.GetBool("Active", sectionRoot).value_or(false);
+
+        _invocationLocation = iniFile.GetUInt("InvocationLocation", sectionRoot).value_or(0);
+
+        std::string techniques = iniFile.GetString("Techniques", sectionRoot).value_or("");
+        if (!techniques.empty())
         {
-            _invocationLocation = invocationLocation;
+            for (const auto& technique : techniques | std::ranges::views::split(','))
+                _preferredTechniques.insert(std::string(technique.begin(), technique.end()));
         }
-        else
-        {
-            _invocationLocation = 0;
-        }
+            
+        
 
-        std::string techniques = iniFile.GetString("Techniques", sectionRoot);
-        if (techniques.size() > 0) {
-            std::stringstream ss(techniques);
+        _allowAllTechniques = iniFile.GetBool("AllowAllTechniques", sectionRoot).value_or(false);
+        _hasTechniqueExceptions = iniFile.GetBool("TechniqueExceptions", sectionRoot).value_or(false);
 
-            while (ss.good())
-            {
-                string substr;
-                getline(ss, substr, ',');
-                _preferredTechniques.insert(substr);
-            }
-        }
+        _isProvidingTextureBinding = iniFile.GetBool("ProvideTextureBinding", sectionRoot).value_or(false);
+        _clearBindings = iniFile.GetBool("ClearTextureBindings", sectionRoot).value_or(true);
+        _textureBindingName = iniFile.GetString("TextureBindingName", sectionRoot).value_or("");
 
-        _allowAllTechniques = iniFile.GetBool("AllowAllTechniques", sectionRoot);
-        _hasTechniqueExceptions = iniFile.GetBool("TechniqueExceptions", sectionRoot);
+        _extractConstants = iniFile.GetBool("ExtractConstants", sectionRoot).value_or(false);
 
-        _isProvidingTextureBinding = iniFile.GetBool("ProvideTextureBinding", sectionRoot);
-        _clearBindings = iniFile.GetBoolOrDefault("ClearTextureBindings", sectionRoot, true);
-        _textureBindingName = iniFile.GetString("TextureBindingName", sectionRoot);
+        _slotIndex = iniFile.GetUInt("ConstantPipelineSlot", sectionRoot).value_or(2);
 
-        _extractConstants = iniFile.GetBool("ExtractConstants", sectionRoot);
+        _descIndex = iniFile.GetUInt("ConstantDescriptorIndex", sectionRoot).value_or(0);
 
-        uint32_t slotIndex = iniFile.GetUInt("ConstantPipelineSlot", sectionRoot);
-        if (slotIndex != UINT_MAX)
-        {
-            _slotIndex = slotIndex;
-        }
-        else
-        {
-            _slotIndex = 2;
-        }
+        _extractResourceViews = iniFile.GetBool("ExtractSRVs", sectionRoot).value_or(false);
 
-        uint32_t descIndex = iniFile.GetUInt("ConstantDescriptorIndex", sectionRoot);
-        if (descIndex != UINT_MAX)
-        {
-            _descIndex = descIndex;
-        }
-        else
-        {
-            _descIndex = 0;
-        }
+        _srvSlotIndex = iniFile.GetUInt("SRVPipelineSlot", sectionRoot).value_or(1);
 
-        _extractResourceViews = iniFile.GetBool("ExtractSRVs", sectionRoot);
-
-        uint32_t srvSlotIndex = iniFile.GetUInt("SRVPipelineSlot", sectionRoot);
-        if (srvSlotIndex != UINT_MAX)
-        {
-            _srvSlotIndex = srvSlotIndex;
-        }
-        else
-        {
-            _srvSlotIndex = 1;
-        }
-
-        uint32_t srvDescIndex = iniFile.GetUInt("SRVDescriptorIndex", sectionRoot);
-        if (srvDescIndex != UINT_MAX)
-        {
-            _srvDescIndex = srvDescIndex;
-        }
-        else
-        {
-            _srvDescIndex = 0;
-        }
+        _srvDescIndex = iniFile.GetUInt("SRVDescriptorIndex", sectionRoot).value_or(0);
     }
 }

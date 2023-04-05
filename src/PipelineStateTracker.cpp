@@ -148,7 +148,7 @@ void PipelineStateTracker::OnBeginRenderPass(command_list* cmd_list, uint32_t co
         _renderPassState.rtvs.resize(count);
     }
 
-    for (int i = 0; i < count; i++)
+    for (uint32_t i = 0; i < count; i++)
     {
         _renderPassState.rtvs[i] = rts[i];
     }
