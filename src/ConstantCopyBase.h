@@ -24,6 +24,7 @@ namespace ConstantFeedback {
         virtual void OnInitResource(reshade::api::device* device, const reshade::api::resource_desc& desc, const reshade::api::subresource_data* initData, reshade::api::resource_usage usage, reshade::api::resource handle);
         virtual void OnDestroyResource(reshade::api::device* device, reshade::api::resource res);
 
+        virtual void OnUpdateBufferRegion(reshade::api::device* device, const void* data, reshade::api::resource resource, uint64_t offset, uint64_t size) = 0;
         virtual void OnMapBufferRegion(reshade::api::device* device, reshade::api::resource resource, uint64_t offset, uint64_t size, reshade::api::map_access access, void** data) = 0;
         virtual void OnUnmapBufferRegion(reshade::api::device* device, reshade::api::resource resource) = 0;
     protected:

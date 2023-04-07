@@ -69,6 +69,8 @@ namespace ConstantFeedback {
         bool Hook(sig_memcpy** original, sig_memcpy* detour, const sigmatch::signature& sig) override final;
         bool Unhook() override final;
 
+        void OnUpdateBufferRegion(reshade::api::device* device, const void* data, reshade::api::resource resource, uint64_t offset, uint64_t size) override final {};
+
         virtual void OnMemcpy(void* dest, void* src, size_t size) = 0;
 
     protected:

@@ -4,6 +4,7 @@
 #include "ConstantCopyMemcpyNested.h"
 #include "ConstantCopyFFXIV.h"
 #include "ConstantCopyNierReplicant.h"
+#include "ConstantCopyDXUpdateBuffer.h"
 
 ConstantCopyType ConstantManager::ResolveConstantCopyType(const string& ctype)
 {
@@ -17,6 +18,8 @@ ConstantCopyType ConstantManager::ResolveConstantCopyType(const string& ctype)
         return ConstantCopyType::Copy_FFXIV;
     else if (ctype == "nier_replicant")
         return ConstantCopyType::Copy_NierReplicant;
+    else if (ctype == "dx_update_buffer")
+        return ConstantCopyType::Copy_DXUpdateBuffer;
     
     return ConstantCopyType::Copy_None;
 }
@@ -69,6 +72,12 @@ bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantFeedback::Cons
     {
         static ConstantCopyNierReplicant constantTypeNierReplicant;
         *constantCopy = &constantTypeNierReplicant;
+    }
+        break;
+    case ConstantCopyType::Copy_DXUpdateBuffer:
+    {
+        static ConstantCopyDXUpdateBuffer constantTypeDXUpdateBuffer;
+        *constantCopy = &constantTypeDXUpdateBuffer;
     }
         break;
     default:

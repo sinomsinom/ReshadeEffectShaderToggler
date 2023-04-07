@@ -42,21 +42,12 @@ void ConstantCopyFFXIV::GetHostConstantBuffer(vector<uint8_t>& dest, size_t size
     }
 }
 
-static inline int64_t exit_cbload(uint16_t* param_2, SomeData& param_3, int64_t* plVar10, uint64_t uVar9)
+inline void ConstantCopyFFXIV::set_host_resource_data_location(void* origin, size_t len, int64_t resource_handle, uint64_t index)
 {
-    *(char*)((param_3.something2) + 8 + (int64_t)param_2) = (char)uVar9;
-    *(int64_t**)(param_2 + param_3.something2 * 4 + 0xc) = plVar10;
-    *param_2 = *param_2 | (uint16_t)(1 << param_3.something2);
-    return param_3.something2;
-}
+    if (_hostResourceBuffer.size() < index + 1)
+        _hostResourceBuffer.resize(index + 1);
 
-inline void ConstantCopyFFXIV::set_host_resource_data_location(void* origin, size_t len, int64_t resource_handle, uint64_t base, uint64_t offset)
-{
-    uint64_t bOffset = (offset - base) / 8;
-    if (_hostResourceBuffer.size() < bOffset + 1)
-        _hostResourceBuffer.resize(bOffset + 1);
-
-    auto& entry = _hostResourceBuffer[bOffset];
+    auto& entry = _hostResourceBuffer[index];
     if (get<1>(entry) != resource_handle)
         get<1>(entry) = resource_handle;
 
@@ -66,114 +57,122 @@ inline void ConstantCopyFFXIV::set_host_resource_data_location(void* origin, siz
     get<0>(entry) = origin;
 }
 
-int64_t __fastcall ConstantCopyFFXIV::detour_ffxiv_cbload(int64_t param_1, uint16_t* param_2, SomeData param_3, HostBufferData* param_4)
+static inline int64_t exit_cbload(param_2_struct* param_2, param_3_struct& param_3, ID3D11Resource* puVar11, uint64_t uVar10)
 {
-    int64_t* plVar1;
-    int64_t* plVar2;
-    uint32_t uVar4;
-    int32_t iVar5;
-    int64_t** pplVar6;
-    uint32_t uVar7;
-    int64_t lVar8;
-    uint64_t uVar9;
-    int64_t* plVar10;
-    uint32_t uVar11;
-    uint64_t uVar12;
+    param_2->something_else[param_3.something2] = (uint8_t)uVar10;
+    param_2->res[param_3.something2] = puVar11;
+    param_2->something0 = param_2->something0 | (uint16_t)(1 << param_3.something2);
+    return param_3.something2;
+}
 
-    ZeroMemory(rBuffer, sizeof(D3D11_MAPPED_SUBRESOURCE));
+int64_t __fastcall ConstantCopyFFXIV::detour_ffxiv_cbload(ResourceData* param_1, param_2_struct* param_2, param_3_struct param_3, HostBufferData* param_4)
+{
+    int64_t lVar2;
+    ID3D11DeviceContext* plVar3 = param_1->deviceContext;
+    int64_t* plVar4;
+    uint32_t uVar6;
+    int32_t iVar7;
+    int64_t** pplVar8;
+    uint32_t uVar9;
+    uint64_t uVar10;
+    ID3D11Resource* puVar11;
+    uint32_t uVar12;
     const size_t valueSize = 16;
-    const uint64_t copySize = static_cast<uint64_t>(param_4->numValues) * valueSize;
+    const uint64_t copySize = static_cast<uint64_t>(param_4->size) * valueSize;
 
-    //uVar11 = (uint32_t)param_3.something1;
-    uVar11 = param_3.something1;
-    plVar10 = (int64_t*)param_4->data;
-    uVar4 = param_4->numValues;
-    if (param_4->numValues < uVar11) {
-        uVar4 = uVar11;
+    uVar12 = param_3.something1;
+    puVar11 = (ID3D11Resource*)param_4->data;
+    uVar6 = param_4->size;
+    if (param_4->size < uVar12) {
+        uVar6 = uVar12;
     }
-    uVar4 = uVar4 - 1;
-    iVar5 = 0x1f;
+    uVar6 = uVar6 - 1;
+    iVar7 = 0x1f;
 
-    if (!_BitScanReverse((DWORD*)&iVar5, uVar4))
+    if (!_BitScanReverse((DWORD*)&iVar7, uVar6))
     {
-        iVar5 = -1;
+        iVar7 = -1;
     }
 
-    //uVar12 = (uint64_t)((uint32_t)param_3.something0 & 3);
-    uVar12 = param_3.something0 & 3;
-    if (*plVar10 == *(int64_t*)(param_1 + 0x10)) {
-        *(uint8_t*)((param_3.something2) + 8 + (int64_t)param_2) = 4;
+    uVar10 = (uint64_t)(param_3.something0 & 3);
+    if (*param_4->data == param_1->reserved1) {
+        param_2->something_else[param_3.something2] = 4;
     }
     else {
-        plVar1 = *(int64_t**)(param_1 + 8);
-        plVar2 = (int64_t*)param_4->data;
-        if (iVar5 + 1U < 6) {
-            uVar9 = 0;
-            lVar8 = (uVar12 + (uint64_t)(iVar5 + 1U) * 4) * 0x50 + param_1;
-            pplVar6 = (int64_t**)(lVar8 + 0x38);
+        ZeroMemory(rBuffer, sizeof(D3D11_MAPPED_SUBRESOURCE));
+        plVar4 = param_4->data;
+        if (iVar7 + 1U < 6) {
+            lVar2 = uVar10 + (uint64_t)(iVar7 + 1U) * 4;
+            uVar10 = 0;
+            pplVar8 = param_1->resources[lVar2].data;
             do {
-                uVar4 = (uint32_t)uVar9;
-                if (*pplVar6 == plVar2) {
-                    *(int32_t*)(lVar8 + 0x60) = *(int*)(lVar8 + 0x60) + 1;
-                    if ((*(uint32_t*)(lVar8 + 0x58) & 7) != uVar4) {
-                        *(uint32_t*)(lVar8 + 0x58) = *(uint32_t*)(lVar8 + 0x58) * 8 | uVar4;
+                uVar6 = (uint32_t)uVar10;
+                if (*pplVar8 == plVar4) {
+                    uVar12 = param_1->resources[lVar2].count0;
+                    param_1->resources[lVar2].count2++;
+                    if ((uVar12 & 7) != uVar6) {
+                        param_1->resources[lVar2].count0 = uVar12 * 8 | uVar6;
                     }
-                    plVar10 = *(int64_t**)(lVar8 + 0x18 + uVar9 * 8);
-                    return exit_cbload(param_2, param_3, plVar10, uVar9);
+                    puVar11 = param_1->resources[lVar2].res[uVar10];
+                    return exit_cbload(param_2, param_3, puVar11, uVar10);
                 }
-                uVar9 = (uint64_t)(uVar4 + 1);
-                pplVar6 = pplVar6 + 1;
-            } while (uVar4 + 1 < 4);
-            *(int32_t*)(lVar8 + 100) = *(int32_t*)(lVar8 + 100) + 1;
-            uVar11 = 0;
-            uVar4 = 0;
+                uVar10 = (uint64_t)(uVar6 + 1);
+                pplVar8 = pplVar8 + 1;
+            } while (uVar6 + 1 < 4);
+            param_1->resources[lVar2].count3++;
+            uVar12 = 0;
+            uVar6 = 0;
             do {
-                uVar7 = 1 << ((uint8_t)(*(uint32_t*)(lVar8 + 0x58) >> ((uint8_t)uVar11 & 0x1f)) & 3) | uVar4;
-                if (uVar7 == 0xf) break;
-                uVar11 = uVar11 + 3;
-                uVar4 = uVar7;
-            } while (uVar11 < 0x1e);
-            uVar11 = *(int32_t*)(lVar8 + 0x5c) + 1U & 3;
-            uVar4 = ~((uVar4 << 4 | uVar4) >> (int8_t)uVar11);
+                uVar9 = 1 << ((uint8_t)(param_1->resources[lVar2].count0 >> ((uint8_t)uVar12 & 0x1f)) & 3) | uVar6
+                    ;
+                if (uVar9 == 0xf) break;
+                uVar12 = uVar12 + 3;
+                uVar6 = uVar9;
+            } while (uVar12 < 0x1e);
+            uVar12 = param_1->resources[lVar2].count1 + 1 & 3;
+            uVar6 = ~((uVar6 << 4 | uVar6) >> (int8_t)uVar12);
+            iVar7 = 0;
 
-            if (!_BitScanForward((DWORD*)&iVar5, uVar4))
+            if (!_BitScanForward((DWORD*)&iVar7, uVar6))
             {
-                iVar5 = 0;
+                iVar7 = 0;
             }
 
-            uVar4 = iVar5 + uVar11 & 3;
-            uVar9 = (uint64_t)uVar4;
-            *(int64_t**)(lVar8 + 0x38 + uVar9 * 8) = plVar2;
-            *(uint32_t*)(lVar8 + 0x5c) = uVar11;
-            if ((*(uint32_t*)(lVar8 + 0x58) & 7) != uVar4) {
-                *(uint32_t*)(lVar8 + 0x58) = *(uint32_t*)(lVar8 + 0x58) * 8 | uVar4;
+            uVar9 = iVar7 + uVar12 & 3;
+            uVar10 = (uint64_t)uVar9;
+            param_1->resources[lVar2].data[uVar10] = plVar4;
+            param_1->resources[lVar2].count1 = uVar12;
+            uVar6 = param_1->resources[lVar2].count0;
+            if ((uVar6 & 7) != uVar9) {
+                param_1->resources[lVar2].count0 = uVar6 * 8 | uVar9;
             }
-            plVar10 = *(int64_t**)(lVar8 + 0x18 + uVar9 * 8);
+            puVar11 = param_1->resources[lVar2].res[uVar10];
 
-            set_host_resource_data_location(plVar2, copySize, (int64_t)plVar10, param_1, lVar8 + 0x18 + uVar9 * 8);
+            set_host_resource_data_location(plVar4, copySize, (int64_t)puVar11, lVar2 * 4 + uVar10);
 
-            ((ID3D11DeviceContext*)(plVar1))->Map((ID3D11Resource*)plVar10, 0, (D3D11_MAP)4, 0, rBuffer);
-            memcpy(rBuffer->pData, plVar2, copySize);
-            ((ID3D11DeviceContext*)(plVar1))->Unmap((ID3D11Resource*)plVar10, 0);
+            plVar3->Map(puVar11, 0, D3D11_MAP::D3D11_MAP_WRITE_DISCARD, 0, rBuffer);
+            memcpy(rBuffer->pData, plVar4, copySize);
+            plVar3->Unmap(puVar11, 0);
 
-            *(uint8_t*)(param_3.something2 + 8 + (int64_t)param_2) = (uint8_t)uVar9;
+            param_2->something_else[param_3.something2] = (uint8_t)uVar10;
         }
         else {
-            lVar8 = uVar12 * 0x10 + param_1;
-            plVar10 = *(int64_t**)(lVar8 + 0x798);
-            if (*(int64_t**)(lVar8 + 0x7a0) != plVar2) {
-                set_host_resource_data_location(plVar2, copySize, (int64_t)plVar10, param_1, lVar8 + 0x798);
+            puVar11 = param_1->tail_resources[uVar10].res;
 
-                ((ID3D11DeviceContext*)(plVar1))->Map((ID3D11Resource*)plVar10, 0, (D3D11_MAP)4, 0, rBuffer);
-                memcpy(rBuffer->pData, plVar2, copySize);
-                ((ID3D11DeviceContext*)(plVar1))->Unmap((ID3D11Resource*)plVar10, 0);
+            if (param_1->tail_resources[uVar10].data != plVar4) {
+                set_host_resource_data_location(plVar4, copySize, (int64_t)puVar11, 24 * 4 + uVar10);
 
-                *(int64_t**)(lVar8 + 0x7a0) = plVar2;
+                plVar3->Map(puVar11, 0, D3D11_MAP::D3D11_MAP_WRITE_DISCARD, 0, rBuffer);
+                memcpy(rBuffer->pData, plVar4, copySize);
+                plVar3->Unmap(puVar11, 0);
+                param_1->tail_resources[uVar10].data = plVar4;
             }
-            *(uint8_t*)(param_3.something2 + 8 + (int64_t)param_2) = 4;
+
+            param_2->something_else[param_3.something2] = 4;
         }
     }
-    *(int64_t**)(param_2 + param_3.something2 * 4 + 0xc) = plVar10;
-    *param_2 = *param_2 | (uint16_t)(1 << param_3.something2);
+
+    param_2->res[param_3.something2] = puVar11;
+    param_2->something0 = param_2->something0 | (uint16_t)(1 << param_3.something2);
     return param_3.something2;
 }
