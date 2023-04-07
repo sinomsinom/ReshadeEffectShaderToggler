@@ -26,6 +26,7 @@ namespace ConstantFeedback {
         bool Init() override final;
         bool UnInit() override final;
 
+        void OnUpdateBufferRegion(reshade::api::device* device, const void* data, reshade::api::resource resource, uint64_t offset, uint64_t size) override final {};
         void OnMapBufferRegion(reshade::api::device * device, reshade::api::resource resource, uint64_t offset, uint64_t size, reshade::api::map_access access, void** data) override final;
         void OnUnmapBufferRegion(reshade::api::device* device, reshade::api::resource resource) override final;
     private:

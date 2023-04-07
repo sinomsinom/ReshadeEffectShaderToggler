@@ -561,6 +561,15 @@ static void onUnmapBufferRegion(device* device, resource resource)
 }
 
 
+static bool onUpdateBufferRegion(device* device, const void* data, resource resource, uint64_t offset, uint64_t size)
+{
+    if (constantCopy != nullptr)
+        constantCopy->OnUpdateBufferRegion(device, data, resource, offset, size);
+
+    return false;
+}
+
+
 static void displaySettings(effect_runtime* runtime)
 {
     DisplaySettings(g_addonUIData, runtime);
@@ -672,6 +681,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::init_resource>(onInitResource);
         reshade::register_event<reshade::addon_event::create_resource>(onCreateResource);
         reshade::register_event<reshade::addon_event::map_buffer_region>(onMapBufferRegion);
+        reshade::register_event<reshade::addon_event::update_buffer_region>(onUpdateBufferRegion);
         reshade::register_event<reshade::addon_event::unmap_buffer_region>(onUnmapBufferRegion);
         reshade::register_event<reshade::addon_event::destroy_resource>(onDestroyResource);
         reshade::register_event<reshade::addon_event::create_resource_view>(onCreateResourceView);
@@ -711,6 +721,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::destroy_swapchain>(onDestroySwapchain);
         reshade::unregister_event<reshade::addon_event::reshade_present>(onReshadePresent);
         reshade::unregister_event<reshade::addon_event::map_buffer_region>(onMapBufferRegion);
+        reshade::unregister_event<reshade::addon_event::update_buffer_region>(onUpdateBufferRegion);
         reshade::unregister_event<reshade::addon_event::unmap_buffer_region>(onUnmapBufferRegion);
         reshade::unregister_event<reshade::addon_event::destroy_pipeline>(onDestroyPipeline);
         reshade::unregister_event<reshade::addon_event::init_pipeline>(onInitPipeline);
