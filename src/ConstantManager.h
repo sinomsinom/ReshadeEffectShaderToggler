@@ -12,7 +12,8 @@ namespace ConstantFeedback
         Copy_MemcpySingular,
         Copy_MemcpyNested,
         Copy_FFXIV, //actually only works with ConstantHandlerType::FFXIV, but shhhhh
-        Copy_NierReplicant
+        Copy_NierReplicant,
+        Copy_DXUpdateBuffer
     };
 
     enum ConstantHandlerType
