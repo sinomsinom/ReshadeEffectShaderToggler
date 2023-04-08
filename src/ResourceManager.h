@@ -24,15 +24,10 @@ namespace Rendering
         void OnDestroySwapchain(reshade::api::swapchain* swapchain);
 
         void SetResourceViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view);
-        const std::tuple<reshade::api::resource, reshade::api::resource, reshade::api::resource_view, reshade::api::resource_view>* GetBackbufferViewData(uint64_t handle);
-        bool IsBackbufferHandle(uint64_t handler);
     private:
         bool _IsSRGB(reshade::api::format value);
         bool _HasSRGB(reshade::api::format value);
 
-        std::unordered_map<uint64_t, std::tuple<reshade::api::resource, reshade::api::resource, reshade::api::resource_view, reshade::api::resource_view>> s_backBufferView;
-        std::unordered_map<reshade::api::swapchain*, vector<uint64_t>> _swapChainToResourceHandles;
-        std::unordered_map<reshade::api::swapchain*, std::tuple<reshade::api::resource, reshade::api::resource_view, reshade::api::resource_view>> _swapchainToCopyResource;
         std::unordered_map<uint64_t, std::pair<reshade::api::resource_view, reshade::api::resource_view>> s_sRGBResourceViews;
         std::unordered_map<const reshade::api::resource_desc*, reshade::api::format> s_resourceFormatTransient;
         std::unordered_map<uint64_t, reshade::api::format> s_resourceFormat;

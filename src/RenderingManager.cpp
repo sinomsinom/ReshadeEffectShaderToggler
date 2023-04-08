@@ -5,9 +5,6 @@ using namespace Rendering;
 using namespace ShaderToggler;
 using namespace reshade::api;
 
-extern void on_begin_render_effects(effect_runtime* runtime, command_list* cmd_list, resource_view, resource_view);
-extern void on_finish_render_effects(effect_runtime* runtime, command_list* cmd_list, resource_view, resource_view);
-
 size_t RenderingManager::g_charBufferSize = CHAR_BUFFER_SIZE;
 char RenderingManager::g_charBuffer[CHAR_BUFFER_SIZE];
 
@@ -203,54 +200,24 @@ bool RenderingManager::RenderRemainingEffects(effect_runtime* runtime)
     bool rendered = false;
 
     resource res = runtime->get_current_back_buffer();
-    auto swapchainData = resourceManager.GetBackbufferViewData(runtime->get_current_back_buffer().handle);
+    resource_view active_rtv = { 0 };
+    resource_view active_rtv_srgb = { 0 };
+
+    resourceManager.SetResourceViewHandles(res.handle, &active_rtv, &active_rtv_srgb);
     
-    if (deviceData.current_runtime == nullptr || swapchainData == nullptr) {
+    if (deviceData.current_runtime == nullptr || active_rtv == 0 || !deviceData.rendered_effects) {
         return false;
     }
-
-    resource copy_res = std::get<1>(*swapchainData);
-    resource_view active_rtv = std::get<2>(*swapchainData);
-    resource_view active_rtv_srgb = std::get<3>(*swapchainData);
     
-    if (deviceData.rendered_effects)
-    {
-        EnumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &active_rtv, &active_rtv_srgb, &rendered, &res, &copy_res](effect_runtime* runtime, effect_technique technique, string& name) {
-            if (deviceData.allEnabledTechniques.contains(name) && !deviceData.allEnabledTechniques[name])
-            {
-                if (!rendered)
-                {
-                    if (copy_res != 0)
-                    {
-                        cmd_list->barrier(res, resource_usage::render_target, resource_usage::copy_source);
-                        cmd_list->copy_texture_region(res, 0, nullptr, copy_res, 0, nullptr);
-                        cmd_list->barrier(copy_res, resource_usage::copy_dest, resource_usage::render_target);
-                    }
-
-                    on_begin_render_effects(runtime, cmd_list, { 0 }, { 0 });
-                }
-    
-                runtime->render_technique(technique, cmd_list, active_rtv, active_rtv_srgb);
-    
-                deviceData.allEnabledTechniques[name] = true;
-                rendered = true;
-            }
-            });
-    
-        if (rendered)
+    EnumerateTechniques(deviceData.current_runtime, [&deviceData, &commandListData, &cmd_list, &device, &active_rtv, &active_rtv_srgb, &rendered, &res](effect_runtime* runtime, effect_technique technique, string& name) {
+        if (deviceData.allEnabledTechniques.contains(name) && !deviceData.allEnabledTechniques[name])
         {
-            on_finish_render_effects(deviceData.current_runtime, runtime->get_command_queue()->get_immediate_command_list(), { 0 }, { 0 });
-
-            if (copy_res != 0)
-            {
-                cmd_list->barrier(res, resource_usage::copy_source, resource_usage::copy_dest);
-                cmd_list->barrier(copy_res, resource_usage::render_target, resource_usage::copy_source);
-                cmd_list->copy_texture_region(copy_res, 0, nullptr, res, 0, nullptr);
-                cmd_list->barrier(res, resource_usage::copy_dest, resource_usage::render_target);
-                cmd_list->barrier(copy_res, resource_usage::copy_source, resource_usage::copy_dest);
-            }
+            runtime->render_technique(technique, cmd_list, active_rtv, active_rtv_srgb);
+    
+            deviceData.allEnabledTechniques[name] = true;
+            rendered = true;
         }
-    }
+        });
 
     return rendered;
 }
@@ -264,9 +231,8 @@ bool RenderingManager::_RenderEffects(
 {
     bool rendered = false;
     CommandListDataContainer& cmdData = cmd_list->get_private_data<CommandListDataContainer>();
-    const std::tuple<reshade::api::resource, reshade::api::resource, reshade::api::resource_view, reshade::api::resource_view>* swapchainData = nullptr;
 
-    EnumerateTechniques(deviceData.current_runtime, [&cmdData, &deviceData, &techniquesToRender, &cmd_list, &rendered, &removalList, &toRenderNames, this, &swapchainData](effect_runtime* runtime, effect_technique technique, string& name) {
+    EnumerateTechniques(deviceData.current_runtime, [&cmdData, &deviceData, &techniquesToRender, &cmd_list, &rendered, &removalList, &toRenderNames, this](effect_runtime* runtime, effect_technique technique, string& name) {
 
         if (toRenderNames.find(name) != toRenderNames.end())
         {
@@ -287,42 +253,11 @@ bool RenderingManager::_RenderEffects(
                 resource_view view_non_srgb = active_rtv;
                 resource_view view_srgb = active_rtv;
 
-                bool isSwapchain = resourceManager.IsBackbufferHandle(res.handle);
-                auto nSwapchainData = resourceManager.GetBackbufferViewData(res.handle);
+                resourceManager.SetResourceViewHandles(res.handle, &view_non_srgb, &view_srgb);
 
-                // Copy back when switching from swapchain to a different one, or from a swapchain to a normal render target
-                if (nSwapchainData != swapchainData && swapchainData != nullptr && std::get<1>(*swapchainData) != 0)
+                if (view_non_srgb == 0)
                 {
-                    resource oldRes = std::get<0>(*swapchainData);
-                    resource oldCopyRes = std::get<1>(*swapchainData);
-
-                    cmd_list->barrier(oldRes, resource_usage::copy_source, resource_usage::copy_dest);
-                    cmd_list->barrier(oldCopyRes, resource_usage::render_target, resource_usage::copy_source);
-                    cmd_list->copy_texture_region(oldCopyRes, 0, nullptr, oldRes, 0, nullptr);
-                    cmd_list->barrier(oldRes, resource_usage::copy_dest, resource_usage::render_target);
-                    cmd_list->barrier(oldCopyRes, resource_usage::copy_source, resource_usage::copy_dest);
-
-                    swapchainData = nSwapchainData;
-                }
-
-                if (isSwapchain)
-                {
-                    // do we have a copy resource? if yes, it means we have apply effects onto it and copy back, otherwise just use the RTVs provided
-                    resource copy_res = std::get<1>(*nSwapchainData);
-                    if (nSwapchainData != swapchainData && copy_res != 0)
-                    {
-                        device* dev = cmd_list->get_device();
-                        cmd_list->barrier(res, resource_usage::render_target, resource_usage::copy_source);
-                        cmd_list->copy_texture_region(res, 0, nullptr, copy_res, 0, nullptr);
-                        cmd_list->barrier(copy_res, resource_usage::copy_dest, resource_usage::render_target);
-                    }
-
-                    view_non_srgb = std::get<2>(*nSwapchainData);
-                    view_srgb = std::get<3>(*nSwapchainData);
-                }
-                else
-                {
-                    resourceManager.SetResourceViewHandles(res.handle, &view_non_srgb, &view_srgb);
+                    return;
                 }
 
                 deviceData.rendered_effects = true;
@@ -335,23 +270,9 @@ bool RenderingManager::_RenderEffects(
 
                 deviceData.allEnabledTechniques[name] = true;
                 rendered = true;
-                swapchainData = nSwapchainData;
             }
         }
         });
-
-    // Copy back to swapchain if last effect was (still) rendering to swapchain copy resource
-    if (swapchainData != nullptr)
-    {
-        resource oldRes = std::get<0>(*swapchainData);
-        resource oldCopyRes = std::get<1>(*swapchainData);
-
-        cmd_list->barrier(oldRes, resource_usage::copy_source, resource_usage::copy_dest);
-        cmd_list->barrier(oldCopyRes, resource_usage::render_target, resource_usage::copy_source);
-        cmd_list->copy_texture_region(oldCopyRes, 0, nullptr, oldRes, 0, nullptr);
-        cmd_list->barrier(oldRes, resource_usage::copy_dest, resource_usage::render_target);
-        cmd_list->barrier(oldCopyRes, resource_usage::copy_source, resource_usage::copy_dest);
-    }
 
     return rendered;
 }
@@ -436,14 +357,14 @@ void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocati
 
     deviceData.current_runtime->render_effects(cmd_list, static_cast<resource_view>(0), static_cast<resource_view>(0));
 
-    on_begin_render_effects(deviceData.current_runtime, cmd_list, { 0 }, { 0 });
+    //on_begin_render_effects(deviceData.current_runtime, cmd_list, { 0 }, { 0 });
 
     std::unique_lock<shared_mutex> dev_mutex(render_mutex);
     rendered = (psToRenderNames.size() > 0) && _RenderEffects(cmd_list, deviceData, commandListData.ps.techniquesToRender, psRemovalList, psToRenderNames) ||
         (vsToRenderNames.size() > 0) && _RenderEffects(cmd_list, deviceData, commandListData.vs.techniquesToRender, vsRemovalList, vsToRenderNames);
     dev_mutex.unlock();
 
-    on_finish_render_effects(deviceData.current_runtime, cmd_list, { 0 }, { 0 });
+    //on_finish_render_effects(deviceData.current_runtime, cmd_list, { 0 }, { 0 });
 
     for (auto& g : psRemovalList)
     {
