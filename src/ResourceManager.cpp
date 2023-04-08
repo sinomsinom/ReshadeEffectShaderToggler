@@ -46,67 +46,31 @@ bool ResourceManager::_HasSRGB(reshade::api::format value)
 
 void ResourceManager::InitBackbuffer(swapchain* runtime)
 {
+    // Make sure to destroy existing views in case it's just a resize
+    ClearBackbuffer(runtime);
+
     // Create backbuffer resource views
     device* dev = runtime->get_device();
     uint32_t count = runtime->get_back_buffer_count();
 
     resource_desc desc = dev->get_resource_desc(runtime->get_back_buffer(0));
-    const bool needCopyRes = dev->get_api() == reshade::api::device_api::d3d10 ||
-        dev->get_api() == reshade::api::device_api::d3d11 ||
-        dev->get_api() == reshade::api::device_api::d3d12;
-
-    resource copyRes = { 0 };
-    resource_view copyBackBufferView = { 0 };
-    resource_view copyBackBufferViewSRGB = { 0 };
-    const auto& copyResData = _swapchainToCopyResource.find(runtime);
-
-    // Create format specific copy resource and associated views. Basically same how ReShade handles it minus multisample support
-    if (needCopyRes)
-    {
-        reshade::api::format resFormat = format_to_typeless(desc.texture.format);
-        runtime->get_device()->create_resource(
-            resource_desc(desc.texture.width, desc.texture.height, 1, 1, resFormat, 1,
-                memory_heap::gpu_only, resource_usage::copy_dest | resource_usage::copy_source | resource_usage::shader_resource | resource_usage::render_target),
-            nullptr, resource_usage::copy_dest, &copyRes);
-
-
-        reshade::api::format viewFormat = format_to_default_typed(resFormat);
-        reshade::api::format viewFormatSRGB = format_to_default_typed(resFormat, 1);
-
-        dev->create_resource_view(copyRes, resource_usage::render_target,
-            resource_view_desc(viewFormat), &copyBackBufferView);
-        dev->create_resource_view(copyRes, resource_usage::render_target,
-            resource_view_desc(viewFormatSRGB), &copyBackBufferViewSRGB);
-
-        _swapchainToCopyResource.emplace(runtime, make_tuple(copyRes, copyBackBufferView, copyBackBufferViewSRGB));
-    }
 
     for (uint32_t i = 0; i < count; ++i)
     {
         resource backBuffer = runtime->get_back_buffer(i);
 
-        if (needCopyRes)
-        {
-            s_backBufferView[backBuffer.handle] = make_tuple(backBuffer, copyRes, copyBackBufferView, copyBackBufferViewSRGB);
-        }
-        else
-        {
-            resource_view backBufferView = { 0 };
-            resource_view backBufferViewSRGB = { 0 };
+        resource_view backBufferView = { 0 };
+        resource_view backBufferViewSRGB = { 0 };
 
-            reshade::api::format viewFormat = format_to_default_typed(desc.texture.format);
-            reshade::api::format viewFormatSRGB = format_to_default_typed(desc.texture.format, 1);
+        reshade::api::format viewFormat = format_to_default_typed(desc.texture.format, 0);
+        reshade::api::format viewFormatSRGB = format_to_default_typed(desc.texture.format, 1);
 
-            dev->create_resource_view(backBuffer, resource_usage::render_target,
-                resource_view_desc(viewFormat), &backBufferView);
-            dev->create_resource_view(backBuffer, resource_usage::render_target,
-                resource_view_desc(viewFormatSRGB), &backBufferViewSRGB);
+        dev->create_resource_view(backBuffer, resource_usage::render_target,
+            resource_view_desc(viewFormat), &backBufferView);
+        dev->create_resource_view(backBuffer, resource_usage::render_target,
+            resource_view_desc(viewFormatSRGB), &backBufferViewSRGB);
 
-            s_backBufferView[backBuffer.handle] = make_tuple(backBuffer, resource{ 0 }, backBufferView, backBufferViewSRGB);
-        }
-
-        _swapChainToResourceHandles[runtime].push_back(backBuffer.handle);
-
+        s_sRGBResourceViews.emplace(backBuffer.handle, make_pair(backBufferView, backBufferViewSRGB));
     }
 }
 
@@ -114,51 +78,33 @@ void ResourceManager::ClearBackbuffer(reshade::api::swapchain* runtime)
 {
     device* dev = runtime->get_device();
 
-    const bool needCopyRes = dev->get_api() == reshade::api::device_api::d3d10 ||
-        dev->get_api() == reshade::api::device_api::d3d11 ||
-        dev->get_api() == reshade::api::device_api::d3d12;
+    uint32_t count = runtime->get_back_buffer_count();
 
-    if (needCopyRes)
+    for (uint32_t i = 0; i < count; ++i)
     {
-        const auto& swapBufferResources = _swapchainToCopyResource.find(runtime);
-        if (swapBufferResources != _swapchainToCopyResource.end())
+        resource backBuffer = runtime->get_back_buffer(i);
+
+        const auto& entry = s_sRGBResourceViews.find(backBuffer.handle);
+
+        // Back buffer resource got probably resized, clear old views and reinitialize
+        if (entry != s_sRGBResourceViews.end())
         {
-            if (get<2>(swapBufferResources->second) != 0)
-                runtime->get_device()->destroy_resource_view(get<2>(swapBufferResources->second));
-            if (get<1>(swapBufferResources->second) != 0)
-                runtime->get_device()->destroy_resource_view(get<1>(swapBufferResources->second));
-            if (get<0>(swapBufferResources->second) != 0)
-                runtime->get_device()->destroy_resource(get<0>(swapBufferResources->second));
+            resource_view oldbackBufferView = entry->second.first;
+            resource_view oldbackBufferViewSRGB = entry->second.second;
+
+            if (oldbackBufferView != 0)
+            {
+                runtime->get_device()->destroy_resource_view(oldbackBufferView);
+            }
+
+            if (oldbackBufferViewSRGB != 0)
+            {
+                runtime->get_device()->destroy_resource_view(oldbackBufferViewSRGB);
+            }
         }
 
-        _swapchainToCopyResource.erase(runtime);
-
+        s_sRGBResourceViews.erase(backBuffer.handle);
     }
-
-    const auto& swapBufferRTVhandles = _swapChainToResourceHandles.find(runtime);
-
-    if (swapBufferRTVhandles == _swapChainToResourceHandles.end())
-        return;
-
-    for (const auto handle : swapBufferRTVhandles->second)
-    {
-        const auto& swapBufferRTVhandle = s_backBufferView.find(handle);
-
-        if (swapBufferRTVhandle == s_backBufferView.end())
-            continue;
-
-        if (!needCopyRes)
-        {
-            if (get<2>(swapBufferRTVhandle->second) != 0)
-                runtime->get_device()->destroy_resource_view(get<2>(swapBufferRTVhandle->second));
-            if (get<3>(swapBufferRTVhandle->second) != 0)
-                runtime->get_device()->destroy_resource_view(get<3>(swapBufferRTVhandle->second));
-        }
-
-        s_backBufferView.erase(handle);
-    }
-
-    _swapChainToResourceHandles.erase(runtime);
 }
 
 bool ResourceManager::OnCreateSwapchain(reshade::api::swapchain_desc& desc, void* hwnd)
@@ -211,7 +157,7 @@ void ResourceManager::OnInitResource(device* device, const resource_desc& desc, 
             resource_view view_non_srgb = { 0 };
             resource_view view_srgb = { 0 };
 
-            reshade::api::format format_non_srgb = format_to_default_typed(desc.texture.format);
+            reshade::api::format format_non_srgb = format_to_default_typed(desc.texture.format, 0);
             reshade::api::format format_srgb = format_to_default_typed(desc.texture.format, 1);
 
             device->create_resource_view(handle, resource_usage::render_target,
@@ -280,11 +226,6 @@ bool ResourceManager::OnCreateResourceView(device* device, resource resource, re
     return false;
 }
 
-bool ResourceManager::IsBackbufferHandle(uint64_t handler)
-{
-    return s_backBufferView.contains(handler);
-}
-
 void ResourceManager::SetResourceViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view)
 {
     const auto& it = s_sRGBResourceViews.find(handle);
@@ -294,15 +235,4 @@ void ResourceManager::SetResourceViewHandles(uint64_t handle, reshade::api::reso
         *srgb_view = it->second.second;
         return;
     }
-}
-
-const std::tuple<reshade::api::resource, reshade::api::resource, reshade::api::resource_view, reshade::api::resource_view>* ResourceManager::GetBackbufferViewData(uint64_t handle)
-{
-    const auto& it = s_backBufferView.find(handle);
-    if (it != s_backBufferView.end())
-    {
-        return &(it->second);
-    }
-
-    return nullptr;
 }

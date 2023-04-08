@@ -204,7 +204,6 @@
     <ClInclude Include="ToggleGroup.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\deps\reshade\examples\09-depth\generic_depth.cpp" />
     <ClCompile Include="AddonUIData.cpp" />
     <ClCompile Include="CDataFile.cpp" />
     <ClCompile Include="ConstantCopyBase.cpp" />

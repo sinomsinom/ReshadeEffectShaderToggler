@@ -6,7 +6,7 @@
 	url = https://github.com/TsudaKageyu/minhook.git
 [submodule "deps/reshade"]
 	path = deps/reshade
-	url = https://github.com/4lex4nder/reshade.git
+	url = https://github.com/crosire/reshade.git
 	branch = addon
 [submodule "deps/robin-map"]
 	path = deps/robin-map
