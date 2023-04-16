@@ -167,7 +167,7 @@ const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* run
         }
 
         // Make sure our target matches swap buffer dimensions when applying effects
-        if (action & MATCH_EFFECT)
+        if (group->getMatchSwapchainResolution())
         {
             resource_desc desc = device->get_resource_desc(rs);
 

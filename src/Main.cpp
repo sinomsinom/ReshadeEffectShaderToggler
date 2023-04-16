@@ -241,8 +241,6 @@ static void onInitEffectRuntime(effect_runtime* runtime)
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
     data.current_runtime = runtime;
     
-    resourceManager.InitBackbuffer(runtime);
-    
     renderingManager.InitTextureBingings(runtime);
 }
 
@@ -259,8 +257,6 @@ static void onDestroyEffectRuntime(effect_runtime* runtime)
     data.current_runtime = nullptr;
     
     renderingManager.DisposeTextureBindings(runtime);
-
-    resourceManager.ClearBackbuffer(runtime);
 }
 
 
@@ -302,6 +298,8 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
 
     const uint32_t handleHasPixelShaderAttached = (uint32_t)(stages & pipeline_stage::pixel_shader) ? g_pixelShaderManager.safeGetShaderHash(pipelineHandle.handle) : 0;
     const uint32_t handleHasVertexShaderAttached = (uint32_t)(stages & pipeline_stage::vertex_shader) ? g_vertexShaderManager.safeGetShaderHash(pipelineHandle.handle) : 0;
+    //const uint32_t handleHasPixelShaderAttached = g_pixelShaderManager.safeGetShaderHash(pipelineHandle.handle);
+    //const uint32_t handleHasVertexShaderAttached = g_vertexShaderManager.safeGetShaderHash(pipelineHandle.handle);
     if (!handleHasPixelShaderAttached && !handleHasVertexShaderAttached)
     {
         // draw call with unknown handle, don't collect it
