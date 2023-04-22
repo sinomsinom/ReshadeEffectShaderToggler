@@ -33,6 +33,8 @@
 #pragma once
 
 #include <format>
+#include <ranges>
+#include <cwctype>
 #include "AddonUIConstants.h"
 #include "KeyData.h"
 
@@ -102,7 +104,7 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
     }
 
     const uint32_t columns = 2;
-    const vector<string>* techniques = instance.GetAllTechniques();
+    const vector<string>* techniquesPtr = instance.GetAllTechniques();
     unordered_set<string> curTechniques = group->preferredTechniques();
     unordered_set<string> newTechniques;
     static char searchBuf[256] = "\0";
@@ -143,21 +145,23 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
             }
             if (ImGui::BeginTable("Technique selection##table", columns, ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
             {
-                string prefix(searchBuf);
+                string searchString(searchBuf);
 
-                for (int i = 0; i < techniques->size(); i++)
+                for (techniquesPtr != nullptr; const auto& technique : *techniquesPtr)
                 {
-                    bool enabled = curTechniques.find(techniques->at(i)) != curTechniques.end();
+                    bool enabled = curTechniques.contains(technique);
 
-                    if (techniques->at(i).rfind(prefix, 0) == 0)
+                    if (std::ranges::search(technique, searchString,
+                        [](const wchar_t lhs, const wchar_t rhs) {return lhs == rhs; },
+                        std::towupper, std::towupper).begin() != technique.end())
                     {
                         ImGui::TableNextColumn();
-                        ImGui::Checkbox(techniques->at(i).c_str(), &enabled);
+                        ImGui::Checkbox(technique.c_str(), &enabled);
                     }
 
                     if (enabled)
                     {
-                        newTechniques.insert(techniques->at(i));
+                        newTechniques.insert(technique);
                     }
                 }
             }
