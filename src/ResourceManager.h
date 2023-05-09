@@ -22,6 +22,7 @@ namespace Rendering
         bool OnCreateSwapchain(reshade::api::swapchain_desc& desc, void* hwnd);
         void OnInitSwapchain(reshade::api::swapchain* swapchain);
         void OnDestroySwapchain(reshade::api::swapchain* swapchain);
+        void OnDestroyDevice(reshade::api::device*);
 
         void SetResourceViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view);
     private:

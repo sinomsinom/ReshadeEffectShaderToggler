@@ -46,9 +46,6 @@ bool ResourceManager::_HasSRGB(reshade::api::format value)
 
 void ResourceManager::InitBackbuffer(swapchain* runtime)
 {
-    // Make sure to destroy existing views in case it's just a resize
-    ClearBackbuffer(runtime);
-
     // Create backbuffer resource views
     device* dev = runtime->get_device();
     uint32_t count = runtime->get_back_buffer_count();
@@ -153,42 +150,64 @@ void ResourceManager::OnInitResource(device* device, const resource_desc& desc, 
             reshade::api::format orgFormat = s_resourceFormatTransient.at(&desc);
             s_resourceFormat.emplace(handle.handle, orgFormat);
             s_resourceFormatTransient.erase(&desc);
-
-            resource_view view_non_srgb = { 0 };
-            resource_view view_srgb = { 0 };
-
-            reshade::api::format format_non_srgb = format_to_default_typed(desc.texture.format, 0);
-            reshade::api::format format_srgb = format_to_default_typed(desc.texture.format, 1);
-
-            device->create_resource_view(handle, resource_usage::render_target,
-                resource_view_desc(format_non_srgb), &view_non_srgb);
-
-            device->create_resource_view(handle, resource_usage::render_target,
-                resource_view_desc(format_srgb), &view_srgb);
-
-            s_sRGBResourceViews.emplace(handle.handle, make_pair(view_non_srgb, view_srgb));
         }
+
+        resource_view view_non_srgb = { 0 };
+        resource_view view_srgb = { 0 };
+
+        reshade::api::format format_non_srgb = format_to_default_typed(desc.texture.format, 0);
+        reshade::api::format format_srgb = format_to_default_typed(desc.texture.format, 1);
+
+        device->create_resource_view(handle, resource_usage::render_target,
+            resource_view_desc(format_non_srgb), &view_non_srgb);
+
+        device->create_resource_view(handle, resource_usage::render_target,
+            resource_view_desc(format_srgb), &view_srgb);
+
+        s_sRGBResourceViews.emplace(handle.handle, make_pair(view_non_srgb, view_srgb));
     }
 }
 
 
 void ResourceManager::OnDestroyResource(device* device, resource res)
 {
-    std::unique_lock<shared_mutex> lock(resource_mutex);
+    if (!resource_mutex.try_lock())
+        return;
 
     s_resourceFormat.erase(res.handle);
 
-    if (s_sRGBResourceViews.contains(res.handle))
+    const auto& it = s_sRGBResourceViews.find(res.handle);
+
+    if (it != s_sRGBResourceViews.end())
     {
-        auto& views = s_sRGBResourceViews.at(res.handle);
+        auto& views = it->second;
 
         if (views.first != 0)
             device->destroy_resource_view(views.first);
         if (views.second != 0)
             device->destroy_resource_view(views.second);
+
+        s_sRGBResourceViews.erase(it);
     }
 
-    s_sRGBResourceViews.erase(res.handle);
+    resource_mutex.unlock();
+}
+
+void ResourceManager::OnDestroyDevice(device* device)
+{
+    std::unique_lock<shared_mutex> lock(resource_mutex);
+
+    for (auto it = s_sRGBResourceViews.begin(); it != s_sRGBResourceViews.end();)
+    {
+        auto& views = it->second;
+
+        if (views.first != 0)
+            device->destroy_resource_view(views.first);
+        if (views.second != 0)
+            device->destroy_resource_view(views.second);
+
+        it = s_sRGBResourceViews.erase(it);
+    }
 }
 
 

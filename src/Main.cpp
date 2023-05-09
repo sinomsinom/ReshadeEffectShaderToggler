@@ -115,6 +115,8 @@ static void onInitDevice(device* device)
 
 static void onDestroyDevice(device* device)
 {
+    resourceManager.OnDestroyDevice(device);
+
     device->destroy_private_data<DeviceDataContainer>();
 }
 
@@ -140,7 +142,7 @@ static void onResetCommandList(command_list* commandList)
 }
 
 
-void onInitSwapchain(reshade::api::swapchain* swapchain)
+static void onInitSwapchain(reshade::api::swapchain* swapchain)
 {
     resourceManager.OnInitSwapchain(swapchain);
 }
@@ -187,7 +189,7 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
     data.allEnabledTechniques.clear();
     allTechniques.clear();
-    
+
     Rendering::RenderingManager::EnumerateTechniques(data.current_runtime, [&data](effect_runtime* runtime, effect_technique technique, string& name) {
         allTechniques.push_back(name);
         bool enabled = runtime->get_technique_state(technique);
@@ -198,9 +200,9 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
         }
         });
 
-    if (constantHandler != nullptr && runtime->get_effects_state())
+    if (constantHandler != nullptr)
     {
-        constantHandler->ReloadConstantVariables(runtime);
+        constantHandler->OnReshadeReloadedEffects(runtime, data.allEnabledTechniques.size());
     }
 }
 
@@ -226,6 +228,11 @@ static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique
             data.allEnabledTechniques.emplace(techName, false);
         }
     }
+
+    if (constantHandler != nullptr)
+    {
+        constantHandler->OnReshadeSetTechniqueState(runtime, data.allEnabledTechniques.size());
+    }
     
     return false;
 }
@@ -233,30 +240,29 @@ static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique
 
 static void onInitEffectRuntime(effect_runtime* runtime)
 {
-    if (constantHandler != nullptr)
-    {
-        constantHandler->ReloadConstantVariables(runtime);
-    }
-
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
     data.current_runtime = runtime;
     
     renderingManager.InitTextureBingings(runtime);
+
+    if (constantHandler != nullptr)
+    {
+        constantHandler->ReloadConstantVariables(runtime);
+    }
 }
 
 
 static void onDestroyEffectRuntime(effect_runtime* runtime)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
+    data.current_runtime = nullptr;
+    
+    renderingManager.DisposeTextureBindings(runtime);
 
     if (constantHandler != nullptr)
     {
         constantHandler->ClearConstantVariables();
     }
-
-    data.current_runtime = nullptr;
-    
-    renderingManager.DisposeTextureBindings(runtime);
 }
 
 
@@ -298,8 +304,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
 
     const uint32_t handleHasPixelShaderAttached = (uint32_t)(stages & pipeline_stage::pixel_shader) ? g_pixelShaderManager.safeGetShaderHash(pipelineHandle.handle) : 0;
     const uint32_t handleHasVertexShaderAttached = (uint32_t)(stages & pipeline_stage::vertex_shader) ? g_vertexShaderManager.safeGetShaderHash(pipelineHandle.handle) : 0;
-    //const uint32_t handleHasPixelShaderAttached = g_pixelShaderManager.safeGetShaderHash(pipelineHandle.handle);
-    //const uint32_t handleHasVertexShaderAttached = g_vertexShaderManager.safeGetShaderHash(pipelineHandle.handle);
+
     if (!handleHasPixelShaderAttached && !handleHasVertexShaderAttached)
     {
         // draw call with unknown handle, don't collect it
@@ -365,6 +370,41 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         if (commandListData.commandQueue & Rendering::CHECK_MATCH_BIND_PIPELINE_EFFECT && !(commandListData.commandQueue & pipelineChanged & Rendering::MATCH_EFFECT))
         {
             renderingManager.RenderEffects(commandList, Rendering::CALL_BIND_PIPELINE, pipelineChanged & Rendering::MATCH_EFFECT);
+        }
+
+        // Make sure we dequeue whatever is left over scheduled for CALL_DRAW/CALL_BIND_PIPELINE in case re-queueing was enabled for some group
+        if (commandListData.commandQueue & ((Rendering::MATCH_ALL << Rendering::CALL_DRAW * Rendering::MATCH_DELIMITER) | (Rendering::MATCH_ALL << Rendering::CALL_BIND_PIPELINE * Rendering::MATCH_DELIMITER)))
+        {
+            commandListData.commandQueue &= ~(Rendering::MATCH_ALL << Rendering::CALL_DRAW * Rendering::MATCH_DELIMITER);
+            commandListData.commandQueue &= ~(Rendering::MATCH_ALL << Rendering::CALL_BIND_PIPELINE * Rendering::MATCH_DELIMITER);
+
+            if (commandListData.ps.techniquesToRender.size() > 0)
+            {
+                for (auto it = commandListData.ps.techniquesToRender.begin(); it != commandListData.ps.techniquesToRender.end();)
+                {
+                    uint32_t callLocation = std::get<1>(it->second);
+                    if (callLocation == Rendering::CALL_DRAW || callLocation == Rendering::CALL_BIND_PIPELINE)
+                    {
+                        it = commandListData.ps.techniquesToRender.erase(it);
+                        continue;
+                    }
+                    it++;
+                }
+            }
+
+            if (commandListData.vs.techniquesToRender.size() > 0)
+            {
+                for (auto it = commandListData.vs.techniquesToRender.begin(); it != commandListData.vs.techniquesToRender.end();)
+                {
+                    uint32_t callLocation = std::get<1>(it->second);
+                    if (callLocation == Rendering::CALL_DRAW || callLocation == Rendering::CALL_BIND_PIPELINE)
+                    {
+                        it = commandListData.vs.techniquesToRender.erase(it);
+                        continue;
+                    }
+                    it++;
+                }
+            }
         }
 
         renderingManager.CheckCallForCommandList(commandList, handleHasPixelShaderAttached, handleHasVertexShaderAttached);
@@ -585,25 +625,23 @@ bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t instance_cou
 {
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
 
-    if (commandListData.commandCheck > 0)
+    if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW)
     {
-        if (constantHandler != nullptr && (commandListData.commandCheck & Rendering::MATCH_CONST))
+        if (constantHandler != nullptr && (commandListData.commandQueue & Rendering::MATCH_CONST))
         {
             constantHandler->UpdateConstants(cmd_list);
+            commandListData.commandQueue &= ~Rendering::MATCH_CONST;
         }
 
         if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_BINDING)
         {
-            renderingManager.UpdateTextureBindings(cmd_list, Rendering::CALL_DRAW, commandListData.commandCheck & Rendering::MATCH_BINDING);
+            renderingManager.UpdateTextureBindings(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_BINDING);
         }
 
         if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_EFFECT)
         {
-            renderingManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, commandListData.commandCheck & Rendering::MATCH_EFFECT);
+            renderingManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_EFFECT);
         }
-
-        // Reset pipeline update data
-        commandListData.commandCheck = 0;
     }
 
     return false;
@@ -613,25 +651,23 @@ bool onDrawIndexed(command_list* cmd_list, uint32_t index_count, uint32_t instan
 {
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
 
-    if (commandListData.commandCheck > 0)
+    if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW)
     {
-        if (constantHandler != nullptr && (commandListData.commandCheck & Rendering::MATCH_CONST))
+        if (constantHandler != nullptr && (commandListData.commandQueue & Rendering::MATCH_CONST))
         {
             constantHandler->UpdateConstants(cmd_list);
+            commandListData.commandQueue &= ~Rendering::MATCH_CONST;
         }
 
         if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_BINDING)
         {
-            renderingManager.UpdateTextureBindings(cmd_list, Rendering::CALL_DRAW, commandListData.commandCheck & Rendering::MATCH_BINDING);
+            renderingManager.UpdateTextureBindings(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_BINDING);
         }
 
         if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_EFFECT)
         {
-            renderingManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, commandListData.commandCheck & Rendering::MATCH_EFFECT);
+            renderingManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_EFFECT);
         }
-
-        // Reset pipeline update data mask
-        commandListData.commandCheck = 0;
     }
 
     return false;

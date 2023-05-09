@@ -76,7 +76,7 @@ namespace ConstantFeedback {
 
     static constexpr size_t CHAR_BUFFER_SIZE = 256;
 
-    class ConstantHandlerBase final {
+    class __declspec(novtable) ConstantHandlerBase final {
     public:
         ConstantHandlerBase();
         ~ConstantHandlerBase();
@@ -90,13 +90,18 @@ namespace ConstantFeedback {
         void ClearConstantVariables();
         void ApplyConstantValues(effect_runtime* runtime, const ToggleGroup*, const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants);
 
+        void OnReshadeReloadedEffects(effect_runtime* runtime, int32_t enabledCount);
+        void OnReshadeSetTechniqueState(effect_runtime* runtime, int32_t enabledCount);
+
         unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables();
 
         static void SetConstantCopy(ConstantCopyBase* constantHandler);
-    protected:
+    private:
         unordered_map<const ToggleGroup*, vector<uint8_t>> groupBufferContent;
         unordered_map<const ToggleGroup*, vector<uint8_t>> groupPrevBufferContent;
         unordered_map<const ToggleGroup*, size_t> groupBufferSize;
+        int32_t previousEnableCount = std::numeric_limits<int32_t>::max();
+        shared_mutex varMutex;
 
         static unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>> restVariables;
         static char charBuffer[CHAR_BUFFER_SIZE];
@@ -107,7 +112,6 @@ namespace ConstantFeedback {
 
         bool CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& target);
         void CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list);
-    private:
         bool UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, const ToggleGroup* group, uint32_t index);
     };
 }

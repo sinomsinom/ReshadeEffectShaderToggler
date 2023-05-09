@@ -179,6 +179,7 @@ namespace ShaderToggler
         }
         iniFile.SetUInt("InvocationLocation", _invocationLocation, "", sectionRoot);
         iniFile.SetBool("MatchSwapchainResolutionOnly", _matchSwapchainResolution, "", sectionRoot);
+        iniFile.SetBool("RequeueAfterRTMatchingFailure", _requeueAfterRTMatchingFailure, "", sectionRoot);
 
         iniFile.SetValue("Techniques", ss.str(), "", sectionRoot);
         iniFile.SetBool("AllowAllTechniques", _allowAllTechniques, "", sectionRoot);
@@ -290,6 +291,7 @@ namespace ShaderToggler
         }
 
         _matchSwapchainResolution = iniFile.GetBoolOrDefault("MatchSwapchainResolutionOnly", sectionRoot, true);
+        _requeueAfterRTMatchingFailure = iniFile.GetBoolOrDefault("RequeueAfterRTMatchingFailure", sectionRoot, false);
 
         std::string techniques = iniFile.GetString("Techniques", sectionRoot);
         if (techniques.size() > 0) {

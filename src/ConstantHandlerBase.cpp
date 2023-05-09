@@ -125,6 +125,27 @@ void ConstantHandlerBase::ClearConstantVariables()
     restVariables.clear();
 }
 
+void ConstantHandlerBase::OnReshadeSetTechniqueState(effect_runtime* runtime, int32_t enabledCount)
+{
+    previousEnableCount = enabledCount;
+}
+
+void ConstantHandlerBase::OnReshadeReloadedEffects(effect_runtime* runtime, int32_t enabledCount)
+{
+    std::unique_lock<shared_mutex> lock(varMutex);
+
+    if (enabledCount == 0 || enabledCount - previousEnableCount < 0)
+    {
+        ClearConstantVariables();
+    }
+    else
+    {
+        ReloadConstantVariables(runtime);
+    }
+
+    previousEnableCount = enabledCount;
+}
+
 bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, const ToggleGroup* group, uint32_t index)
 {
     uint32_t slot_size = static_cast<uint32_t>(cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index].size());
@@ -208,6 +229,8 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list)
 void ConstantHandlerBase::ApplyConstantValues(effect_runtime* runtime, const ToggleGroup* group,
     const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>& constants)
 {
+    std::unique_lock<shared_mutex> lock(varMutex);
+
     if (!groupBufferContent.contains(group) || runtime == nullptr)
     {
         return;

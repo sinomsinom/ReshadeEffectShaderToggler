@@ -31,7 +31,6 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
 {
     // Masks which checks to perform. Note that we will always schedule a draw call check for binding and effect updates,
     // this serves the purpose of assigning the resource_view to perform the update later on if needed.
-    uint32_t match_mask = MATCH_NONE;
     uint32_t queue_mask = MATCH_NONE;
 
     // Shift in case of VS using data id
@@ -50,7 +49,7 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
                     if (!sData.constantBuffersToUpdate.contains(group))
                     {
                         sData.constantBuffersToUpdate.emplace(group);
-                        match_mask |= match_const;
+                        queue_mask |= match_const;
                     }
                 }
 
@@ -59,7 +58,6 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
                     if (!sData.bindingsToUpdate.contains(group->getTextureBindingName()))
                     {
                         sData.bindingsToUpdate.emplace(group->getTextureBindingName(), std::make_tuple(group, group->getInvocationLocation(), resource_view{ 0 }));
-                        match_mask |= match_binding;
                         queue_mask |= (match_binding << (group->getInvocationLocation() * MATCH_DELIMITER)) | (match_binding << CALL_DRAW * MATCH_DELIMITER);
                     }
                 }
@@ -78,7 +76,6 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
                             if (!sData.techniquesToRender.contains(tech.first))
                             {
                                 sData.techniquesToRender.emplace(tech.first, std::make_tuple(group, group->getInvocationLocation(), resource_view{ 0 }));
-                                match_mask |= match_effect;
                                 queue_mask |= (match_effect << (group->getInvocationLocation() * MATCH_DELIMITER)) | (match_effect << CALL_DRAW * MATCH_DELIMITER);
                             }
                         }
@@ -92,7 +89,6 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
                             if (!sData.techniquesToRender.contains(techName))
                             {
                                 sData.techniquesToRender.emplace(techName, std::make_tuple(group, group->getInvocationLocation(), resource_view{ 0 }));
-                                match_mask |= match_effect;
                                 queue_mask |= (match_effect << (group->getInvocationLocation() * MATCH_DELIMITER)) | (match_effect << CALL_DRAW * MATCH_DELIMITER);
                             }
                         }
@@ -102,7 +98,6 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
         }
     }
 
-    commandListData.commandCheck |= match_mask;
     commandListData.commandQueue |= queue_mask;
 }
 
@@ -289,13 +284,20 @@ void RenderingManager::_QueueOrDequeue(
     for (auto it = queue.begin(); it != queue.end();)
     {
         // Set views during draw call since we can be sure the correct ones are bound at that point
-        if (!callLocation)
+        if (!callLocation && std::get<2>(it->second) == 0)
         {
             resource_view active_rtv = GetCurrentResourceView(runtime, *it, commandListData, layoutIndex, action);
 
             if (active_rtv != 0)
             {
                 std::get<2>(it->second) = active_rtv;
+            }
+            else if(std::get<0>(it->second)->getRequeueAfterRTMatchingFailure())
+            {
+                // Re-issue draw call queue command
+                commandListData.commandQueue |= (action << (callLocation * MATCH_DELIMITER));
+                it++;
+                continue;
             }
             else
             {
@@ -338,12 +340,12 @@ void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocati
 
     if (invocation & MATCH_EFFECT_PS)
     {
-        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.ps.techniquesToRender, psToRenderNames, callLocation, 0, MATCH_EFFECT);
+        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.ps.techniquesToRender, psToRenderNames, callLocation, 0, MATCH_EFFECT_PS);
     }
 
     if (invocation & MATCH_EFFECT_VS)
     {
-        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.vs.techniquesToRender, vsToRenderNames, callLocation, 1, MATCH_EFFECT);
+        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.vs.techniquesToRender, vsToRenderNames, callLocation, 1, MATCH_EFFECT_VS);
     }
 
     bool rendered = false;
@@ -623,12 +625,12 @@ void RenderingManager::UpdateTextureBindings(command_list* cmd_list, uint32_t ca
 
     if (invocation & MATCH_BINDING_PS)
     {
-        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.ps.bindingsToUpdate, psToUpdateBindings, callLocation, 0, MATCH_BINDING);
+        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.ps.bindingsToUpdate, psToUpdateBindings, callLocation, 0, MATCH_BINDING_PS);
     }
 
     if (invocation & MATCH_BINDING_VS)
     {
-        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.vs.bindingsToUpdate, vsToUpdateBindings, callLocation, 1, MATCH_BINDING);
+        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.vs.bindingsToUpdate, vsToUpdateBindings, callLocation, 1, MATCH_BINDING_VS);
     }
 
     if (psToUpdateBindings.size() == 0 && vsToUpdateBindings.size() == 0)

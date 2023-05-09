@@ -28,6 +28,8 @@ namespace Rendering
     static constexpr uint32_t MATCH_EFFECT     = 0b00000011;
     static constexpr uint32_t MATCH_BINDING    = 0b00001100;
     static constexpr uint32_t MATCH_CONST      = 0b00110000;
+    static constexpr uint32_t MATCH_PS         = 0b00010101;
+    static constexpr uint32_t MATCH_VS         = 0b00101010;
     static constexpr uint32_t MATCH_DELIMITER  = 6;
 
     static constexpr uint32_t CHECK_MATCH_DRAW         = MATCH_ALL << (CALL_DRAW * MATCH_DELIMITER);
