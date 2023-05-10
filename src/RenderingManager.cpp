@@ -27,7 +27,7 @@ void RenderingManager::EnumerateTechniques(effect_runtime* runtime, std::functio
         });
 }
 
-void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDataContainer& commandListData, const DeviceDataContainer& deviceData)
+void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDataContainer& commandListData, const DeviceDataContainer& deviceData) const
 {
     // Masks which checks to perform. Note that we will always schedule a draw call check for binding and effect updates,
     // this serves the purpose of assigning the resource_view to perform the update later on if needed.
@@ -101,7 +101,7 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
     commandListData.commandQueue |= queue_mask;
 }
 
-void RenderingManager::CheckCallForCommandList(reshade::api::command_list* commandList, uint32_t psShaderHash, uint32_t vsShaderHash)
+void RenderingManager::CheckCallForCommandList(reshade::api::command_list* commandList)
 {
     if (nullptr == commandList)
     {
@@ -687,6 +687,43 @@ void RenderingManager::ClearUnmatchedTextureBindings(reshade::api::command_list*
         if (rtv != 0)
         {
             cmd_list->clear_render_target_view(rtv, clearColor);
+        }
+    }
+}
+
+void RenderingManager::ClearQueue2(CommandListDataContainer& commandListData, const uint32_t location0, const uint32_t location1) const
+{
+    if (commandListData.commandQueue & ((Rendering::MATCH_ALL << location0 * Rendering::MATCH_DELIMITER) | (Rendering::MATCH_ALL << location1 * Rendering::MATCH_DELIMITER)))
+    {
+        commandListData.commandQueue &= ~(Rendering::MATCH_ALL << location0 * Rendering::MATCH_DELIMITER);
+        commandListData.commandQueue &= ~(Rendering::MATCH_ALL << location1 * Rendering::MATCH_DELIMITER);
+
+        if (commandListData.ps.techniquesToRender.size() > 0)
+        {
+            for (auto it = commandListData.ps.techniquesToRender.begin(); it != commandListData.ps.techniquesToRender.end();)
+            {
+                uint32_t callLocation = std::get<1>(it->second);
+                if (callLocation == location0 || callLocation == location1)
+                {
+                    it = commandListData.ps.techniquesToRender.erase(it);
+                    continue;
+                }
+                it++;
+            }
+        }
+
+        if (commandListData.vs.techniquesToRender.size() > 0)
+        {
+            for (auto it = commandListData.vs.techniquesToRender.begin(); it != commandListData.vs.techniquesToRender.end();)
+            {
+                uint32_t callLocation = std::get<1>(it->second);
+                if (callLocation == location0 || callLocation == location1)
+                {
+                    it = commandListData.vs.techniquesToRender.erase(it);
+                    continue;
+                }
+                it++;
+            }
         }
     }
 }

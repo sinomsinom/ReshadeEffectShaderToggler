@@ -646,6 +646,18 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
                 }
                 ImGui::PopItemWidth();
 
+
+                // Misc. Options
+                bool retry = group.getRequeueAfterRTMatchingFailure();
+                bool matchRes = group.getMatchSwapchainResolution();
+
+                ImGui::AlignTextToFramePadding();
+                ImGui::Checkbox("Retry RT assignment", &retry);
+                group.setRequeueAfterRTMatchingFailure(retry);
+                ImGui::SameLine();
+                ImGui::Checkbox("Match swapchain resolution", &matchRes);
+                group.setMatchSwapchainResolution(matchRes);
+
                 if (ImGui::Button("OK"))
                 {
                     group.setEditing(false);

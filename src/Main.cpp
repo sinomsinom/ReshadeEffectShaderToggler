@@ -202,7 +202,7 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
 
     if (constantHandler != nullptr)
     {
-        constantHandler->OnReshadeReloadedEffects(runtime, data.allEnabledTechniques.size());
+        constantHandler->OnReshadeReloadedEffects(runtime, static_cast<int32_t>(data.allEnabledTechniques.size()));
     }
 }
 
@@ -231,7 +231,7 @@ static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique
 
     if (constantHandler != nullptr)
     {
-        constantHandler->OnReshadeSetTechniqueState(runtime, data.allEnabledTechniques.size());
+        constantHandler->OnReshadeSetTechniqueState(runtime, static_cast<int32_t>(data.allEnabledTechniques.size()));
     }
     
     return false;
@@ -318,7 +318,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         return;
     }
     
-    if (commandList->get_device()->get_api() == device_api::vulkan)
+    if (commandList->get_device()->get_api() == device_api::vulkan || commandList->get_device()->get_api() == device_api::d3d12)
     {
         commandListData.stateTracker.OnBindPipeline(commandList, stages, pipelineHandle);
     }
@@ -373,41 +373,9 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         }
 
         // Make sure we dequeue whatever is left over scheduled for CALL_DRAW/CALL_BIND_PIPELINE in case re-queueing was enabled for some group
-        if (commandListData.commandQueue & ((Rendering::MATCH_ALL << Rendering::CALL_DRAW * Rendering::MATCH_DELIMITER) | (Rendering::MATCH_ALL << Rendering::CALL_BIND_PIPELINE * Rendering::MATCH_DELIMITER)))
-        {
-            commandListData.commandQueue &= ~(Rendering::MATCH_ALL << Rendering::CALL_DRAW * Rendering::MATCH_DELIMITER);
-            commandListData.commandQueue &= ~(Rendering::MATCH_ALL << Rendering::CALL_BIND_PIPELINE * Rendering::MATCH_DELIMITER);
+        renderingManager.ClearQueue2(commandListData, Rendering::CALL_DRAW, Rendering::CALL_BIND_PIPELINE);
 
-            if (commandListData.ps.techniquesToRender.size() > 0)
-            {
-                for (auto it = commandListData.ps.techniquesToRender.begin(); it != commandListData.ps.techniquesToRender.end();)
-                {
-                    uint32_t callLocation = std::get<1>(it->second);
-                    if (callLocation == Rendering::CALL_DRAW || callLocation == Rendering::CALL_BIND_PIPELINE)
-                    {
-                        it = commandListData.ps.techniquesToRender.erase(it);
-                        continue;
-                    }
-                    it++;
-                }
-            }
-
-            if (commandListData.vs.techniquesToRender.size() > 0)
-            {
-                for (auto it = commandListData.vs.techniquesToRender.begin(); it != commandListData.vs.techniquesToRender.end();)
-                {
-                    uint32_t callLocation = std::get<1>(it->second);
-                    if (callLocation == Rendering::CALL_DRAW || callLocation == Rendering::CALL_BIND_PIPELINE)
-                    {
-                        it = commandListData.vs.techniquesToRender.erase(it);
-                        continue;
-                    }
-                    it++;
-                }
-            }
-        }
-
-        renderingManager.CheckCallForCommandList(commandList, handleHasPixelShaderAttached, handleHasVertexShaderAttached);
+        renderingManager.CheckCallForCommandList(commandList);
     }
 }
 
@@ -621,7 +589,7 @@ static bool UnInitHooks()
     return constantManager.UnInit();
 }
 
-bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
+static void CheckDrawCall(command_list* cmd_list)
 {
     CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
 
@@ -643,31 +611,32 @@ bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t instance_cou
             renderingManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_EFFECT);
         }
     }
+}
+
+static bool onDraw(command_list* cmd_list, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
+{
+    CheckDrawCall(cmd_list);
 
     return false;
 }
 
-bool onDrawIndexed(command_list* cmd_list, uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
+static bool onDrawIndexed(command_list* cmd_list, uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
 {
-    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    CheckDrawCall(cmd_list);
 
-    if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW)
+    return false;
+}
+
+static bool onDrawOrDispatchIndirect(command_list* cmd_list, indirect_command type, resource buffer, uint64_t offset, uint32_t draw_count, uint32_t stride)
+{
+    switch (type)
     {
-        if (constantHandler != nullptr && (commandListData.commandQueue & Rendering::MATCH_CONST))
-        {
-            constantHandler->UpdateConstants(cmd_list);
-            commandListData.commandQueue &= ~Rendering::MATCH_CONST;
-        }
-
-        if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_BINDING)
-        {
-            renderingManager.UpdateTextureBindings(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_BINDING);
-        }
-
-        if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_EFFECT)
-        {
-            renderingManager.RenderEffects(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_EFFECT);
-        }
+    case indirect_command::draw:
+    case indirect_command::draw_indexed:
+        CheckDrawCall(cmd_list);
+        break;
+    default:
+        break;
     }
 
     return false;
@@ -734,6 +703,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 
         reshade::register_event<reshade::addon_event::draw>(onDraw);
         reshade::register_event<reshade::addon_event::draw_indexed>(onDrawIndexed);
+        reshade::register_event<reshade::addon_event::draw_or_dispatch_indirect>(onDrawOrDispatchIndirect);
 
         reshade::register_overlay(nullptr, &displaySettings);
         break;
@@ -775,6 +745,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 
         reshade::unregister_event<reshade::addon_event::draw>(onDraw);
         reshade::unregister_event<reshade::addon_event::draw_indexed>(onDrawIndexed);
+        reshade::unregister_event<reshade::addon_event::draw_or_dispatch_indirect>(onDrawOrDispatchIndirect);
 
         reshade::unregister_overlay(nullptr, &displaySettings);
         reshade::unregister_addon(hModule);
