@@ -200,7 +200,7 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
         }
         });
 
-    if (constantHandler != nullptr)
+    if (constantHandler != nullptr && runtime == data.current_runtime)
     {
         constantHandler->OnReshadeReloadedEffects(runtime, static_cast<int32_t>(data.allEnabledTechniques.size()));
     }
@@ -229,7 +229,7 @@ static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique
         }
     }
 
-    if (constantHandler != nullptr)
+    if (constantHandler != nullptr && runtime == data.current_runtime)
     {
         constantHandler->OnReshadeSetTechniqueState(runtime, static_cast<int32_t>(data.allEnabledTechniques.size()));
     }
@@ -241,13 +241,17 @@ static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique
 static void onInitEffectRuntime(effect_runtime* runtime)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
-    data.current_runtime = runtime;
-    
-    renderingManager.InitTextureBingings(runtime);
 
-    if (constantHandler != nullptr)
+    if (data.current_runtime == nullptr)
     {
-        constantHandler->ReloadConstantVariables(runtime);
+        data.current_runtime = runtime;
+
+        renderingManager.InitTextureBingings(runtime);
+
+        if (constantHandler != nullptr)
+        {
+            constantHandler->ReloadConstantVariables(runtime);
+        }
     }
 }
 
@@ -255,13 +259,17 @@ static void onInitEffectRuntime(effect_runtime* runtime)
 static void onDestroyEffectRuntime(effect_runtime* runtime)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
-    data.current_runtime = nullptr;
-    
-    renderingManager.DisposeTextureBindings(runtime);
 
-    if (constantHandler != nullptr)
+    if (data.current_runtime != nullptr && runtime == data.current_runtime)
     {
-        constantHandler->ClearConstantVariables();
+        data.current_runtime = nullptr;
+
+        renderingManager.DisposeTextureBindings(runtime);
+
+        if (constantHandler != nullptr)
+        {
+            constantHandler->ClearConstantVariables();
+        }
     }
 }
 
