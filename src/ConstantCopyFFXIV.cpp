@@ -8,7 +8,7 @@ using namespace ConstantFeedback;
 using namespace reshade::api;
 
 sig_ffxiv_cbload* ConstantCopyFFXIV::org_ffxiv_cbload = nullptr;
-vector<tuple<const void*, uint64_t, uint64_t>> ConstantCopyFFXIV::_hostResourceBuffer;
+vector<tuple<const void*, uint64_t, size_t>> ConstantCopyFFXIV::_hostResourceBuffer;
 
 ConstantCopyFFXIV::ConstantCopyFFXIV()
 {
@@ -35,7 +35,7 @@ void ConstantCopyFFXIV::GetHostConstantBuffer(vector<uint8_t>& dest, size_t size
         auto& item = _hostResourceBuffer[i];
         if (get<1>(item) == resourceHandle)
         {
-            size_t minSize = min(size, get<2>(item));
+            size_t minSize = std::min(size, get<2>(item));
             memcpy(dest.data(), get<0>(item), minSize);
         }
     }
