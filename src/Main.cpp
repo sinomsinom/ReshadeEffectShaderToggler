@@ -190,7 +190,7 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
     data.allEnabledTechniques.clear();
     allTechniques.clear();
 
-    Rendering::RenderingManager::EnumerateTechniques(data.current_runtime, [&data](effect_runtime* runtime, effect_technique technique, string& name) {
+    Rendering::RenderingManager::EnumerateTechniques(runtime, [&data](effect_runtime* runtime, effect_technique technique, string& name) {
         allTechniques.push_back(name);
         bool enabled = runtime->get_technique_state(technique);
     
