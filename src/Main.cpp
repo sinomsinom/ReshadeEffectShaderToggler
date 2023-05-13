@@ -90,6 +90,7 @@ static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
 
 // TODO: actually implement ability to turn off srgb-view generation
 static bool srgbOverride = false;
+static std::vector<effect_runtime*> runtimes;
 
 /// <summary>
 /// Calculates a crc32 hash from the passed in shader bytecode. The hash is used to identity the shader in future runs.
@@ -200,7 +201,7 @@ static void onReshadeReloadedEffects(effect_runtime* runtime)
         }
         });
 
-    if (constantHandler != nullptr && runtime == data.current_runtime)
+    if (constantHandler != nullptr)
     {
         constantHandler->OnReshadeReloadedEffects(runtime, static_cast<int32_t>(data.allEnabledTechniques.size()));
     }
@@ -229,7 +230,7 @@ static bool onReshadeSetTechniqueState(effect_runtime* runtime, effect_technique
         }
     }
 
-    if (constantHandler != nullptr && runtime == data.current_runtime)
+    if (constantHandler != nullptr)
     {
         constantHandler->OnReshadeSetTechniqueState(runtime, static_cast<int32_t>(data.allEnabledTechniques.size()));
     }
@@ -242,16 +243,21 @@ static void onInitEffectRuntime(effect_runtime* runtime)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
-    if (data.current_runtime == nullptr)
+    // Dispose of texture bindings created from the runtime below
+    if (data.current_runtime != nullptr)
     {
-        data.current_runtime = runtime;
+        renderingManager.DisposeTextureBindings(data.current_runtime);
+    }
 
-        renderingManager.InitTextureBingings(runtime);
+    // Push new runtime on top
+    runtimes.push_back(runtime);
+    data.current_runtime = runtime;
 
-        if (constantHandler != nullptr)
-        {
-            constantHandler->ReloadConstantVariables(runtime);
-        }
+    renderingManager.InitTextureBingings(runtime);
+
+    if (constantHandler != nullptr)
+    {
+        constantHandler->ReloadConstantVariables(runtime);
     }
 }
 
@@ -260,15 +266,42 @@ static void onDestroyEffectRuntime(effect_runtime* runtime)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
-    if (data.current_runtime != nullptr && runtime == data.current_runtime)
+    // Remove runtime from stack
+    for (auto it = runtimes.begin(); it != runtimes.end();)
     {
-        data.current_runtime = nullptr;
+        if (runtime == *it)
+        {
+            it = runtimes.erase(it);
+            continue;
+        }
 
+        it++;
+    }
+
+    // Pick the runtime on top of our stack if there are any
+    if (runtime == data.current_runtime)
+    {
         renderingManager.DisposeTextureBindings(runtime);
 
-        if (constantHandler != nullptr)
+        if (runtimes.size() > 0)
         {
-            constantHandler->ClearConstantVariables();
+            data.current_runtime = runtimes[runtimes.size() - 1];
+
+            renderingManager.InitTextureBingings(data.current_runtime);
+
+            if (constantHandler != nullptr)
+            {
+                constantHandler->ReloadConstantVariables(data.current_runtime);
+            }
+        }
+        else
+        {
+            data.current_runtime = nullptr;
+
+            if (constantHandler != nullptr)
+            {
+                constantHandler->ClearConstantVariables();
+            }
         }
     }
 }
