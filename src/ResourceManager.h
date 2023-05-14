@@ -25,9 +25,11 @@ namespace Rendering
         void OnDestroyDevice(reshade::api::device*);
 
         void SetResourceViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view);
+        void SetAttempSrgbCorrection(bool attempt) { _attemptSrgbCorrection = attempt; }
     private:
         bool _IsSRGB(reshade::api::format value);
         bool _HasSRGB(reshade::api::format value);
+        bool _attemptSrgbCorrection = false;
 
         std::unordered_map<uint64_t, std::pair<reshade::api::resource_view, reshade::api::resource_view>> s_sRGBResourceViews;
         std::unordered_map<const reshade::api::resource_desc*, reshade::api::format> s_resourceFormatTransient;

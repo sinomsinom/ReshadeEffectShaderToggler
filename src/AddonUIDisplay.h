@@ -448,6 +448,14 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
     }
     ImGui::Separator();
 
+    if (ImGui::CollapsingHeader("Options", ImGuiTreeNodeFlags_None))
+    {
+        bool srgb = instance.GetAttemptSRGBCorrection();
+        ImGui::AlignTextToFramePadding();
+        ImGui::Checkbox("Attempt SRGB correction", &srgb);
+        instance.SetAttemptSRGBCorrection(srgb);
+    }
+
     if (ImGui::CollapsingHeader("Keybindings", ImGuiTreeNodeFlags_None))
     {
         for (uint32_t i = 0; i < IM_ARRAYSIZE(AddonImGui::KeybindNames); i++)

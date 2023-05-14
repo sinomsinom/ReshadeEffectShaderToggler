@@ -144,6 +144,7 @@ namespace AddonImGui
         const string& GetConstHookType() { return _constHookType; }
         const string& GetConstHookCopyType()  { return _constHookCopyType; }
         bool GetAttemptSRGBCorrection() { return _attemptSRGBCorrection; }
+        void SetAttemptSRGBCorrection(bool srgb) { _attemptSRGBCorrection = srgb; }
         void SetKeybinding(Keybind keybind, uint32_t keys);
         const unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>>* GetRESTVariables() { return _constantHandler->GetRESTVariables(); };
         reshade::api::format cFormat;

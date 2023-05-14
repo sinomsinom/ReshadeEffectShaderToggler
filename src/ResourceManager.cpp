@@ -121,7 +121,7 @@ void ResourceManager::OnDestroySwapchain(reshade::api::swapchain* swapchain)
 
 bool ResourceManager::OnCreateResource(device* device, resource_desc& desc, subresource_data* initial_data, resource_usage initial_state)
 {
-    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d)
+    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d && _attemptSrgbCorrection)
     {
         if (_HasSRGB(desc.texture.format)) {
             std::unique_lock<shared_mutex> lock(resource_mutex);

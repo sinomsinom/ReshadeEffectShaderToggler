@@ -89,7 +89,6 @@ static char g_charBuffer[CHAR_BUFFER_SIZE];
 static size_t g_charBufferSize = CHAR_BUFFER_SIZE;
 
 // TODO: actually implement ability to turn off srgb-view generation
-static bool srgbOverride = false;
 static std::vector<effect_runtime*> runtimes;
 
 /// <summary>
@@ -617,15 +616,15 @@ static void displaySettings(effect_runtime* runtime)
 }
 
 
-static bool InitHooks()
+static bool Init()
 {
-    srgbOverride = g_addonUIData.GetAttemptSRGBCorrection();
+    resourceManager.SetAttempSrgbCorrection(g_addonUIData.GetAttemptSRGBCorrection());
 
     return constantManager.Init(g_addonUIData, &constantCopy, &constantHandler);
 }
 
 
-static bool UnInitHooks()
+static bool UnInit()
 {
     return constantManager.UnInit();
 }
@@ -707,7 +706,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 
         g_addonUIData.SetBasePath(g_dllPath.parent_path());
         g_addonUIData.LoadShaderTogglerIniFile();
-        InitHooks();
+        Init();
         reshade::register_event<reshade::addon_event::init_swapchain>(onInitSwapchain);
         reshade::register_event<reshade::addon_event::destroy_swapchain>(onDestroySwapchain);
         reshade::register_event<reshade::addon_event::init_resource>(onInitResource);
@@ -749,7 +748,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_overlay(nullptr, &displaySettings);
         break;
     case DLL_PROCESS_DETACH:
-        UnInitHooks();
+        UnInit();
         reshade::unregister_event<reshade::addon_event::init_swapchain>(onInitSwapchain);
         reshade::unregister_event<reshade::addon_event::destroy_swapchain>(onDestroySwapchain);
         reshade::unregister_event<reshade::addon_event::reshade_present>(onReshadePresent);

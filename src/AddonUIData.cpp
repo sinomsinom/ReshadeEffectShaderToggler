@@ -171,7 +171,7 @@ void AddonUIData::LoadShaderTogglerIniFile(const std::string& fileName)
         return;
     }
 
-    _attemptSRGBCorrection = iniFile.GetBool("AttemptSRGBCorrection", "General");
+    _attemptSRGBCorrection = iniFile.GetBoolOrDefault("AttemptSRGBCorrection", "General", false);
 
     _constHookType = iniFile.GetValue("ConstantBufferHookType", "General");
     if (_constHookType.size() <= 0)
