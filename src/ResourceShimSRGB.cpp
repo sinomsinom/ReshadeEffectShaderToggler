@@ -1,10 +1,10 @@
-#include "GameShimSRGB.h"
+#include "ResourceShimSRGB.h"
 
 using namespace Shim::Resources;
 using namespace reshade::api;
 using namespace std;
 
-bool GameShimSRGB::_IsSRGB(reshade::api::format value)
+bool ResourceShimSRGB::_IsSRGB(reshade::api::format value)
 {
     switch (value)
     {
@@ -21,7 +21,7 @@ bool GameShimSRGB::_IsSRGB(reshade::api::format value)
 }
 
 
-bool GameShimSRGB::_HasSRGB(reshade::api::format value)
+bool ResourceShimSRGB::_HasSRGB(reshade::api::format value)
 {
     switch (value)
     {
@@ -44,17 +44,17 @@ bool GameShimSRGB::_HasSRGB(reshade::api::format value)
     return false;
 }
 
-bool GameShimSRGB::Init()
+bool ResourceShimSRGB::Init()
 {
     return true;
 }
 
-bool GameShimSRGB::UnInit()
+bool ResourceShimSRGB::UnInit()
 {
     return true;
 }
 
-bool GameShimSRGB::OnCreateResource(reshade::api::device* device, reshade::api::resource_desc& desc, reshade::api::subresource_data* initial_data, reshade::api::resource_usage initial_state)
+bool ResourceShimSRGB::OnCreateResource(reshade::api::device* device, reshade::api::resource_desc& desc, reshade::api::subresource_data* initial_data, reshade::api::resource_usage initial_state)
 {
     if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d)
     {
@@ -73,14 +73,14 @@ bool GameShimSRGB::OnCreateResource(reshade::api::device* device, reshade::api::
 }
 
 
-void GameShimSRGB::OnDestroyResource(reshade::api::device* device, reshade::api::resource res)
+void ResourceShimSRGB::OnDestroyResource(reshade::api::device* device, reshade::api::resource res)
 {
     std::unique_lock<shared_mutex> lock(resource_mutex);
 
     s_resourceFormat.erase(res.handle);
 }
 
-void GameShimSRGB::OnInitResource(reshade::api::device* device, const reshade::api::resource_desc& desc, const reshade::api::subresource_data* initData, reshade::api::resource_usage usage, reshade::api::resource handle)
+void ResourceShimSRGB::OnInitResource(reshade::api::device* device, const reshade::api::resource_desc& desc, const reshade::api::subresource_data* initData, reshade::api::resource_usage usage, reshade::api::resource handle)
 {
     if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d)
     {
@@ -95,7 +95,7 @@ void GameShimSRGB::OnInitResource(reshade::api::device* device, const reshade::a
     }
 }
 
-bool GameShimSRGB::OnCreateResourceView(reshade::api::device* device, reshade::api::resource resource, reshade::api::resource_usage usage_type, reshade::api::resource_view_desc& desc)
+bool ResourceShimSRGB::OnCreateResourceView(reshade::api::device* device, reshade::api::resource resource, reshade::api::resource_usage usage_type, reshade::api::resource_view_desc& desc)
 {
     const resource_desc texture_desc = device->get_resource_desc(resource);
     if (!static_cast<uint32_t>(texture_desc.usage & resource_usage::render_target) || texture_desc.type != resource_type::texture_2d)

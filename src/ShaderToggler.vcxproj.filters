@@ -90,13 +90,13 @@
     <ClInclude Include="GameHookT.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GameShim.h">
+    <ClInclude Include="ResourceShim.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GameShimFFXIV.h">
+    <ClInclude Include="ResourceShimFFXIV.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="GameShimSRGB.h">
+    <ClInclude Include="ResourceShimSRGB.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -155,10 +155,10 @@
     <ClCompile Include="GameHookT.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GameShimFFXIV.cpp">
+    <ClCompile Include="ResourceShimFFXIV.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GameShimSRGB.cpp">
+    <ClCompile Include="ResourceShimSRGB.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

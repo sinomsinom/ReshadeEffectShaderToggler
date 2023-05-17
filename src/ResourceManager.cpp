@@ -7,7 +7,7 @@ using namespace Shim::Resources;
 
 void ResourceManager::Init()
 {
-    rShim = new Shim::Resources::GameShimFFXIV;
+    rShim = new Shim::Resources::ResourceShimFFXIV;
 
     if (rShim->Init())
     {

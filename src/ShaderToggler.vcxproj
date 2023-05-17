@@ -193,9 +193,9 @@
     <ClInclude Include="ConstantManager.h" />
     <ClInclude Include="crc32_hash.hpp" />
     <ClInclude Include="GameHookT.h" />
-    <ClInclude Include="GameShim.h" />
-    <ClInclude Include="GameShimFFXIV.h" />
-    <ClInclude Include="GameShimSRGB.h" />
+    <ClInclude Include="ResourceShim.h" />
+    <ClInclude Include="ResourceShimFFXIV.h" />
+    <ClInclude Include="ResourceShimSRGB.h" />
     <ClInclude Include="KeyData.h" />
     <ClInclude Include="PipelinePrivateData.h" />
     <ClInclude Include="PipelineStateTracker.h" />
@@ -219,8 +219,8 @@
     <ClCompile Include="ConstantCopyMemcpy.cpp" />
     <ClCompile Include="ConstantManager.cpp" />
     <ClCompile Include="GameHookT.cpp" />
-    <ClCompile Include="GameShimFFXIV.cpp" />
-    <ClCompile Include="GameShimSRGB.cpp" />
+    <ClCompile Include="ResourceShimFFXIV.cpp" />
+    <ClCompile Include="ResourceShimSRGB.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="PipelineStateTracker.cpp" />
     <ClCompile Include="RenderingManager.cpp" />

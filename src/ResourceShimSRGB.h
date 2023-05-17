@@ -6,13 +6,13 @@
 #include <unordered_map>
 #include <shared_mutex>
 
-#include "GameShim.h"
+#include "ResourceShim.h"
 
 namespace Shim
 {
     namespace Resources
     {
-        class GameShimSRGB final : public virtual GameShim {
+        class ResourceShimSRGB final : public virtual ResourceShim {
         public:
             virtual bool Init() override final;
             virtual bool UnInit() override final;

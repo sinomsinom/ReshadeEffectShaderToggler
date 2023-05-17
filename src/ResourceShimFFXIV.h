@@ -5,7 +5,7 @@
 #include <reshade_api_pipeline.hpp>
 #include <unordered_map>
 
-#include "GameShim.h"
+#include "ResourceShim.h"
 #include "GameHookT.h"
 
 using namespace sigmatch_literals;
@@ -21,7 +21,7 @@ namespace Shim
         constexpr uintptr_t RT_NORMALS = 0x4ae0;
         constexpr uintptr_t RT_NORMALS_DECAL = 0x4be0;
 
-        class GameShimFFXIV final : public virtual GameShim {
+        class ResourceShimFFXIV final : public virtual ResourceShim {
         public:
             virtual bool Init() override final;
             virtual bool UnInit() override final;

@@ -1,28 +1,28 @@
-#include "GameShimFFXIV.h"
+#include "ResourceShimFFXIV.h"
 
 using namespace Shim::Resources;
 using namespace reshade::api;
 
-sig_ffxiv_texture_create* GameShimFFXIV::org_ffxiv_texture_create = nullptr;
-sig_ffxiv_textures_create* GameShimFFXIV::org_ffxiv_textures_create = nullptr;
+sig_ffxiv_texture_create* ResourceShimFFXIV::org_ffxiv_texture_create = nullptr;
+sig_ffxiv_textures_create* ResourceShimFFXIV::org_ffxiv_textures_create = nullptr;
 
-uintptr_t* GameShimFFXIV::p1 = nullptr;
-uintptr_t* GameShimFFXIV::p2 = nullptr;
-uintptr_t GameShimFFXIV::p1_1 = 0;
+uintptr_t* ResourceShimFFXIV::p1 = nullptr;
+uintptr_t* ResourceShimFFXIV::p2 = nullptr;
+uintptr_t ResourceShimFFXIV::p1_1 = 0;
 
-bool GameShimFFXIV::Init()
+bool ResourceShimFFXIV::Init()
 {
     return
         GameHookT<sig_ffxiv_textures_create>::Hook(&org_ffxiv_textures_create, detour_ffxiv_textures_create, ffxiv_textures_create) &&
         GameHookT<sig_ffxiv_texture_create>::Hook(&org_ffxiv_texture_create, detour_ffxiv_texture_create, ffxiv_texture_create);
 }
 
-bool GameShimFFXIV::UnInit()
+bool ResourceShimFFXIV::UnInit()
 {
     return MH_Uninitialize() == MH_OK;
 }
 
-bool GameShimFFXIV::OnCreateResource(reshade::api::device* device, reshade::api::resource_desc& desc, reshade::api::subresource_data* initial_data, reshade::api::resource_usage initial_state)
+bool ResourceShimFFXIV::OnCreateResource(reshade::api::device* device, reshade::api::resource_desc& desc, reshade::api::subresource_data* initial_data, reshade::api::resource_usage initial_state)
 {
     if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d && p1 != nullptr)
     {
@@ -46,17 +46,17 @@ bool GameShimFFXIV::OnCreateResource(reshade::api::device* device, reshade::api:
 }
 
 
-void GameShimFFXIV::OnDestroyResource(reshade::api::device* device, reshade::api::resource res)
+void ResourceShimFFXIV::OnDestroyResource(reshade::api::device* device, reshade::api::resource res)
 {
 
 }
 
-void GameShimFFXIV::OnInitResource(reshade::api::device* device, const reshade::api::resource_desc& desc, const reshade::api::subresource_data* initData, reshade::api::resource_usage usage, reshade::api::resource handle)
+void ResourceShimFFXIV::OnInitResource(reshade::api::device* device, const reshade::api::resource_desc& desc, const reshade::api::subresource_data* initData, reshade::api::resource_usage usage, reshade::api::resource handle)
 {
 
 }
 
-bool GameShimFFXIV::OnCreateResourceView(reshade::api::device* device, reshade::api::resource resource, reshade::api::resource_usage usage_type, reshade::api::resource_view_desc& desc)
+bool ResourceShimFFXIV::OnCreateResourceView(reshade::api::device* device, reshade::api::resource resource, reshade::api::resource_usage usage_type, reshade::api::resource_view_desc& desc)
 {
     const resource_desc texture_desc = device->get_resource_desc(resource);
     if(!static_cast<uint32_t>(texture_desc.usage & resource_usage::render_target) || texture_desc.type != resource_type::texture_2d || p1 == nullptr)
@@ -89,7 +89,7 @@ bool GameShimFFXIV::OnCreateResourceView(reshade::api::device* device, reshade::
     return false;
 }
 
-void __fastcall GameShimFFXIV::detour_ffxiv_texture_create(uintptr_t* param_1, uintptr_t* param_2)
+void __fastcall ResourceShimFFXIV::detour_ffxiv_texture_create(uintptr_t* param_1, uintptr_t* param_2)
 {
     p1 = param_1;
 
@@ -98,7 +98,7 @@ void __fastcall GameShimFFXIV::detour_ffxiv_texture_create(uintptr_t* param_1, u
     p1 = nullptr;
 }
 
-void __fastcall GameShimFFXIV::detour_ffxiv_textures_create(uintptr_t param_1)
+void __fastcall ResourceShimFFXIV::detour_ffxiv_textures_create(uintptr_t param_1)
 {
     p1_1 = param_1;
 

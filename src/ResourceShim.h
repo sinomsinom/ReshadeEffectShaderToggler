@@ -8,7 +8,7 @@
 namespace Shim {
     namespace Resources
     {
-        class GameShim {
+        class ResourceShim {
         public:
             virtual bool Init() = 0;
             virtual bool UnInit() = 0;
