@@ -37,21 +37,22 @@
 #include <cwctype>
 #include "AddonUIConstants.h"
 #include "KeyData.h"
+#include "ResourceManager.h"
 
 #define MAX_DESCRIPTOR_INDEX 10
 
 // From Reshade, see https://github.com/crosire/reshade/blob/main/source/imgui_widgets.cpp
-static bool key_input_box(const char* name, uint32_t* keys, const effect_runtime* runtime)
+static bool key_input_box(const char* name, uint32_t* keys, const reshade::api::effect_runtime* runtime)
 {
     char buf[48]; buf[0] = '\0';
     if (*keys)
-        buf[reshade_key_name(*keys).copy(buf, sizeof(buf) - 1)] = '\0';
+        buf[ShaderToggler::reshade_key_name(*keys).copy(buf, sizeof(buf) - 1)] = '\0';
 
     ImGui::InputTextWithHint(name, "Click to set keyboard shortcut", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoUndoRedo | ImGuiInputTextFlags_NoHorizontalScroll);
 
     if (ImGui::IsItemActive())
     {
-        const uint32_t last_key_pressed = reshade_last_key_pressed(runtime);
+        const uint32_t last_key_pressed = ShaderToggler::reshade_last_key_pressed(runtime);
         if (last_key_pressed != 0)
         {
             if (last_key_pressed == static_cast<uint32_t>(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
@@ -96,7 +97,7 @@ static void DisplayIsPartOfToggleGroup()
 }
 
 
-static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleGroup* group)
+static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ShaderToggler::ToggleGroup* group)
 {
     if (group == nullptr)
     {
@@ -104,9 +105,9 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
     }
 
     const uint32_t columns = 2;
-    const vector<string>* techniquesPtr = instance.GetAllTechniques();
-    unordered_set<string> curTechniques = group->preferredTechniques();
-    unordered_set<string> newTechniques;
+    const std::vector<std::string>* techniquesPtr = instance.GetAllTechniques();
+    std::unordered_set<std::string> curTechniques = group->preferredTechniques();
+    std::unordered_set<std::string> newTechniques;
     static char searchBuf[256] = "\0";
 
     ImGui::SetNextWindowSize({ 500, 300 }, ImGuiCond_Once);
@@ -145,7 +146,7 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
             }
             if (ImGui::BeginTable("Technique selection##table", columns, ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders))
             {
-                string searchString(searchBuf);
+                std::string searchString(searchBuf);
 
                 for (techniquesPtr != nullptr; const auto& technique : *techniquesPtr)
                 {
@@ -184,11 +185,11 @@ static void DisplayTechniqueSelection(AddonImGui::AddonUIData& instance, ToggleG
     }
 }
 
-static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
+static void DisplayOverlay(AddonImGui::AddonUIData& instance, reshade::api::effect_runtime* runtime)
 {
     if (instance.GetToggleGroupIdConstantEditing() >= 0)
     {
-        ToggleGroup* tGroup = nullptr;
+        ShaderToggler::ToggleGroup* tGroup = nullptr;
         const int idx = instance.GetToggleGroupIdConstantEditing();
         if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
         {
@@ -200,7 +201,7 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* ru
 
     if (instance.GetToggleGroupIdEffectEditing() >= 0)
     {
-        ToggleGroup* tGroup = nullptr;
+        ShaderToggler::ToggleGroup* tGroup = nullptr;
         const int idx = instance.GetToggleGroupIdEffectEditing();
         if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
         {
@@ -212,9 +213,9 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* ru
 
     if (instance.GetToggleGroupIdShaderEditing() >= 0)
     {
-        string editingGroupName = "";
+        std::string editingGroupName = "";
         const int idx = instance.GetToggleGroupIdShaderEditing();
-        ToggleGroup* tGroup = nullptr;
+        ShaderToggler::ToggleGroup* tGroup = nullptr;
         if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
         {
             editingGroupName = instance.GetToggleGroups()[idx].getName();
@@ -273,7 +274,7 @@ static void DisplayOverlay(AddonImGui::AddonUIData& instance, effect_runtime* ru
     }
 }
 
-static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
+static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect_runtime* runtime)
 {
     if (*instance.ActiveCollectorFrameCounter() > 0)
     {
@@ -285,7 +286,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
         return;
     }
 
-    ToggleGroup* editGroup = nullptr;
+    ShaderToggler::ToggleGroup* editGroup = nullptr;
 
     for (auto& group : instance.GetToggleGroups())
     {
@@ -295,7 +296,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
             break;
         }
 
-        if (group.second.getToggleKey() > 0 && areKeysPressed(group.second.getToggleKey(), runtime))
+        if (group.second.getToggleKey() > 0 && ShaderToggler::areKeysPressed(group.second.getToggleKey(), runtime))
         {
             group.second.toggleActive();
             // if the group's shaders are being edited, it should toggle the ones currently marked.
@@ -307,55 +308,55 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
         }
     }
 
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_DOWN), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_DOWN), runtime))
     {
         instance.GetPixelShaderManager()->huntPreviousShader(false);
         instance.UpdateToggleGroupsForShaderHashes();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_UP), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_UP), runtime))
     {
         instance.GetPixelShaderManager()->huntNextShader(false);
         instance.UpdateToggleGroupsForShaderHashes();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_DOWN), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_DOWN), runtime))
     {
         instance.GetPixelShaderManager()->huntPreviousShader(true);
         instance.UpdateToggleGroupsForShaderHashes();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_UP), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_UP), runtime))
     {
         instance.GetPixelShaderManager()->huntNextShader(true);
         instance.UpdateToggleGroupsForShaderHashes();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARK), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARK), runtime))
     {
         instance.GetPixelShaderManager()->toggleMarkOnHuntedShader();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_DOWN), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_DOWN), runtime))
     {
         instance.GetVertexShaderManager()->huntPreviousShader(false);
         instance.UpdateToggleGroupsForShaderHashes();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_UP), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_UP), runtime))
     {
         instance.GetVertexShaderManager()->huntNextShader(false);
         instance.UpdateToggleGroupsForShaderHashes();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_DOWN), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_DOWN), runtime))
     {
         instance.GetVertexShaderManager()->huntPreviousShader(true);
         instance.UpdateToggleGroupsForShaderHashes();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_UP), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_UP), runtime))
     {
         instance.GetVertexShaderManager()->huntNextShader(true);
         instance.UpdateToggleGroupsForShaderHashes();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARK), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARK), runtime))
     {
         instance.GetVertexShaderManager()->toggleMarkOnHuntedShader();
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::INVOCATION_DOWN), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::INVOCATION_DOWN), runtime))
     {
         if (instance.GetInvocationLocation() > 0)
         {
@@ -366,7 +367,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
             }
         }
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::INVOCATION_UP), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::INVOCATION_UP), runtime))
     {
         if (instance.GetInvocationLocation() < 2)
         {
@@ -377,7 +378,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
             }
         }
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::DESCRIPTOR_DOWN), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::DESCRIPTOR_DOWN), runtime))
     {
         if (instance.GetDescriptorIndex() > 0)
         {
@@ -388,7 +389,7 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, effect_runtime* runt
             }
         }
     }
-    if (areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::DESCRIPTOR_UP), runtime))
+    if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::DESCRIPTOR_UP), runtime))
     {
         if (instance.GetDescriptorIndex() < MAX_DESCRIPTOR_INDEX)
         {
@@ -416,7 +417,7 @@ static void ShowHelpMarker(const char* desc)
 }
 
 
-static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* runtime)
+static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::effect_runtime* runtime)
 {
     if (ImGui::CollapsingHeader("General info and help"))
     {
@@ -450,10 +451,23 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 
     if (ImGui::CollapsingHeader("Options", ImGuiTreeNodeFlags_None))
     {
-        bool srgb = instance.GetAttemptSRGBCorrection();
         ImGui::AlignTextToFramePadding();
-        ImGui::Checkbox("Attempt SRGB correction", &srgb);
-        instance.SetAttemptSRGBCorrection(srgb);
+        std::string varSelectedItem = instance.GetResourceShim();
+        if (ImGui::BeginCombo("Resource Shim", varSelectedItem.c_str(), ImGuiComboFlags_None))
+        {
+            for (auto& v : Rendering::ResourceShimNames)
+            {
+                bool is_selected = (varSelectedItem == v);
+                if (ImGui::Selectable(v.c_str(), is_selected))
+                {
+                    varSelectedItem = v;
+                }
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        instance.SetResourceShim(varSelectedItem);
     }
 
     if (ImGui::CollapsingHeader("Keybindings", ImGuiTreeNodeFlags_None))
@@ -478,10 +492,10 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
         }
         ImGui::Separator();
 
-        std::vector<ToggleGroup> toRemove;
+        std::vector<ShaderToggler::ToggleGroup> toRemove;
         for (auto& groupKV : instance.GetToggleGroups())
         {
-            ToggleGroup& group = groupKV.second;
+            ShaderToggler::ToggleGroup& group = groupKV.second;
 
             ImGui::PushID(group.getId());
             ImGui::AlignTextToFramePadding();
@@ -591,7 +605,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
             ImGui::SameLine();
             if (group.getToggleKey() > 0)
             {
-                ImGui::Text(" %s (%s)", group.getName().c_str(), reshade_key_name(group.getToggleKey()).c_str());
+                ImGui::Text(" %s (%s)", group.getName().c_str(), ShaderToggler::reshade_key_name(group.getToggleKey()).c_str());
             }
             else
             {
@@ -605,7 +619,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 
                 // Name of group
                 char tmpBuffer[150];
-                const string& name = group.getName();
+                const std::string& name = group.getName();
                 strncpy_s(tmpBuffer, 150, name.c_str(), name.size());
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.7f);
                 ImGui::AlignTextToFramePadding();
@@ -617,7 +631,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
 
                 // Name of Binding
                 bool isBindingEnabled = group.isProvidingTextureBinding();
-                const string& bindingName = group.getTextureBindingName();
+                const std::string& bindingName = group.getTextureBindingName();
                 strncpy_s(tmpBuffer, 150, bindingName.c_str(), bindingName.size());
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.7f);
                 ImGui::AlignTextToFramePadding();
@@ -648,7 +662,7 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, effect_runtime* r
                 ImGui::SameLine(ImGui::GetWindowWidth() * 0.2f);
 
                 uint32_t keys = group.getToggleKey();
-                if (key_input_box(reshade_key_name(keys).c_str(), &keys, runtime))
+                if (key_input_box(ShaderToggler::reshade_key_name(keys).c_str(), &keys, runtime))
                 {
                     group.setToggleKey(keys);
                 }

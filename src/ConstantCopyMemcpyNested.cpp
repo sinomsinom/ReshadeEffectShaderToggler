@@ -1,6 +1,8 @@
 #include "ConstantCopyMemcpyNested.h"
 
-using namespace ConstantFeedback;
+using namespace Shim::Constants;
+using namespace reshade::api;
+using namespace std;
 
 ConstantCopyMemcpyNested::ConstantCopyMemcpyNested()
 {

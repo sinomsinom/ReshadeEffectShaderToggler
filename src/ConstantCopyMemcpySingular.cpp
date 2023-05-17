@@ -1,6 +1,8 @@
 #include "ConstantCopyMemcpySingular.h"
 
-using namespace ConstantFeedback;
+using namespace Shim::Constants;
+using namespace reshade::api;
+using namespace std;
 
 BufferCopy ConstantCopyMemcpySingular::_bufferCopy;
 

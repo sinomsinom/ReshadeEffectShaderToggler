@@ -55,7 +55,7 @@
 using namespace reshade::api;
 using namespace ShaderToggler;
 using namespace AddonImGui;
-using namespace ConstantFeedback;
+using namespace Shim::Constants;
 using namespace StateTracker;
 
 extern "C" __declspec(dllexport) const char* NAME = "Reshade Effect Shader Toggler";
@@ -618,7 +618,8 @@ static void displaySettings(effect_runtime* runtime)
 
 static bool Init()
 {
-    resourceManager.SetAttempSrgbCorrection(g_addonUIData.GetAttemptSRGBCorrection());
+    resourceManager.SetResourceShim(g_addonUIData.GetResourceShim());
+    resourceManager.Init();
 
     return constantManager.Init(g_addonUIData, &constantCopy, &constantHandler);
 }

@@ -107,9 +107,9 @@ namespace ShaderToggler
         void setMatchSwapchainResolution(bool match) { _matchSwapchainResolution = match; }
         bool getRequeueAfterRTMatchingFailure() const { return _requeueAfterRTMatchingFailure; }
         void setRequeueAfterRTMatchingFailure(bool requeue) { _requeueAfterRTMatchingFailure = requeue; }
-        const std::unordered_map<string, tuple<uintptr_t, bool>>& GetVarOffsetMapping() const { return _varOffsetMapping; }
-        bool SetVarMapping(uintptr_t, string&, bool);
-        bool RemoveVarMapping(string&);
+        const std::unordered_map<std::string, std::tuple<uintptr_t, bool>>& GetVarOffsetMapping() const { return _varOffsetMapping; }
+        bool SetVarMapping(uintptr_t, std::string&, bool);
+        bool RemoveVarMapping(std::string&);
 
         bool operator==(const ToggleGroup& rhs)
         {
@@ -139,6 +139,6 @@ namespace ShaderToggler
         bool _requeueAfterRTMatchingFailure;
         std::string _textureBindingName;
         std::unordered_set<std::string> _preferredTechniques;
-        std::unordered_map<string, tuple<uintptr_t, bool>> _varOffsetMapping;
+        std::unordered_map<std::string, std::tuple<uintptr_t, bool>> _varOffsetMapping;
     };
 }
