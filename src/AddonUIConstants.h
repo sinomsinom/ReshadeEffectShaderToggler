@@ -77,7 +77,7 @@ static void DisplayConstantSettings(ShaderToggler::ToggleGroup* group)
     }
 }
 
-static void DisplaySRVSettings(ShaderToggler::ToggleGroup * group)
+static void DisplaySRVSettings(ShaderToggler::ToggleGroup* group)
 {
     ImGui::Text("Slot #: %u", group->getSRVSlotIndex());
 
@@ -124,7 +124,7 @@ static void DisplaySRVSettings(ShaderToggler::ToggleGroup * group)
     }
 }
 
-static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ShaderToggler::ToggleGroup* group, reshade::api::device * dev)
+static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ShaderToggler::ToggleGroup* group, reshade::api::device* dev)
 {
     if (instance.GetConstantHandler() == nullptr)
     {
@@ -369,7 +369,7 @@ static void DisplaySRVTab(AddonImGui::AddonUIData& instance, ShaderToggler::Togg
     DisplaySRVSettings(group);
 }
 
-static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ShaderToggler::ToggleGroup* group, reshade::api::device * dev)
+static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ShaderToggler::ToggleGroup* group, reshade::api::device* dev)
 {
     if (group == nullptr)
     {
