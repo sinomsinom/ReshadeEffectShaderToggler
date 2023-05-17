@@ -1,4 +1,5 @@
 #include "ResourceShimFFXIV.h"
+#include "PipelinePrivateData.h"
 
 using namespace Shim::Resources;
 using namespace reshade::api;
@@ -31,7 +32,12 @@ bool ResourceShimFFXIV::OnCreateResource(reshade::api::device* device, reshade::
         switch (rtindex)
         {
         case RT_UI:
-            desc.texture.format = format::r10g10b10a2_typeless;
+        {
+            DeviceDataContainer& dev = device->get_private_data<DeviceDataContainer>();
+            resource_desc d = device->get_resource_desc(dev.current_runtime->get_current_back_buffer());
+
+            desc.texture.format = format_to_typeless(d.texture.format);
+        }
             return true;
         case RT_NORMALS:
         case RT_NORMALS_DECAL:
@@ -76,7 +82,10 @@ bool ResourceShimFFXIV::OnCreateResourceView(reshade::api::device* device, resha
     switch (rtindex)
     {
     case RT_UI:
-        desc.format = format::r10g10b10a2_unorm;
+    {
+        resource_desc d = device->get_resource_desc(resource);
+        desc.format = format_to_default_typed(d.texture.format, 0);
+    }
         return true;
     case RT_NORMALS:
     case RT_NORMALS_DECAL:
