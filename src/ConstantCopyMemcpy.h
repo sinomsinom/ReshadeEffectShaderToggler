@@ -9,9 +9,6 @@
 #include "ConstantCopyBase.h"
 #include "GameHookT.h"
 
-//using namespace std;
-//using namespace reshade::api;
-//using namespace ShaderToggler;
 using namespace sigmatch_literals;
 
 #if _WIN64

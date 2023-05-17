@@ -8,9 +8,6 @@
 #include "ToggleGroup.h"
 #include "AddonUIData.h"
 
-//using namespace reshade::api;
-//using namespace ShaderToggler;
-
 static const std::unordered_set<std::string> varExclusionSet({
     "frametime",
     "framecount",
