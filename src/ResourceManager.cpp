@@ -5,17 +5,50 @@ using namespace Rendering;
 using namespace reshade::api;
 using namespace Shim::Resources;
 
+ResourceShimType ResourceManager::ResolveResourceShimType(const std::string& stype)
+{
+    if (stype == "none")
+        return ResourceShimType::Resource_Shim_None;
+    else if (stype == "srgb")
+        return ResourceShimType::Resource_Shim_SRGB;
+    else if (stype == "ffxiv")
+        return ResourceShimType::Resource_Shim_FFXIV;
+
+    return ResourceShimType::Resource_Shim_None;
+}
+
 void ResourceManager::Init()
 {
-    rShim = new Shim::Resources::ResourceShimFFXIV;
 
-    if (rShim->Init())
+    switch (_shimType)
     {
-        reshade::log_message(reshade::log_level::info, std::format("Resource Shim initialized").c_str());
+    case Resource_Shim_None:
+        rShim = nullptr;
+        break;
+    case Resource_Shim_SRGB:
+    {
+        static ResourceShimSRGB srgbShim;
+        rShim = &srgbShim;
+    }
+        break;
+    case Resource_Shim_FFXIV:
+    {
+        static ResourceShimFFXIV ffxivShim;
+        rShim = &ffxivShim;
+    }
+        break;
+    default:
+        rShim = nullptr;
+        break;
+    }
+
+    if (rShim != nullptr && rShim->Init())
+    {
+        reshade::log_message(reshade::log_level::info, std::format("Resource shim initialized").c_str());
     }
     else
     {
-        reshade::log_message(reshade::log_level::info, std::format("Resource Shim initialization failed").c_str());
+        reshade::log_message(reshade::log_level::info, std::format("No resource shim initialized").c_str());
     }
 }
 

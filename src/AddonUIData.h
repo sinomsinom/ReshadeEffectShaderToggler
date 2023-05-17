@@ -100,7 +100,7 @@ namespace AddonImGui
         uint32_t _keyBindings[ARRAYSIZE(KeybindNames)];
         std::string _constHookType = "none";
         std::string _constHookCopyType = "singular";
-        bool _attemptSRGBCorrection = false;
+        std::string _resourceShim = "none";
         std::filesystem::path _basePath;
     public:
         AddonUIData(ShaderToggler::ShaderManager* pixelShaderManager, ShaderToggler::ShaderManager* vertexShaderManager, Shim::Constants::ConstantHandlerBase* constants, std::atomic_uint32_t* activeCollectorFrameCounter,
@@ -139,8 +139,8 @@ namespace AddonImGui
         uint32_t GetKeybinding(Keybind keybind);
         const std::string& GetConstHookType() { return _constHookType; }
         const std::string& GetConstHookCopyType()  { return _constHookCopyType; }
-        bool GetAttemptSRGBCorrection() { return _attemptSRGBCorrection; }
-        void SetAttemptSRGBCorrection(bool srgb) { _attemptSRGBCorrection = srgb; }
+        const std::string& GetResourceShim() { return _resourceShim; }
+        void SetResourceShim(std::string& shim) { _resourceShim = shim; }
         void SetKeybinding(Keybind keybind, uint32_t keys);
         const std::unordered_map<std::string, std::tuple<Shim::Constants::constant_type, std::vector<reshade::api::effect_uniform_variable>>>* GetRESTVariables() { return _constantHandler->GetRESTVariables(); };
         reshade::api::format cFormat;

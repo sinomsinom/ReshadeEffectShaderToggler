@@ -37,6 +37,7 @@
 #include <cwctype>
 #include "AddonUIConstants.h"
 #include "KeyData.h"
+#include "ResourceManager.h"
 
 #define MAX_DESCRIPTOR_INDEX 10
 
@@ -450,10 +451,23 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
 
     if (ImGui::CollapsingHeader("Options", ImGuiTreeNodeFlags_None))
     {
-        bool srgb = instance.GetAttemptSRGBCorrection();
         ImGui::AlignTextToFramePadding();
-        ImGui::Checkbox("Attempt SRGB correction", &srgb);
-        instance.SetAttemptSRGBCorrection(srgb);
+        std::string varSelectedItem = instance.GetResourceShim();
+        if (ImGui::BeginCombo("Resource Shim", varSelectedItem.c_str(), ImGuiComboFlags_None))
+        {
+            for (auto& v : Rendering::ResourceShimNames)
+            {
+                bool is_selected = (varSelectedItem == v);
+                if (ImGui::Selectable(v.c_str(), is_selected))
+                {
+                    varSelectedItem = v;
+                }
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        instance.SetResourceShim(varSelectedItem);
     }
 
     if (ImGui::CollapsingHeader("Keybindings", ImGuiTreeNodeFlags_None))

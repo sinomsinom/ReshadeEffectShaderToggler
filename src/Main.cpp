@@ -618,18 +618,16 @@ static void displaySettings(effect_runtime* runtime)
 
 static bool Init()
 {
-    resourceManager.SetAttempSrgbCorrection(g_addonUIData.GetAttemptSRGBCorrection());
+    resourceManager.SetResourceShim(g_addonUIData.GetResourceShim());
     resourceManager.Init();
 
     return constantManager.Init(g_addonUIData, &constantCopy, &constantHandler);
-    //return true;
 }
 
 
 static bool UnInit()
 {
     return constantManager.UnInit();
-    //return true;
 }
 
 static void CheckDrawCall(command_list* cmd_list)

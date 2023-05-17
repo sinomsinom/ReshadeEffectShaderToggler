@@ -32,6 +32,7 @@
 
 #include <format>
 #include "AddonUIData.h"
+#include "RenderingManager.h"
 
 using namespace AddonImGui;
 using namespace reshade::api;
@@ -175,7 +176,11 @@ void AddonUIData::LoadShaderTogglerIniFile(const std::string& fileName)
         return;
     }
 
-    _attemptSRGBCorrection = iniFile.GetBoolOrDefault("AttemptSRGBCorrection", "General", false);
+    _resourceShim = iniFile.GetValue("ResourceShim", "General");
+    if (_resourceShim.size() <= 0)
+    {
+        _resourceShim = Rendering::ResourceShimNames[0];
+    }
 
     _constHookType = iniFile.GetValue("ConstantBufferHookType", "General");
     if (_constHookType.size() <= 0)
@@ -241,7 +246,7 @@ void AddonUIData::SaveShaderTogglerIniFile(const std::string& fileName)
     // groups are stored with "Group" + group counter, starting with 0.
     CDataFile iniFile;
 
-    iniFile.SetBool("AttemptSRGBCorrection", _attemptSRGBCorrection, "", "General");
+    iniFile.SetValue("ResourceShim", _resourceShim, "", "General");
 
     iniFile.SetValue("ConstantBufferHookType", _constHookType, "", "General");
     iniFile.SetValue("ConstantBufferHookCopyType", _constHookCopyType, "", "General");
