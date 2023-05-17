@@ -34,6 +34,8 @@
 #include "stdafx.h"
 #include "ToggleGroup.h"
 
+using namespace std;
+
 namespace ShaderToggler
 {
     ToggleGroup::ToggleGroup(std::string name, int id)

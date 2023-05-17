@@ -2,7 +2,10 @@
 #include "ConstantHandlerBase.h"
 #include "PipelinePrivateData.h"
 
-using namespace ConstantFeedback;
+using namespace Shim::Constants;
+using namespace std;
+using namespace reshade::api;
+using namespace ShaderToggler;
 
 unordered_map<string, tuple<constant_type, vector<effect_uniform_variable>>> ConstantHandlerBase::restVariables;
 char ConstantHandlerBase::charBuffer[CHAR_BUFFER_SIZE];

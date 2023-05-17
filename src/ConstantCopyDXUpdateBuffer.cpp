@@ -1,7 +1,7 @@
 #include <cstring>
 #include "ConstantCopyDXUpdateBuffer.h"
 
-using namespace ConstantFeedback;
+using namespace Shim::Constants;
 using namespace reshade::api;
 
 void ConstantCopyDXUpdateBuffer::OnUpdateBufferRegion(device* device, const void* data, resource resource, uint64_t offset, uint64_t size)

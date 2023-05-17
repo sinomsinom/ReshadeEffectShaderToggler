@@ -34,6 +34,10 @@
 #include "AddonUIData.h"
 
 using namespace AddonImGui;
+using namespace reshade::api;
+using namespace ShaderToggler;
+using namespace Shim::Constants;
+using namespace std;
 
 AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* vertexShaderManager, ConstantHandlerBase* cHandler, atomic_uint32_t* activeCollectorFrameCounter,
     vector<string>* techniques):

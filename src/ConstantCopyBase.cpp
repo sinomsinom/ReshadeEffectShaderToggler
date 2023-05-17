@@ -1,6 +1,6 @@
 #include "ConstantCopyBase.h"
 
-using namespace ConstantFeedback;
+using namespace Shim::Constants;
 using namespace reshade::api;
 using namespace std;
 
@@ -15,20 +15,6 @@ ConstantCopyBase::ConstantCopyBase()
 ConstantCopyBase::~ConstantCopyBase()
 {
 
-}
-
-std::string ConstantCopyBase::GetExecutableName()
-{
-    char fileName[MAX_PATH + 1];
-    DWORD charsWritten = GetModuleFileNameA(NULL, fileName, MAX_PATH + 1);
-    if (charsWritten != 0)
-    {
-        std::string ret(fileName);
-        std::size_t found = ret.find_last_of("/\\");
-        return ret.substr(found + 1);
-    }
-
-    return std::string();
 }
 
 void ConstantCopyBase::GetHostConstantBuffer(vector<uint8_t>& dest, size_t size, uint64_t resourceHandle)

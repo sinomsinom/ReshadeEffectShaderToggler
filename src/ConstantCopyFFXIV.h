@@ -6,8 +6,8 @@
 #include <unordered_map>
 #include <vector>
 #include <shared_mutex>
-#include "ConstantCopyDefinitions.h"
-#include "ConstantCopyT.h"
+#include "ConstantCopyBase.h"
+#include "GameHookT.h"
 
 using namespace sigmatch_literals;
 
@@ -59,25 +59,29 @@ struct ResourceData {
     TailBufferData tail_resources[4];
 };
 
-namespace ConstantFeedback {
-    class ConstantCopyFFXIV final : public virtual ConstantCopyT<sig_ffxiv_cbload> {
-    public:
-        ConstantCopyFFXIV();
-        ~ConstantCopyFFXIV();
+namespace Shim
+{
+    namespace Constants
+    {
+        class ConstantCopyFFXIV final : public virtual ConstantCopyBase {
+        public:
+            ConstantCopyFFXIV();
+            ~ConstantCopyFFXIV();
 
-        bool Init() override final;
-        bool UnInit() override final;
+            bool Init() override final;
+            bool UnInit() override final;
 
-        void OnInitResource(reshade::api::device* device, const reshade::api::resource_desc& desc, const reshade::api::subresource_data* initData, reshade::api::resource_usage usage, reshade::api::resource handle) override final {};
-        void OnDestroyResource(reshade::api::device* device, reshade::api::resource res) override final {};
-        void OnUpdateBufferRegion(reshade::api::device* device, const void* data, reshade::api::resource resource, uint64_t offset, uint64_t size) override final {};
-        void OnMapBufferRegion(reshade::api::device* device, reshade::api::resource resource, uint64_t offset, uint64_t size, reshade::api::map_access access, void** data) override final {};
-        void OnUnmapBufferRegion(reshade::api::device* device, reshade::api::resource resource) override final {};
-        void GetHostConstantBuffer(std::vector<uint8_t>& dest, size_t size, uint64_t resourceHandle) override final;
-    private:
-        static vector<tuple<const void*, uint64_t, size_t>> _hostResourceBuffer;
-        static sig_ffxiv_cbload* org_ffxiv_cbload;
-        static int64_t __fastcall detour_ffxiv_cbload(ResourceData* param_1, param_2_struct* param_2, param_3_struct param_3, HostBufferData* param_4);
-        static inline void set_host_resource_data_location(void* origin, size_t len, int64_t resource_handle, uint64_t index);
-    };
+            void OnInitResource(reshade::api::device* device, const reshade::api::resource_desc& desc, const reshade::api::subresource_data* initData, reshade::api::resource_usage usage, reshade::api::resource handle) override final {};
+            void OnDestroyResource(reshade::api::device* device, reshade::api::resource res) override final {};
+            void OnUpdateBufferRegion(reshade::api::device* device, const void* data, reshade::api::resource resource, uint64_t offset, uint64_t size) override final {};
+            void OnMapBufferRegion(reshade::api::device* device, reshade::api::resource resource, uint64_t offset, uint64_t size, reshade::api::map_access access, void** data) override final {};
+            void OnUnmapBufferRegion(reshade::api::device* device, reshade::api::resource resource) override final {};
+            void GetHostConstantBuffer(std::vector<uint8_t>& dest, size_t size, uint64_t resourceHandle) override final;
+        private:
+            static std::vector<std::tuple<const void*, uint64_t, size_t>> _hostResourceBuffer;
+            static sig_ffxiv_cbload* org_ffxiv_cbload;
+            static int64_t __fastcall detour_ffxiv_cbload(ResourceData* param_1, param_2_struct* param_2, param_3_struct param_3, HostBufferData* param_4);
+            static inline void set_host_resource_data_location(void* origin, size_t len, int64_t resource_handle, uint64_t index);
+        };
+    }
 }

@@ -1,11 +1,11 @@
 #include <cstring>
-#include <MinHook.h>
 #include <intrin.h>
 #include <d3d11.h>
 #include "ConstantCopyFFXIV.h"
 
-using namespace ConstantFeedback;
+using namespace Shim::Constants;
 using namespace reshade::api;
+using namespace std;
 
 sig_ffxiv_cbload* ConstantCopyFFXIV::org_ffxiv_cbload = nullptr;
 vector<tuple<const void*, uint64_t, size_t>> ConstantCopyFFXIV::_hostResourceBuffer;
@@ -20,7 +20,7 @@ ConstantCopyFFXIV::~ConstantCopyFFXIV()
 
 bool ConstantCopyFFXIV::Init()
 {
-    return Hook(&org_ffxiv_cbload, detour_ffxiv_cbload, ffxiv_cbload);
+    return Shim::GameHookT<sig_ffxiv_cbload>::Hook(&org_ffxiv_cbload, detour_ffxiv_cbload, ffxiv_cbload);
 }
 
 bool ConstantCopyFFXIV::UnInit()

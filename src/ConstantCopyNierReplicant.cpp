@@ -1,8 +1,7 @@
 #include <cstring>
-#include <MinHook.h>
 #include "ConstantCopyNierReplicant.h"
 
-using namespace ConstantFeedback;
+using namespace Shim::Constants;
 using namespace reshade::api;
 
 sig_nier_replicant_cbload* ConstantCopyNierReplicant::org_nier_replicant_cbload = nullptr;
@@ -19,7 +18,7 @@ ConstantCopyNierReplicant::~ConstantCopyNierReplicant()
 
 bool ConstantCopyNierReplicant::Init()
 {
-    return Hook(&org_nier_replicant_cbload, detour_nier_replicant_cbload, nier_replicant_cbload);
+    return Shim::GameHookT<sig_nier_replicant_cbload>::Hook(&org_nier_replicant_cbload, detour_nier_replicant_cbload, nier_replicant_cbload);
 }
 
 bool ConstantCopyNierReplicant::UnInit()

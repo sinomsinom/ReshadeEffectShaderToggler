@@ -6,6 +6,9 @@
 #include "ConstantCopyNierReplicant.h"
 #include "ConstantCopyDXUpdateBuffer.h"
 
+using namespace Shim::Constants;
+using namespace std;
+
 ConstantCopyType ConstantManager::ResolveConstantCopyType(const string& ctype)
 {
     if (ctype == "none")
@@ -32,14 +35,8 @@ ConstantHandlerType ConstantManager::ResolveConstantHandlerType(const string& ht
     return ConstantHandlerType::Handler_Default;
 }
 
-bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantFeedback::ConstantCopyBase** constantCopy, ConstantFeedback::ConstantHandlerBase** constantHandler)
+bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantCopyBase** constantCopy, ConstantHandlerBase** constantHandler)
 {
-    // Initialize MinHook.
-    if (MH_Initialize() != MH_OK)
-    {
-        return false;
-    }
-
     const string& hookType = data.GetConstHookType();
     const string& hookCopyType = data.GetConstHookCopyType();
 

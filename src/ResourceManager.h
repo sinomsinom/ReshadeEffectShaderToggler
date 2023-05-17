@@ -6,6 +6,9 @@
 #include <shared_mutex>
 #include <functional>
 #include "PipelinePrivateData.h"
+#include "GameShim.h"
+#include "GameShimSRGB.h"
+#include "GameShimFFXIV.h"
 
 namespace Rendering
 {
@@ -26,14 +29,12 @@ namespace Rendering
 
         void SetResourceViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view);
         void SetAttempSrgbCorrection(bool attempt) { _attemptSrgbCorrection = attempt; }
+        void Init();
     private:
-        bool _IsSRGB(reshade::api::format value);
-        bool _HasSRGB(reshade::api::format value);
         bool _attemptSrgbCorrection = false;
+        Shim::Resources::GameShim* rShim = nullptr;
 
         std::unordered_map<uint64_t, std::pair<reshade::api::resource_view, reshade::api::resource_view>> s_sRGBResourceViews;
-        std::unordered_map<const reshade::api::resource_desc*, reshade::api::format> s_resourceFormatTransient;
-        std::unordered_map<uint64_t, reshade::api::format> s_resourceFormat;
 
         std::shared_mutex resource_mutex;
     };

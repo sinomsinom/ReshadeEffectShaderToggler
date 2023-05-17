@@ -78,9 +78,6 @@
     <ClInclude Include="ConstantCopyNierReplicant.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ConstantCopyT.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ConstantCopyMemcpySingular.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -88,6 +85,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ConstantCopyDXUpdateBuffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GameHookT.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GameShim.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GameShimFFXIV.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GameShimSRGB.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -134,9 +143,6 @@
     <ClCompile Include="ConstantCopyNierReplicant.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ConstantCopyT.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ConstantCopyMemcpySingular.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -144,6 +150,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ConstantCopyDXUpdateBuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GameHookT.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GameShimFFXIV.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GameShimSRGB.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
