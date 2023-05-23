@@ -10,7 +10,7 @@
 
 using namespace sigmatch_literals;
 
-static const sigmatch::signature ffxiv_texture_create = "40 55 53 57 41 54 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC E0 05 00 00"_sig;
+static const sigmatch::signature ffxiv_texture_create = "40 55 53 57 41 54 41 57 48 8D AC 24 ?? ?? ?? ?? B8 E0 21 00 00"_sig;
 static const sigmatch::signature ffxiv_textures_create = "40 53 48 83 EC 60 48 83 79 ?? 00 48 8B D9 0F 84 ?? ?? ?? ??"_sig;
 
 namespace Shim
