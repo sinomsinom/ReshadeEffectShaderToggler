@@ -25,26 +25,30 @@ bool ResourceShimFFXIV::UnInit()
 
 bool ResourceShimFFXIV::OnCreateResource(reshade::api::device* device, reshade::api::resource_desc& desc, reshade::api::subresource_data* initial_data, reshade::api::resource_usage initial_state)
 {
-    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d && p1 != nullptr)
+    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d && p1 != nullptr && p1_1 != 0)
     {
-        uintptr_t rtindex = reinterpret_cast<uintptr_t>(p1) - (p1_1);
-
-        switch (rtindex)
+        for (uint32_t i = 0; i < RT_OFFSET_LIST.size(); i++)
         {
-        case RT_UI:
-        {
-            DeviceDataContainer& dev = device->get_private_data<DeviceDataContainer>();
-            resource_desc d = device->get_resource_desc(dev.current_runtime->get_current_back_buffer());
-
-            desc.texture.format = format_to_typeless(d.texture.format);
-        }
-            return true;
-        case RT_NORMALS:
-        case RT_NORMALS_DECAL:
-            desc.texture.format = format::r16g16b16a16_unorm;
-            return true;
-        default:
-            return false;
+            if (*reinterpret_cast<uintptr_t*>(p1_1 + RT_OFFSET_LIST[i]) == reinterpret_cast<uintptr_t>(p1))
+            {
+                switch (RT_OFFSET_LIST[i])
+                {
+                case RT_OFFSET::RT_UI:
+                {
+                    DeviceDataContainer& dev = device->get_private_data<DeviceDataContainer>();
+                    resource_desc d = device->get_resource_desc(dev.current_runtime->get_current_back_buffer());
+                
+                    desc.texture.format = format_to_typeless(d.texture.format);
+                }
+                    return true;
+                case RT_OFFSET::RT_NORMALS:
+                case RT_OFFSET::RT_NORMALS_DECAL:
+                    desc.texture.format = format::r16g16b16a16_unorm;
+                    return true;
+                default:
+                    return false;
+                }
+            }
         }
     }
 
@@ -65,7 +69,7 @@ void ResourceShimFFXIV::OnInitResource(reshade::api::device* device, const resha
 bool ResourceShimFFXIV::OnCreateResourceView(reshade::api::device* device, reshade::api::resource resource, reshade::api::resource_usage usage_type, reshade::api::resource_view_desc& desc)
 {
     const resource_desc texture_desc = device->get_resource_desc(resource);
-    if(!static_cast<uint32_t>(texture_desc.usage & resource_usage::render_target) || texture_desc.type != resource_type::texture_2d || p1 == nullptr)
+    if(!static_cast<uint32_t>(texture_desc.usage & resource_usage::render_target) || texture_desc.type != resource_type::texture_2d || p1 == nullptr || p1_1 == 0)
         return false;
 
     if (desc.type == resource_view_type::unknown)
@@ -77,22 +81,26 @@ bool ResourceShimFFXIV::OnCreateResourceView(reshade::api::device* device, resha
         desc.texture.layer_count = (usage_type == resource_usage::shader_resource) ? UINT32_MAX : 1;
     }
 
-    uintptr_t rtindex = reinterpret_cast<uintptr_t>(p1) - (p1_1);
-
-    switch (rtindex)
+    for (uint32_t i = 0; i < RT_OFFSET_LIST.size(); i++)
     {
-    case RT_UI:
-    {
-        resource_desc d = device->get_resource_desc(resource);
-        desc.format = format_to_default_typed(d.texture.format, 0);
-    }
-        return true;
-    case RT_NORMALS:
-    case RT_NORMALS_DECAL:
-        desc.format = format::r16g16b16a16_unorm;
-        return true;
-    default:
-        return false;
+        if (*reinterpret_cast<uintptr_t*>(p1_1 + RT_OFFSET_LIST[i]) == reinterpret_cast<uintptr_t>(p1))
+        {
+            switch (RT_OFFSET_LIST[i])
+            {
+            case RT_OFFSET::RT_UI:
+            {
+                resource_desc d = device->get_resource_desc(resource);
+                desc.format = format_to_default_typed(d.texture.format, 0);
+            }
+            return true;
+            case RT_OFFSET::RT_NORMALS:
+            case RT_OFFSET::RT_NORMALS_DECAL:
+                desc.format = format::r16g16b16a16_unorm;
+                return true;
+            default:
+                return false;
+            }
+        }
     }
 
     return false;
@@ -107,9 +115,13 @@ void __fastcall ResourceShimFFXIV::detour_ffxiv_texture_create(uintptr_t* param_
     p1 = nullptr;
 }
 
-void __fastcall ResourceShimFFXIV::detour_ffxiv_textures_create(uintptr_t param_1)
+uintptr_t __fastcall ResourceShimFFXIV::detour_ffxiv_textures_create(uintptr_t param_1)
 {
     p1_1 = param_1;
 
-    org_ffxiv_textures_create(param_1);
+    uintptr_t ret = org_ffxiv_textures_create(param_1);
+
+    p1_1 = 0;
+
+    return ret;
 }

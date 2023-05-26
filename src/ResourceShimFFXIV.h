@@ -11,15 +11,32 @@
 using namespace sigmatch_literals;
 
 static const sigmatch::signature ffxiv_texture_create = "40 55 53 57 41 54 41 57 48 8D AC 24 ?? ?? ?? ?? B8 E0 21 00 00"_sig;
-static const sigmatch::signature ffxiv_textures_create = "40 53 48 83 EC 60 48 83 79 ?? 00 48 8B D9 0F 84 ?? ?? ?? ??"_sig;
+static const sigmatch::signature ffxiv_textures_create = "40 55 53 41 55 48 8B EC 48 83 EC 50"_sig;
 
 namespace Shim
 {
     namespace Resources
     {
-        constexpr uintptr_t RT_UI = 0x59e0;
-        constexpr uintptr_t RT_NORMALS = 0x4ae0;
-        constexpr uintptr_t RT_NORMALS_DECAL = 0x4be0;
+        static const std::vector<uintptr_t> RT_OFFSET_LIST = {
+            0x20,  // normals
+            0x28,  // lambert?
+            0x30,  // actually lambert
+            0x38,  // white thing
+            0x40,  // yellow thing
+            0x70,  // decal normals
+            0x250, // UI
+        };
+
+        enum RT_OFFSET : uint32_t
+        {
+            RT_NORMALS = 0x20,
+            RT_UNKNOWN0 = 0x28,
+            RT_LAMBERT = 0x30,
+            RT_UNKNOWN1 = 0x38,
+            RT_UNKNOWN2 = 0x40,
+            RT_NORMALS_DECAL = 0x70,
+            RT_UI = 0x250
+        };
 
         class ResourceShimFFXIV final : public virtual ResourceShim {
         public:
@@ -40,7 +57,7 @@ namespace Shim
             static sig_ffxiv_textures_create* org_ffxiv_textures_create;
 
             static void __fastcall detour_ffxiv_texture_create(uintptr_t*, uintptr_t*);
-            static void __fastcall detour_ffxiv_textures_create(uintptr_t);
+            static uintptr_t __fastcall detour_ffxiv_textures_create(uintptr_t);
         };
     }
 }
