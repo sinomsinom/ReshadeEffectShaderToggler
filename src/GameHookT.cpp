@@ -86,6 +86,7 @@ bool GameHookT<T>::Unhook()
 
 template class GameHookT<sig_ffxiv_texture_create>;
 template class GameHookT<sig_ffxiv_textures_create>;
+template class GameHookT<sig_ffxiv_textures_recreate>;
 template class GameHookT<sig_memcpy>;
 template class GameHookT<sig_ffxiv_cbload>;
 template class GameHookT<sig_nier_replicant_cbload>;
