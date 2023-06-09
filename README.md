@@ -1,3 +1,5 @@
+[![MSBuild](https://github.com/4lex4nder/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml/badge.svg)](https://github.com/4lex4nder/ReshadeEffectShaderToggler/actions/workflows/msbuild.yml)
+
 # ReshadeEffectShaderToggler
 Reshade 5.8+ addon to apply Reshade effects to render targets bound before specific, user-configurable, groups of shaders are 
 encountered within a game's rendering pipeline.
