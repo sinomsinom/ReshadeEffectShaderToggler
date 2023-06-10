@@ -183,6 +183,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AddonUIAbout.h" />
     <ClInclude Include="AddonUIConstants.h" />
     <ClInclude Include="AddonUIData.h" />
     <ClInclude Include="AddonUIDisplay.h" />

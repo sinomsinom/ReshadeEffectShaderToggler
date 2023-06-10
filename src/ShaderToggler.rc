@@ -93,6 +93,22 @@ BEGIN
     END
 END
 
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// RCDATA
+//
+
+LICENSE_MINHOOK         RCDATA                  "..\\deps\\minhook\\LICENSE.txt"
+
+LICENSE_RESHADE         RCDATA                  "..\\deps\\reshade\\LICENSE.md"
+
+LICENSE_ROBINMAP        RCDATA                  "..\\deps\\robin-map\\LICENSE"
+
+LICENSE_SIGMATCH        RCDATA                  "..\\deps\\sigmatch\\LICENSE"
+
+LICENSE_REST            RCDATA                  "..\\LICENSE"
+
 #endif    // English (United Kingdom) resources
 /////////////////////////////////////////////////////////////////////////////
 
