@@ -36,6 +36,7 @@
 #include <ranges>
 #include <cwctype>
 #include "AddonUIConstants.h"
+#include "AddonUIAbout.h"
 #include "KeyData.h"
 #include "ResourceManager.h"
 
@@ -419,6 +420,8 @@ static void ShowHelpMarker(const char* desc)
 
 static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::effect_runtime* runtime)
 {
+    DisplayAbout();
+
     if (ImGui::CollapsingHeader("General info and help"))
     {
         ImGui::PushTextWrapPos();
