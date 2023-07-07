@@ -51,6 +51,7 @@ namespace ShaderToggler
         _extractConstants = false;
         _extractResourceViews = false;
         _matchSwapchainResolution = true;
+        _copyTextureBinding = false;
     }
 
 
@@ -190,6 +191,7 @@ namespace ShaderToggler
         iniFile.SetBool("ProvideTextureBinding", _isProvidingTextureBinding, "", sectionRoot);
         iniFile.SetValue("TextureBindingName", _textureBindingName, "", sectionRoot);
         iniFile.SetBool("ClearTextureBindings", _clearBindings, "", sectionRoot);
+        iniFile.SetBool("CopyTextureBinding", _copyTextureBinding, "", sectionRoot);
 
         iniFile.SetBool("ExtractConstants", _extractConstants, "", sectionRoot);
         iniFile.SetUInt("ConstantPipelineSlot", _slotIndex, "", sectionRoot);
@@ -313,6 +315,7 @@ namespace ShaderToggler
         _isProvidingTextureBinding = iniFile.GetBool("ProvideTextureBinding", sectionRoot);
         _clearBindings = iniFile.GetBoolOrDefault("ClearTextureBindings", sectionRoot, true);
         _textureBindingName = iniFile.GetString("TextureBindingName", sectionRoot);
+        _copyTextureBinding = iniFile.GetBoolOrDefault("CopyTextureBinding", sectionRoot, true);
 
         _extractConstants = iniFile.GetBool("ExtractConstants", sectionRoot);
 

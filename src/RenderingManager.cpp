@@ -121,6 +121,42 @@ void RenderingManager::CheckCallForCommandList(reshade::api::command_list* comma
     r_mutex.unlock();
 }
 
+static inline bool IsColorBuffer(reshade::api::format value)
+{
+    switch (value)
+    {
+    default:
+        return false;
+    case reshade::api::format::b5g6r5_unorm:
+    case reshade::api::format::b5g5r5a1_unorm:
+    case reshade::api::format::b5g5r5x1_unorm:
+    case reshade::api::format::r8g8b8a8_typeless:
+    case reshade::api::format::r8g8b8a8_unorm:
+    case reshade::api::format::r8g8b8a8_unorm_srgb:
+    case reshade::api::format::r8g8b8x8_unorm:
+    case reshade::api::format::r8g8b8x8_unorm_srgb:
+    case reshade::api::format::b8g8r8a8_typeless:
+    case reshade::api::format::b8g8r8a8_unorm:
+    case reshade::api::format::b8g8r8a8_unorm_srgb:
+    case reshade::api::format::b8g8r8x8_typeless:
+    case reshade::api::format::b8g8r8x8_unorm:
+    case reshade::api::format::b8g8r8x8_unorm_srgb:
+    case reshade::api::format::r10g10b10a2_typeless:
+    case reshade::api::format::r10g10b10a2_unorm:
+    case reshade::api::format::r10g10b10a2_xr_bias:
+    case reshade::api::format::b10g10r10a2_typeless:
+    case reshade::api::format::b10g10r10a2_unorm:
+    case reshade::api::format::r11g11b10_float:
+    case reshade::api::format::r16g16b16a16_typeless:
+    case reshade::api::format::r16g16b16a16_float:
+    case reshade::api::format::r32g32b32_typeless:
+    case reshade::api::format::r32g32b32_float:
+    case reshade::api::format::r32g32b32a32_typeless:
+    case reshade::api::format::r32g32b32a32_float:
+        return true;
+    }
+}
+
 const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* runtime, const pair<string, tuple<const ToggleGroup*, bool, resource_view>>& matchObject, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action)
 {
     resource_view active_rtv = { 0 };
@@ -161,11 +197,16 @@ const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* run
             return active_rtv;
         }
 
-        // Make sure our target matches swap buffer dimensions when applying effects
-        if (group->getMatchSwapchainResolution())
+        // Don't apply effects to non-RGB buffers
+        resource_desc desc = device->get_resource_desc(rs);
+        if (action & MATCH_EFFECT && !IsColorBuffer(desc.texture.format))
         {
-            resource_desc desc = device->get_resource_desc(rs);
+            return active_rtv;
+        }
 
+        // Make sure our target matches swap buffer dimensions when applying effects or it's explicitly requested
+        if (group->getMatchSwapchainResolution() || action & MATCH_EFFECT)
+        {
             uint32_t width, height;
             runtime->get_screenshot_width_and_height(&width, &height);
 
@@ -357,16 +398,12 @@ void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocati
         return;
     }
 
-    deviceData.current_runtime->render_effects(cmd_list, static_cast<resource_view>(0), static_cast<resource_view>(0));
-
-    //on_begin_render_effects(deviceData.current_runtime, cmd_list, { 0 }, { 0 });
+    deviceData.current_runtime->render_effects(cmd_list, resource_view{ 0 }, resource_view{ 0 });
 
     std::unique_lock<shared_mutex> dev_mutex(render_mutex);
     rendered = (psToRenderNames.size() > 0) && _RenderEffects(cmd_list, deviceData, commandListData.ps.techniquesToRender, psRemovalList, psToRenderNames) ||
         (vsToRenderNames.size() > 0) && _RenderEffects(cmd_list, deviceData, commandListData.vs.techniquesToRender, vsRemovalList, vsToRenderNames);
     dev_mutex.unlock();
-
-    //on_finish_render_effects(deviceData.current_runtime, cmd_list, { 0 }, { 0 });
 
     for (auto& g : psRemovalList)
     {
@@ -390,20 +427,28 @@ void RenderingManager::InitTextureBingings(effect_runtime* runtime)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
+    // Init empty texture
+    CreateTextureBinding(runtime, &empty_res, &empty_srv, &empty_rtv, reshade::api::format::r8g8b8a8_unorm);
+
     // Initialize texture bindings with default format
     for (auto& group : uiData.GetToggleGroups())
     {
         if (group.second.isProvidingTextureBinding() && group.second.getTextureBindingName().length() > 0)
         {
-            resource res = {};
-            resource_view srv = {};
-            resource_view rtv = {};
+            resource res = { 0 };
+            resource_view srv = { 0 };
+            resource_view rtv = { 0 };
 
-            if (CreateTextureBinding(runtime, &res, &srv, &rtv, reshade::api::format::r8g8b8a8_unorm))
+            std::unique_lock<shared_mutex> lock(binding_mutex);
+            if (group.second.getCopyTextureBinding() && CreateTextureBinding(runtime, &res, &srv, &rtv, reshade::api::format::r8g8b8a8_unorm))
             {
-                std::unique_lock<shared_mutex> lock(binding_mutex);
-                data.bindingMap[group.second.getTextureBindingName()] = std::make_tuple(res, format::unknown, srv, rtv, 0, 0, group.second.getClearBindings());
+                data.bindingMap[group.second.getTextureBindingName()] = TextureBindingData{ res, reshade::api::format::r8g8b8a8_unorm, rtv, srv, 0, 0, group.second.getClearBindings(), group.second.getCopyTextureBinding(), false };
                 runtime->update_texture_bindings(group.second.getTextureBindingName().c_str(), srv);
+            }
+            else if (!group.second.getCopyTextureBinding())
+            {
+                data.bindingMap[group.second.getTextureBindingName()] = TextureBindingData{ resource { 0 }, format::unknown, resource_view { 0 }, resource_view { 0 }, 0, 0, group.second.getClearBindings(), group.second.getCopyTextureBinding(), false};
+                runtime->update_texture_bindings(group.second.getTextureBindingName().c_str(), resource_view{ 0 }, resource_view{ 0 });
             }
         }
     }
@@ -414,6 +459,21 @@ void RenderingManager::DisposeTextureBindings(effect_runtime* runtime)
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
     std::unique_lock<shared_mutex> lock(binding_mutex);
+
+    if (empty_res != 0)
+    {
+        runtime->get_device()->destroy_resource(empty_res);
+    }
+
+    if (empty_srv != 0)
+    {
+        runtime->get_device()->destroy_resource_view(empty_srv);
+    }
+
+    if (empty_rtv != 0)
+    {
+        runtime->get_device()->destroy_resource_view(empty_rtv);
+    }
 
     for (auto& binding : data.bindingMap)
     {
@@ -479,36 +539,43 @@ void RenderingManager::DestroyTextureBinding(effect_runtime* runtime, const stri
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
-    if (data.bindingMap.contains(binding))
+    auto it = data.bindingMap.find(binding);
+
+    if (it != data.bindingMap.end())
     {
-        resource res = { 0 };
-        resource_view srv = { 0 };
-        resource_view rtv = { 0 };
-        bool reset = std::get<6>(data.bindingMap.at(binding));
-        reshade::api::format rformat = std::get<1>(data.bindingMap.at(binding));
-
-        runtime->get_command_queue()->wait_idle();
-
-        res = std::get<0>(data.bindingMap[binding]);
-        if (res != 0)
+        // Destroy copy resource if copy option is enabled, otherwise just reset the binding
+        if (it->second.copy)
         {
-            runtime->get_device()->destroy_resource(res);
-        }
+            resource res = { 0 };
+            resource_view srv = { 0 };
+            resource_view rtv = { 0 };
 
-        srv = std::get<2>(data.bindingMap[binding]);
-        if (srv != 0)
-        {
-            runtime->get_device()->destroy_resource_view(srv);
-        }
+            runtime->get_command_queue()->wait_idle();
 
-        rtv = std::get<3>(data.bindingMap[binding]);
-        if (rtv != 0)
-        {
-            runtime->get_device()->destroy_resource_view(rtv);
+            res = it->second.res;
+            if (res != 0)
+            {
+                runtime->get_device()->destroy_resource(res);
+            }
+
+            srv = it->second.srv;
+            if (srv != 0)
+            {
+                runtime->get_device()->destroy_resource_view(srv);
+            }
+
+            rtv = it->second.rtv;
+            if (rtv != 0)
+            {
+                runtime->get_device()->destroy_resource_view(rtv);
+            }
         }
 
         runtime->update_texture_bindings(binding.c_str(), resource_view{ 0 }, resource_view{ 0 });
-        data.bindingMap[binding] = std::make_tuple(resource{ 0 }, rformat, resource_view{ 0 }, resource_view{ 0 }, 0, 0, reset);
+
+        it->second.res = { 0 };
+        it->second.rtv = { 0 };
+        it->second.srv = { 0 };
     }
 }
 
@@ -517,15 +584,16 @@ uint32_t RenderingManager::UpdateTextureBinding(effect_runtime* runtime, const s
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
-    if (data.bindingMap.contains(binding))
+    auto it = data.bindingMap.find(binding);
+
+    if (it != data.bindingMap.end())
     {
-        reshade::api::format oldFormat = std::get<1>(data.bindingMap[binding]);
+        reshade::api::format oldFormat = it->second.format;
         reshade::api::format format = desc.texture.format;
-        uint32_t oldWidth = std::get<4>(data.bindingMap.at(binding));
+        uint32_t oldWidth = it->second.width;
         uint32_t width = desc.texture.width;
-        uint32_t oldHeight = std::get<5>(data.bindingMap.at(binding));
+        uint32_t oldHeight = it->second.height;
         uint32_t height = desc.texture.height;
-        bool reset = std::get<6>(data.bindingMap.at(binding));
 
         if (format != oldFormat || oldWidth != width || oldHeight != height)
         {
@@ -537,7 +605,9 @@ uint32_t RenderingManager::UpdateTextureBinding(effect_runtime* runtime, const s
 
             if (CreateTextureBinding(runtime, &res, &srv, &rtv, desc))
             {
-                data.bindingMap[binding] = std::make_tuple(res, format, srv, rtv, desc.texture.width, desc.texture.height, reset);
+                it->second.res = res;
+                it->second.srv = srv;
+                it->second.rtv = rtv;
                 runtime->update_texture_bindings(binding.c_str(), srv);
             }
             else
@@ -555,6 +625,7 @@ uint32_t RenderingManager::UpdateTextureBinding(effect_runtime* runtime, const s
 
     return 1;
 }
+
 
 void RenderingManager::_UpdateTextureBindings(command_list* cmd_list,
     DeviceDataContainer& deviceData,
@@ -576,7 +647,9 @@ void RenderingManager::_UpdateTextureBindings(command_list* cmd_list,
                 continue;
             }
 
-            if (deviceData.bindingMap.contains(bindingName))
+            auto it = deviceData.bindingMap.find(bindingName);
+
+            if (it != deviceData.bindingMap.end())
             {
                 resource res = runtime->get_device()->get_resource_from_view(active_rtv);
 
@@ -585,18 +658,53 @@ void RenderingManager::_UpdateTextureBindings(command_list* cmd_list,
                     continue;
                 }
 
-                resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
-
-                uint32_t retUpdate = UpdateTextureBinding(runtime, bindingName, resDesc);
-
-                resource target_res = std::get<0>(deviceData.bindingMap[bindingName]);
-
-                if (retUpdate && target_res != 0)
+                if (!it->second.copy)
                 {
-                    cmd_list->copy_resource(res, target_res);
-                    deviceData.bindingsUpdated.emplace(bindingName);
-                    removalList.push_back(bindingName);
+                    resource_view view_non_srgb = { 0 };
+                    resource_view view_srgb = { 0 };
+
+                    resourceManager.SetShaderResourceViewHandles(res.handle, &view_non_srgb, &view_srgb);
+
+                    if (view_non_srgb == 0)
+                    {
+                        return;
+                    }
+
+                    resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
+
+                    resource target_res = it->second.res;
+
+                    if (target_res != res)
+                    {
+                        runtime->update_texture_bindings(bindingName.c_str(), view_non_srgb, view_srgb);
+
+                        it->second.res = res;
+                        it->second.format = resDesc.texture.format;
+                        it->second.srv = { 0 };
+                        it->second.rtv = { 0 };
+                        it->second.width = 0;
+                        it->second.height = 0;
+                    }
+
+                    it->second.reset = false;
                 }
+                else
+                {
+                    resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
+
+                    uint32_t retUpdate = UpdateTextureBinding(runtime, bindingName, resDesc);
+
+                    resource target_res = it->second.res;
+
+                    if (retUpdate && target_res != 0)
+                    {
+                        cmd_list->copy_resource(res, target_res);
+                        it->second.reset = false;
+                    }
+                }
+
+                deviceData.bindingsUpdated.emplace(bindingName);
+                removalList.push_back(bindingName);
             }
         }
     }
@@ -677,17 +785,32 @@ void RenderingManager::ClearUnmatchedTextureBindings(reshade::api::command_list*
 
     for (auto& binding : data.bindingMap)
     {
-        if (data.bindingsUpdated.contains(binding.first) || !std::get<6>(binding.second))
+        if (data.bindingsUpdated.contains(binding.first) || !binding.second.enabled_reset_on_miss || binding.second.reset)
         {
             continue;
         }
 
-        resource_view rtv = std::get<3>(binding.second);
-
-        if (rtv != 0)
+        if (!binding.second.copy)
         {
-            cmd_list->clear_render_target_view(rtv, clearColor);
+            data.current_runtime->update_texture_bindings(binding.first.c_str(), empty_srv);
+
+            binding.second.res = { 0 };
+            binding.second.srv = { 0 };
+            binding.second.rtv = { 0 };
+            binding.second.width = 0;
+            binding.second.height = 0;
         }
+        else
+        {
+            resource_view rtv = binding.second.rtv;
+
+            if (rtv != 0)
+            {
+                cmd_list->clear_render_target_view(rtv, clearColor);
+            }
+        }
+
+        binding.second.reset = true;
     }
 }
 

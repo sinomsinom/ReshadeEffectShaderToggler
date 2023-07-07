@@ -119,12 +119,12 @@ bool ResourceManager::OnCreateSwapchain(reshade::api::swapchain_desc& desc, void
 
 void ResourceManager::OnInitSwapchain(reshade::api::swapchain* swapchain)
 {
-    InitBackbuffer(swapchain);
+    //InitBackbuffer(swapchain);
 }
 
 void ResourceManager::OnDestroySwapchain(reshade::api::swapchain* swapchain)
 {
-    ClearBackbuffer(swapchain);
+    //ClearBackbuffer(swapchain);
 }
 
 bool ResourceManager::OnCreateResource(device* device, resource_desc& desc, subresource_data* initial_data, resource_usage initial_state)
@@ -141,43 +141,15 @@ void ResourceManager::OnInitResource(device* device, const resource_desc& desc, 
 {
     auto& data = device->get_private_data<DeviceDataContainer>();
 
-    std::unique_lock<shared_mutex> lock(resource_mutex);
-
     if (rShim != nullptr)
     {
         rShim->OnInitResource(device, desc, initData, usage, handle);
     }
-
-    if (static_cast<uint32_t>(desc.usage & resource_usage::render_target) && desc.type == resource_type::texture_2d)
-    {
-        resource_view view_non_srgb = { 0 };
-        resource_view view_srgb = { 0 };
-
-        reshade::api::format format_non_srgb = format_to_default_typed(desc.texture.format, 0);
-        reshade::api::format format_srgb = format_to_default_typed(desc.texture.format, 1);
-
-        device->create_resource_view(handle, resource_usage::render_target,
-            resource_view_desc(format_non_srgb), &view_non_srgb);
-
-        device->create_resource_view(handle, resource_usage::render_target,
-            resource_view_desc(format_srgb), &view_srgb);
-
-        s_sRGBResourceViews.emplace(handle.handle, make_pair(view_non_srgb, view_srgb));
-    }
 }
 
-
-void ResourceManager::OnDestroyResource(device* device, resource res)
+void ResourceManager::DisposeView(device* device, uint64_t handle)
 {
-    if (!resource_mutex.try_lock())
-        return;
-
-    if (rShim != nullptr)
-    {
-        rShim->OnDestroyResource(device, res);
-    }
-
-    const auto& it = s_sRGBResourceViews.find(res.handle);
+    const auto it = s_sRGBResourceViews.find(handle);
 
     if (it != s_sRGBResourceViews.end())
     {
@@ -191,24 +163,65 @@ void ResourceManager::OnDestroyResource(device* device, resource res)
         s_sRGBResourceViews.erase(it);
     }
 
-    resource_mutex.unlock();
-}
+    const auto sit = s_SRVs.find(handle);
 
-void ResourceManager::OnDestroyDevice(device* device)
-{
-    std::unique_lock<shared_mutex> lock(resource_mutex);
-
-    for (auto it = s_sRGBResourceViews.begin(); it != s_sRGBResourceViews.end();)
+    if (sit != s_SRVs.end())
     {
-        auto& views = it->second;
+        auto& views = sit->second;
 
         if (views.first != 0)
             device->destroy_resource_view(views.first);
         if (views.second != 0)
             device->destroy_resource_view(views.second);
 
-        it = s_sRGBResourceViews.erase(it);
+        s_SRVs.erase(sit);
     }
+
+    const auto rIt = _resourceViewRefCount.find(handle);
+    if (rIt != _resourceViewRefCount.end())
+    {
+        _resourceViewRefCount.erase(rIt);
+    }
+}
+
+void ResourceManager::OnDestroyResource(device* device, resource res)
+{
+    if (rShim != nullptr)
+    {
+        rShim->OnDestroyResource(device, res);
+    }
+
+    if (view_mutex.try_lock())
+    {
+        if (resource_mutex.try_lock())
+        {
+            DisposeView(device, res.handle);
+            resource_mutex.unlock();
+        }
+    
+        view_mutex.unlock();
+    }
+}
+
+void ResourceManager::OnDestroyDevice(device* device)
+{
+    //std::unique_lock<shared_mutex> lock(resource_mutex);
+    //
+    //for (auto it = s_sRGBResourceViews.begin(); it != s_sRGBResourceViews.end();)
+    //{
+    //    auto& views = it->second;
+    //
+    //    if (views.first != 0)
+    //        device->destroy_resource_view(views.first);
+    //    if (views.second != 0)
+    //        device->destroy_resource_view(views.second);
+    //
+    //    it = s_sRGBResourceViews.erase(it);
+    //}
+    //
+    //std::unique_lock<shared_mutex> vlock(view_mutex);
+    //_resourceViewRefCount.clear();
+    //_resourceViewRef.clear();
 }
 
 
@@ -222,10 +235,110 @@ bool ResourceManager::OnCreateResourceView(device* device, resource resource, re
     return false;
 }
 
+void ResourceManager::OnInitResourceView(device* device, resource resource, resource_usage usage_type, const resource_view_desc& desc, resource_view view)
+{
+    resource_desc rdesc = device->get_resource_desc(resource);
+    
+    if (static_cast<uint32_t>(rdesc.usage & resource_usage::render_target) && rdesc.type == resource_type::texture_2d)
+    {
+        std::unique_lock<shared_mutex> vlock(view_mutex);
+
+        const auto vRef = _resourceViewRef.find(view.handle);
+        if (vRef != _resourceViewRef.end())
+        {
+            if (vRef->second != resource.handle)
+            {
+                auto curCount = _resourceViewRefCount.find(vRef->second);
+
+                if (curCount != _resourceViewRefCount.end())
+                {
+                    if (curCount->second > 1)
+                    {
+                        curCount->second--;
+                    }
+                    else
+                    {
+                        DisposeView(device, vRef->second);
+                    }
+                }
+            }
+        }
+
+        const auto& cRef = _resourceViewRefCount.find(resource.handle);
+        if (cRef == _resourceViewRefCount.end())
+        {
+            std::unique_lock<shared_mutex> lock(resource_mutex);
+        
+            resource_view view_non_srgb = { 0 };
+            resource_view view_srgb = { 0 };
+
+            resource_view srv_non_srgb = { 0 };
+            resource_view srv_srgb = { 0 };
+            
+            reshade::api::format format_non_srgb = format_to_default_typed(rdesc.texture.format, 0);
+            reshade::api::format format_srgb = format_to_default_typed(rdesc.texture.format, 1);
+            
+            device->create_resource_view(resource, resource_usage::render_target,
+                resource_view_desc(format_non_srgb), &view_non_srgb);
+            
+            device->create_resource_view(resource, resource_usage::render_target,
+                resource_view_desc(format_srgb), &view_srgb);
+
+            device->create_resource_view(resource, resource_usage::shader_resource,
+                resource_view_desc(format_non_srgb), &srv_non_srgb);
+
+            device->create_resource_view(resource, resource_usage::shader_resource,
+                resource_view_desc(format_srgb), &srv_srgb);
+            
+            s_sRGBResourceViews.emplace(resource.handle, make_pair(view_non_srgb, view_srgb));
+            s_SRVs.emplace(resource.handle, make_pair(srv_non_srgb, srv_srgb));
+        }
+
+        _resourceViewRefCount[resource.handle]++;
+        _resourceViewRef[view.handle] = resource.handle;
+    }
+}
+
+void ResourceManager::OnDestroyResourceView(device* device, resource_view view)
+{
+    std::unique_lock<shared_mutex> lock(view_mutex);
+
+    const auto& vRef = _resourceViewRef.find(view.handle);
+    if (vRef != _resourceViewRef.end())
+    {
+        auto curCount = _resourceViewRefCount.find(vRef->second);
+
+        if (curCount != _resourceViewRefCount.end())
+        {
+            if (curCount->second > 1)
+            {
+                curCount->second--;
+            }
+            else
+            {
+                DisposeView(device, vRef->second);
+            }
+        }
+    
+        _resourceViewRef.erase(vRef);
+    }
+}
+
 void ResourceManager::SetResourceViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view)
 {
     const auto& it = s_sRGBResourceViews.find(handle);
     if (it != s_sRGBResourceViews.end())
+    {
+        *non_srgb_view = it->second.first;
+        *srgb_view = it->second.second;
+        return;
+    }
+}
+
+void ResourceManager::SetShaderResourceViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view)
+{
+    const auto& it = s_SRVs.find(handle);
+    if (it != s_SRVs.end())
     {
         *non_srgb_view = it->second.first;
         *srgb_view = it->second.second;

@@ -656,7 +656,34 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
 
                 ImGui::SameLine(ImGui::GetWindowWidth() * 0.905f);
                 ImGui::Checkbox("##isBindingEnabled", &isBindingEnabled);
+
+                bool copyBinding = group.getCopyTextureBinding();
+                if (isBindingEnabled)
+                {
+                    ImGui::Checkbox("Create texture copy for binding", &copyBinding);
+                }
+                else
+                {
+                    ImGui::BeginDisabled();
+                    ImGui::Checkbox("Create texture copy for binding", &copyBinding);
+                    ImGui::EndDisabled();
+                }
+
+                bool clearBinding = group.getClearBindings();
+                if (isBindingEnabled)
+                {
+                    ImGui::Checkbox("Clear binding on hash miss", &clearBinding);
+                }
+                else
+                {
+                    ImGui::BeginDisabled();
+                    ImGui::Checkbox("Clear binding on hash miss", &clearBinding);
+                    ImGui::EndDisabled();
+                }
+
                 group.setProvidingTextureBinding(isBindingEnabled);
+                group.setClearBindings(clearBinding);
+                group.setCopyTextureBinding(copyBinding);
                 
                 // Key binding of group
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.7f);

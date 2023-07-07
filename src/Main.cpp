@@ -184,6 +184,18 @@ static bool onCreateResourceView(device* device, resource resource, resource_usa
 }
 
 
+static void onInitResourceView(device* device, resource resource, resource_usage usage_type, const resource_view_desc& desc, resource_view view)
+{
+    resourceManager.OnInitResourceView(device, resource, usage_type, desc, view);
+}
+
+
+static void onDestroyResourceView(device* device, resource_view view)
+{
+    resourceManager.OnDestroyResourceView(device, view);
+}
+
+
 static void onReshadeReloadedEffects(effect_runtime* runtime)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
@@ -717,6 +729,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::unmap_buffer_region>(onUnmapBufferRegion);
         reshade::register_event<reshade::addon_event::destroy_resource>(onDestroyResource);
         reshade::register_event<reshade::addon_event::create_resource_view>(onCreateResourceView);
+        reshade::register_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
+        reshade::register_event<reshade::addon_event::init_resource_view>(onInitResourceView);
         reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
         reshade::register_event<reshade::addon_event::bind_viewports>(onBindViewports);
         reshade::register_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
@@ -782,6 +796,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::init_resource>(onInitResource);
         reshade::unregister_event<reshade::addon_event::destroy_resource>(onDestroyResource);
         reshade::unregister_event<reshade::addon_event::create_resource_view>(onCreateResourceView);
+        reshade::unregister_event<reshade::addon_event::init_resource_view>(onInitResourceView);
+        reshade::unregister_event<reshade::addon_event::destroy_resource_view>(onDestroyResourceView);
         reshade::unregister_event<reshade::addon_event::present>(onPresent);
 
         reshade::unregister_event<reshade::addon_event::draw>(onDraw);

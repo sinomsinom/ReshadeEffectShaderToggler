@@ -107,6 +107,8 @@ namespace ShaderToggler
         void setMatchSwapchainResolution(bool match) { _matchSwapchainResolution = match; }
         bool getRequeueAfterRTMatchingFailure() const { return _requeueAfterRTMatchingFailure; }
         void setRequeueAfterRTMatchingFailure(bool requeue) { _requeueAfterRTMatchingFailure = requeue; }
+        bool getCopyTextureBinding() { return _copyTextureBinding; }
+        void setCopyTextureBinding(bool copy) { _copyTextureBinding = copy; }
         const std::unordered_map<std::string, std::tuple<uintptr_t, bool>>& GetVarOffsetMapping() const { return _varOffsetMapping; }
         bool SetVarMapping(uintptr_t, std::string&, bool);
         bool RemoveVarMapping(std::string&);
@@ -131,6 +133,7 @@ namespace ShaderToggler
         bool _isEditing;			// true means the group is actively edited (name, key)
         bool _allowAllTechniques;	// true means all techniques are allowed, regardless of preferred techniques.
         bool _isProvidingTextureBinding;
+        bool _copyTextureBinding;
         bool _extractConstants;
         bool _extractResourceViews;
         bool _clearBindings;
