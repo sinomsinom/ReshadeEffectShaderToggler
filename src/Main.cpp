@@ -386,7 +386,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         }
         if (commandListData.ps.activeShaderHash != handleHasPixelShaderAttached)
         {
-            pipelineChanged |= Rendering::MATCH_EFFECT_PS | Rendering::MATCH_BINDING_PS;
+            pipelineChanged |= Rendering::MATCH_EFFECT_PS | Rendering::MATCH_BINDING_PS | Rendering::MATCH_PREVIEW_PS;
             commandListData.ps.constantBuffersToUpdate.clear();
         }
 
@@ -403,7 +403,7 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
         }
         if (commandListData.vs.activeShaderHash != handleHasVertexShaderAttached)
         {
-            pipelineChanged |= Rendering::MATCH_EFFECT_VS | Rendering::MATCH_BINDING_VS;
+            pipelineChanged |= Rendering::MATCH_EFFECT_VS | Rendering::MATCH_BINDING_VS | Rendering::MATCH_PREVIEW_VS;
             commandListData.vs.constantBuffersToUpdate.clear();
         }
 
@@ -414,6 +414,11 @@ static void onBindPipeline(command_list* commandList, pipeline_stage stages, pip
     if (pipelineChanged > 0)
     {
         // Perform updates scheduled for after a shader has been applied. Only do so once the draw flag has been cleared.
+        if (commandListData.commandQueue & Rendering::CHECK_MATCH_BIND_PIPELINE_PREVIEW && !(commandListData.commandQueue & pipelineChanged & Rendering::MATCH_PREVIEW))
+        {
+            renderingManager.UpdatePreview(commandList, Rendering::CALL_BIND_PIPELINE, pipelineChanged & Rendering::MATCH_PREVIEW);
+        }
+
         if (commandListData.commandQueue & Rendering::CHECK_MATCH_BIND_PIPELINE_BINDING && !(commandListData.commandQueue & pipelineChanged & Rendering::MATCH_BINDING))
         {
             renderingManager.UpdateTextureBindings(commandList, Rendering::CALL_BIND_PIPELINE, pipelineChanged & Rendering::MATCH_BINDING);
@@ -447,6 +452,11 @@ static void onBindRenderTargetsAndDepthStencil(command_list* cmd_list, uint32_t 
 
     if (count > 0)
     {
+        if (commandListData.commandQueue & Rendering::CHECK_MATCH_BIND_RENDERTARGET_PREVIEW && !(commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_PREVIEW))
+        {
+            renderingManager.UpdatePreview(cmd_list, Rendering::CALL_BIND_RENDER_TARGET, Rendering::MATCH_PREVIEW);
+        }
+
         if (commandListData.commandQueue & Rendering::CHECK_MATCH_BIND_RENDERTARGET_BINDING && !(commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_BINDING))
         {
             renderingManager.UpdateTextureBindings(cmd_list, Rendering::CALL_BIND_RENDER_TARGET, Rendering::MATCH_BINDING);
@@ -490,17 +500,17 @@ static void onBeginRenderPass(command_list* cmd_list, uint32_t count, const rend
 }
 
 
-static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
+static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const reshade::api::descriptor_table_update& tables)
 {
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
-    data.stateTracker.OnPushDescriptors(cmd_list, stages, layout, layout_param, update);
+    data.stateTracker.OnPushDescriptors(cmd_list, stages, layout, layout_param, tables);
 }
 
 
-static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_set* sets)
+static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const reshade::api::descriptor_table* tables)
 {
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
-    data.stateTracker.OnBindDescriptorSets(cmd_list, stages, layout, first, count, sets);
+    data.stateTracker.OnBindDescriptorSets(cmd_list, stages, layout, first, count, tables);
 }
 
 
@@ -553,7 +563,7 @@ static void onDestroyPipelineLayout(device* device, pipeline_layout layout)
 
 static void onReshadeOverlay(effect_runtime* runtime)
 {
-    DisplayOverlay(g_addonUIData, runtime);
+    DisplayOverlay(g_addonUIData, resourceManager, runtime);
 }
 
 static void onPresent(command_queue* queue, swapchain* swapchain, const rect* source_rect, const rect* dest_rect, uint32_t dirty_rect_count, const rect* dirty_rects)
@@ -594,6 +604,15 @@ static void onReshadePresent(effect_runtime* runtime)
         });
     deviceData.bindingsUpdated.clear();
     deviceData.constantsUpdated.clear();
+    deviceData.huntPreview.Reset();
+
+    if (deviceData.reload_bindings)
+    {
+        renderingManager.DisposeTextureBindings(runtime);
+        renderingManager.InitTextureBingings(runtime);
+
+        deviceData.reload_bindings = false;
+    }
 
     CheckHotkeys(g_addonUIData, runtime);
 }
@@ -652,6 +671,11 @@ static void CheckDrawCall(command_list* cmd_list)
         {
             constantHandler->UpdateConstants(cmd_list);
             commandListData.commandQueue &= ~Rendering::MATCH_CONST;
+        }
+
+        if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_PREVIEW)
+        {
+            renderingManager.UpdatePreview(cmd_list, Rendering::CALL_DRAW, Rendering::MATCH_PREVIEW);
         }
 
         if (commandListData.commandQueue & Rendering::CHECK_MATCH_DRAW_BINDING)
@@ -734,7 +758,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::init_pipeline>(onInitPipeline);
         reshade::register_event<reshade::addon_event::bind_viewports>(onBindViewports);
         reshade::register_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
-        reshade::register_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
+        reshade::register_event<reshade::addon_event::bind_descriptor_tables>(onBindDescriptorSets);
         reshade::register_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
         reshade::register_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
         reshade::register_event<reshade::addon_event::bind_pipeline_states>(onBindPipelineStates);
@@ -778,7 +802,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::bind_pipeline>(onBindPipeline);
         reshade::unregister_event<reshade::addon_event::bind_viewports>(onBindViewports);
         reshade::unregister_event<reshade::addon_event::bind_scissor_rects>(onBindScissorRects);
-        reshade::unregister_event<reshade::addon_event::bind_descriptor_sets>(onBindDescriptorSets);
+        reshade::unregister_event<reshade::addon_event::bind_descriptor_tables>(onBindDescriptorSets);
         reshade::unregister_event<reshade::addon_event::init_pipeline_layout>(onInitPipelineLayout);
         reshade::unregister_event<reshade::addon_event::destroy_pipeline_layout>(onDestroyPipelineLayout);
         reshade::unregister_event<reshade::addon_event::bind_pipeline_states>(onBindPipelineStates);

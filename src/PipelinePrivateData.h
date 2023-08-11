@@ -56,6 +56,28 @@ struct __declspec(novtable) TextureBindingData final
     bool reset = false;
 };
 
+struct __declspec(novtable) HuntPreview final
+{
+    resource_view target_rtv = resource_view{ 0 };
+    bool matched = false;
+    uint32_t target_invocation_location = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    reshade::api::format format = reshade::api::format::unknown;
+    uint32_t targets_sum = 0;
+
+    void Reset()
+    {
+        matched = false;
+        target_rtv = resource_view{ 0 };
+        target_invocation_location = 0;
+        width = 0;
+        height = 0;
+        format = reshade::api::format::unknown;
+        targets_sum = 0;
+    }
+};
+
 struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContainer {
     reshade::api::effect_runtime* current_runtime = nullptr;
     atomic_bool rendered_effects = false;
@@ -65,4 +87,6 @@ struct __declspec(uuid("C63E95B1-4E2F-46D6-A276-E8B4612C069A")) DeviceDataContai
     std::unordered_set<const ShaderToggler::ToggleGroup*> constantsUpdated;
     std::unordered_set<const ShaderToggler::ToggleGroup*> srvUpdated;
     std::unordered_map<uint64_t, std::vector<bool>> transient_mask;
+    bool reload_bindings = false;
+    HuntPreview huntPreview;
 };

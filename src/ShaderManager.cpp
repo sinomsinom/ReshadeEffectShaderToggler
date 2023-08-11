@@ -243,6 +243,30 @@ namespace ShaderToggler
     }
 
 
+    void ShaderManager::setActivedHuntedShaderIndex(uint32_t index)
+    {
+        if (!_isInHuntingMode)
+        {
+            return;
+        }
+        if (_collectedActiveShaderHashes.size() <= 0)
+        {
+            return;
+        }
+
+        if (index >= _collectedActiveShaderHashes.size())
+        {
+            _activeHuntedShaderIndex = 0;
+        }
+        else
+        {
+            _activeHuntedShaderIndex = index;
+        }
+
+        setActiveHuntedShaderHandle();
+    }
+
+
     bool ShaderManager::isBlockedShader(uint32_t shaderHash)
     {
         bool toReturn = false;

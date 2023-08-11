@@ -29,93 +29,54 @@ static const std::unordered_set<std::string> varExclusionSet({
 
 static void DisplayConstantSettings(ShaderToggler::ToggleGroup* group)
 {
-    ImGui::Text("Slot #: %u", group->getSlotIndex());
+    ImGui::TableNextColumn();
+    ImGui::Text("Slot");
+    ImGui::TableNextColumn();
+    ImGui::Text("%u", group->getCBSlotIndex());
 
     ImGui::SameLine();
 
     ImGui::PushID(0);
     if (ImGui::SmallButton("+"))
     {
-        group->setSlotIndex(group->getSlotIndex() + 1);
+        group->setCBSlotIndex(group->getCBSlotIndex() + 1);
     }
     ImGui::PopID();
 
-    if (group->getSlotIndex() != 0)
+    if (group->getCBSlotIndex() != 0)
     {
         ImGui::SameLine();
 
         if (ImGui::SmallButton("-"))
         {
-            group->setSlotIndex(group->getSlotIndex() - 1);
+            group->setCBSlotIndex(group->getCBSlotIndex() - 1);
         }
     }
 
-    ImGui::Text("Binding #: %u", group->getDescriptorIndex());
+    ImGui::TableNextRow();
+
+    ImGui::TableNextColumn();
+    ImGui::Text("Binding");
+    ImGui::TableNextColumn();
+    ImGui::Text("%u", group->getCBDescriptorIndex());
 
     ImGui::SameLine();
 
     ImGui::PushID(2);
     if (ImGui::SmallButton("+"))
     {
-        group->setDescriptorIndex(group->getDescriptorIndex() + 1);
+        group->setCBDescriptorIndex(group->getCBDescriptorIndex() + 1);
     }
     ImGui::PopID();
 
-    if (group->getDescriptorIndex() != 0)
+    if (group->getCBDescriptorIndex() != 0)
     {
         ImGui::SameLine();
 
         ImGui::PushID(1);
         if (ImGui::SmallButton("-"))
         {
-            group->setDescriptorIndex(group->getDescriptorIndex() - 1);
-        }
-        ImGui::PopID();
-    }
-}
-
-static void DisplaySRVSettings(ShaderToggler::ToggleGroup* group)
-{
-    ImGui::Text("Slot #: %u", group->getSRVSlotIndex());
-
-    ImGui::SameLine();
-
-    ImGui::PushID(0);
-    if (ImGui::SmallButton("+"))
-    {
-        group->setSRVSlotIndex(group->getSRVSlotIndex() + 1);
-    }
-    ImGui::PopID();
-
-    if (group->getSRVSlotIndex() != 0)
-    {
-        ImGui::SameLine();
-
-        if (ImGui::SmallButton("-"))
-        {
-            group->setSRVSlotIndex(group->getSRVSlotIndex() - 1);
-        }
-    }
-
-    ImGui::Text("Binding #: %u", group->getSRVDescriptorIndex());
-
-    ImGui::SameLine();
-
-    ImGui::PushID(2);
-    if (ImGui::SmallButton("+"))
-    {
-        group->setSRVDescriptorIndex(group->getSRVDescriptorIndex() + 1);
-    }
-    ImGui::PopID();
-
-    if (group->getSRVDescriptorIndex() != 0)
-    {
-        ImGui::SameLine();
-
-        ImGui::PushID(1);
-        if (ImGui::SmallButton("-"))
-        {
-            group->setSRVDescriptorIndex(group->getSRVDescriptorIndex() - 1);
+            group->setCBDescriptorIndex(group->getCBDescriptorIndex() - 1);
         }
         ImGui::PopID();
     }
@@ -128,11 +89,14 @@ static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ShaderToggler:
         return;
     }
 
+    static float height = ImGui::GetWindowHeight();
+    static float width = ImGui::GetWindowWidth();
+
     const uint32_t columns = 4;
     const char* typeItems[] = { "byte", "float", "int", "uint" };
     const uint32_t typeSizes[] = { 1, 4, 4, 4 };
-    static int typeSelectionIndex = 0;
-    static const char* typeSelectedItem = typeItems[0];
+    static int typeSelectionIndex = 1;
+    static const char* typeSelectedItem = typeItems[1];
     const uint8_t* bufferContent = instance.GetConstantHandler()->GetConstantBuffer(group);
     const size_t bufferSize = instance.GetConstantHandler()->GetConstantBufferSize(group);
     auto& varMap = group->GetVarOffsetMapping();
@@ -140,36 +104,53 @@ static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ShaderToggler:
     static char offsetInputBuf[offsetInputBufSize] = { "000" };
 
     bool extractionEnabled = group->getExtractConstants();
-    ImGui::Checkbox("Extract constant buffer", &extractionEnabled);
-    group->setExtractConstant(extractionEnabled);
-
-    if (!extractionEnabled)
-    {
-        instance.GetConstantHandler()->RemoveGroup(group, dev);
-    }
-
-    ImGui::Separator();
-
-    DisplayConstantSettings(group);
-
-    float height = ImGui::GetWindowHeight();
-
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     if (ImGui::BeginChild("Constant Buffer Viewer##child", { 0, height / 1.5f }, true, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (ImGui::BeginCombo("View mode", typeSelectedItem, ImGuiComboFlags_None))
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 3));
+
+        if (ImGui::BeginTable("ConstantBufferSettings", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody))
         {
-            for (int n = 0; n < IM_ARRAYSIZE(typeItems); n++)
+            ImGui::TableSetupColumn("##CBcolumnsetup", ImGuiTableColumnFlags_WidthFixed, ImGui::GetWindowWidth() / 3);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("Extract constant buffer");
+            ImGui::TableNextColumn();
+            ImGui::Checkbox("##Extractconstantbuffer", &extractionEnabled);
+
+            ImGui::TableNextRow();
+
+            ImGui::TableNextColumn();
+            ImGui::Text("View mode");
+            ImGui::TableNextColumn();
+            if (ImGui::BeginCombo("##Viewmode", typeSelectedItem, ImGuiComboFlags_None))
             {
-                bool is_selected = (typeSelectedItem == typeItems[n]);
-                if (ImGui::Selectable(typeItems[n], is_selected))
+                for (int n = 0; n < IM_ARRAYSIZE(typeItems); n++)
                 {
-                    typeSelectionIndex = n;
-                    typeSelectedItem = typeItems[n];
+                    bool is_selected = (typeSelectedItem == typeItems[n]);
+                    if (ImGui::Selectable(typeItems[n], is_selected))
+                    {
+                        typeSelectionIndex = n;
+                        typeSelectedItem = typeItems[n];
+                    }
+                    if (is_selected)
+                        ImGui::SetItemDefaultFocus();
                 }
-                if (is_selected)
-                    ImGui::SetItemDefaultFocus();
+                ImGui::EndCombo();
             }
-            ImGui::EndCombo();
+
+            ImGui::TableNextRow();
+
+            DisplayConstantSettings(group);
+
+            ImGui::EndTable();
+        }
+        group->setExtractConstant(extractionEnabled);
+
+        if (!extractionEnabled)
+        {
+            instance.GetConstantHandler()->RemoveGroup(group, dev);
+            ImGui::BeginDisabled();
         }
 
         ImGui::Separator();
@@ -242,11 +223,21 @@ static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ShaderToggler:
 
             ImGui::EndTable();
         }
+
+        ImGui::PopStyleVar();
         ImGui::EndChild();
     }
 
+    ImGui::PushID(1);
+    ImGui::Button("", ImVec2(-1, 8.0f));
+    ImGui::PopID();
+    if (ImGui::IsItemActive())
+        height += ImGui::GetIO().MouseDelta.y;
+
     if (ImGui::BeginChild("Constant Buffer Viewer##vars", { 0, 0 }, true, ImGuiWindowFlags_AlwaysAutoResize))
     {
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 3));
+
         if (ImGui::Button("Add Variable Binding"))
         {
             ImGui::OpenPopup("Add###const_variables");
@@ -351,54 +342,153 @@ static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ShaderToggler:
 
         std::for_each(removal.begin(), removal.end(), [&group](std::string& e) { group->RemoveVarMapping(e); });
 
+        ImGui::PopStyleVar();
         ImGui::EndChild();
     }
-}
-
-static void DisplaySRVTab(AddonImGui::AddonUIData& instance, ShaderToggler::ToggleGroup* group, reshade::api::device* dev)
-{
-    bool extractionEnabled = group->getExtractResourceViews();
-    ImGui::Checkbox("Extract shader resource views", &extractionEnabled);
-    group->setExtractResourceViews(extractionEnabled);
-
-    ImGui::Separator();
-
-    DisplaySRVSettings(group);
-}
-
-static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ShaderToggler::ToggleGroup* group, reshade::api::device* dev)
-{
-    if (group == nullptr)
+    
+    if (!extractionEnabled)
     {
-        return;
+        ImGui::EndDisabled();
     }
 
-    ImGui::SetNextWindowSize({ 500, 800 }, ImGuiCond_Once);
-    bool wndOpen = true;
-
-    if (ImGui::Begin("Shader Resource Viewer", &wndOpen))
-    {
-        ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_None;
-        if (ImGui::BeginTabBar("MyTabBar", tab_bar_flags))
-        {
-            if (ImGui::BeginTabItem("Constants"))
-            {
-                DisplayConstantTab(instance, group, dev);
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("Shader Resource Views"))
-            {
-                DisplaySRVTab(instance, group, dev);
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
-        }
-
-        ImGui::End();
-    }
-
-    if (!wndOpen)
-    {
-        instance.EndConstantEditing();
-    }
+    ImGui::PopStyleVar();
 }
+
+
+
+//static void DisplayPreview(AddonImGui::AddonUIData& instance, Rendering::ResourceManager& resManager, reshade::api::effect_runtime* runtime)
+//{
+//    if (ImGui::BeginChild("Group settings##child", { 0, 0 }, true, ImGuiWindowFlags_AlwaysAutoResize))
+//    {
+//        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 3));
+//
+//        DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
+//        resource_view srv = resource_view{ 0 };
+//        resManager.SetPreviewViewHandles(nullptr, nullptr, &srv);
+//
+//        if (srv != 0)
+//        {
+//            ImGui::Text(std::format("Format: {}", static_cast<uint32_t>(deviceData.huntPreview.format)).c_str());
+//            ImGui::SameLine();
+//            ImGui::Text(std::format("Width: {}", deviceData.huntPreview.width).c_str());
+//            ImGui::SameLine();
+//            ImGui::Text(std::format("Height: {}", deviceData.huntPreview.height).c_str());
+//            ImGui::Separator();
+//
+//            ImGui::Image(srv.handle, ImVec2(1920, 1080));
+//        }
+//
+//        ImGui::PopStyleVar();
+//        ImGui::EndChild();
+//    }
+//}
+//
+//static void DisplaySRVTab(AddonImGui::AddonUIData& instance, ShaderToggler::ToggleGroup* group, reshade::api::effect_runtime* runtime, Rendering::ResourceManager& resManager)
+//{
+//    static float height = ImGui::GetWindowHeight();
+//    static float width = ImGui::GetWindowWidth();
+//
+//    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+//    if (ImGui::BeginChild("Constant Buffer Viewer##vars", { 0, height / 1.5f }, true, ImGuiWindowFlags_AlwaysAutoResize))
+//    {
+//        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3, 3));
+//
+//        bool extractionEnabled = group->getExtractResourceViews();
+//        ImGui::Checkbox("Extract shader resource views", &extractionEnabled);
+//        group->setExtractResourceViews(extractionEnabled);
+//
+//        ImGui::Separator();
+//
+//        ImGui::Text("Slot #: %u", group->getSRVSlotIndex());
+//
+//        ImGui::SameLine();
+//
+//        ImGui::PushID(0);
+//        if (ImGui::SmallButton("+"))
+//        {
+//            group->setSRVSlotIndex(group->getSRVSlotIndex() + 1);
+//        }
+//        ImGui::PopID();
+//
+//        if (group->getSRVSlotIndex() != 0)
+//        {
+//            ImGui::SameLine();
+//
+//            if (ImGui::SmallButton("-"))
+//            {
+//                group->setSRVSlotIndex(group->getSRVSlotIndex() - 1);
+//            }
+//        }
+//
+//        ImGui::Text("Binding #: %u", group->getSRVDescriptorIndex());
+//
+//        ImGui::SameLine();
+//
+//        ImGui::PushID(2);
+//        if (ImGui::SmallButton("+"))
+//        {
+//            group->setSRVDescriptorIndex(group->getSRVDescriptorIndex() + 1);
+//        }
+//        ImGui::PopID();
+//
+//        if (group->getSRVDescriptorIndex() != 0)
+//        {
+//            ImGui::SameLine();
+//
+//            ImGui::PushID(1);
+//            if (ImGui::SmallButton("-"))
+//            {
+//                group->setSRVDescriptorIndex(group->getSRVDescriptorIndex() - 1);
+//            }
+//            ImGui::PopID();
+//        }
+//
+//        ImGui::PopStyleVar();
+//        ImGui::EndChild();
+//    }
+//
+//    ImGui::InvisibleButton("hsplitter2", ImVec2(-1, 8.0f));
+//    if (ImGui::IsItemActive())
+//        height += ImGui::GetIO().MouseDelta.y;
+//
+//    DisplayPreview(instance, resManager, runtime);
+//
+//    ImGui::PopStyleVar();
+//}
+
+//static void DisplayConstantViewer(AddonImGui::AddonUIData& instance, ShaderToggler::ToggleGroup* group, reshade::api::device* dev)
+//{
+//    if (group == nullptr)
+//    {
+//        return;
+//    }
+//
+//    ImGui::SetNextWindowSize({ 500, 800 }, ImGuiCond_Once);
+//    bool wndOpen = true;
+//
+//    if (ImGui::Begin("Shader Resource Viewer", &wndOpen))
+//    {
+//        ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_None;
+//        if (ImGui::BeginTabBar("MyTabBar", tab_bar_flags))
+//        {
+//            if (ImGui::BeginTabItem("Constants"))
+//            {
+//                DisplayConstantTab(instance, group, dev);
+//                ImGui::EndTabItem();
+//            }
+//            if (ImGui::BeginTabItem("Shader Resource Views"))
+//            {
+//                DisplaySRVTab(instance, group, dev);
+//                ImGui::EndTabItem();
+//            }
+//            ImGui::EndTabBar();
+//        }
+//
+//        ImGui::End();
+//    }
+//
+//    if (!wndOpen)
+//    {
+//        instance.EndConstantEditing();
+//    }
+//}

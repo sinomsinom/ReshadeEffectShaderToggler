@@ -81,10 +81,14 @@ namespace ShaderToggler
         std::unordered_set<uint32_t> getVertexShaderHashes() const { return _vertexShaderHashes; }
         void setInvocationLocation(uint32_t location) { _invocationLocation = location; }
         uint32_t getInvocationLocation() const { return _invocationLocation; }
-        void setSlotIndex(uint32_t index) { _slotIndex = index; }
-        uint32_t getSlotIndex() const { return _slotIndex; }
-        void setDescriptorIndex(uint32_t index) { _descIndex = index; }
-        uint32_t getDescriptorIndex() const { return _descIndex; }
+        void setBindingInvocationLocation(uint32_t location) { _bindingInvocationLocation = location; }
+        uint32_t getBindingInvocationLocation() const { return _bindingInvocationLocation; }
+        void setCBSlotIndex(uint32_t index) { _cbSlotIndex = index; }
+        uint32_t getCBSlotIndex() const { return _cbSlotIndex; }
+        void setCBDescriptorIndex(uint32_t index) { _cbDescIndex = index; }
+        uint32_t getCBDescriptorIndex() const { return _cbDescIndex; }
+        void setRenderTargetIndex(uint32_t index) { _rtIndex = index; }
+        uint32_t getRenderTargetIndex() const { return _rtIndex; }
         bool isProvidingTextureBinding() const { return _isProvidingTextureBinding; }
         void setProvidingTextureBinding(bool isProvidingTextureBinding) { _isProvidingTextureBinding = isProvidingTextureBinding; }
         const std::string& getTextureBindingName() const { return _textureBindingName; }
@@ -97,17 +101,19 @@ namespace ShaderToggler
         void setExtractConstant(bool extract) { _extractConstants = extract; }
         bool getExtractResourceViews() const { return _extractResourceViews; }
         void setExtractResourceViews(bool extract) { _extractResourceViews = extract; }
-        void setSRVSlotIndex(uint32_t index) { _srvSlotIndex = index; }
-        uint32_t getSRVSlotIndex() const { return _srvSlotIndex; }
-        void setSRVDescriptorIndex(uint32_t index) { _srvDescIndex = index; }
-        uint32_t getSRVDescriptorIndex() const { return _srvDescIndex; }
+        void setBindingSRVSlotIndex(uint32_t index) { _bindingSrvSlotIndex = index; }
+        uint32_t getBindingSRVSlotIndex() const { return _bindingSrvSlotIndex; }
+        void setBindingSRVDescriptorIndex(uint32_t index) { _bindingSrvDescIndex = index; }
+        uint32_t getBindingSRVDescriptorIndex() const { return _bindingSrvDescIndex; }
+        void setBindingRenderTargetIndex(uint32_t index) { _bindingRTIndex = index; }
+        uint32_t getBindingRenderTargetIndex() const { return _bindingRTIndex; }
         bool getHasTechniqueExceptions() const { return _hasTechniqueExceptions; }
         void setHasTechniqueExceptions(bool exceptions) { _hasTechniqueExceptions = exceptions; }
         bool getMatchSwapchainResolution() const { return _matchSwapchainResolution; }
         void setMatchSwapchainResolution(bool match) { _matchSwapchainResolution = match; }
         bool getRequeueAfterRTMatchingFailure() const { return _requeueAfterRTMatchingFailure; }
         void setRequeueAfterRTMatchingFailure(bool requeue) { _requeueAfterRTMatchingFailure = requeue; }
-        bool getCopyTextureBinding() { return _copyTextureBinding; }
+        bool getCopyTextureBinding() const { return _copyTextureBinding; }
         void setCopyTextureBinding(bool copy) { _copyTextureBinding = copy; }
         const std::unordered_map<std::string, std::tuple<uintptr_t, bool>>& GetVarOffsetMapping() const { return _varOffsetMapping; }
         bool SetVarMapping(uintptr_t, std::string&, bool);
@@ -124,11 +130,14 @@ namespace ShaderToggler
         uint32_t _keybind;
         std::unordered_set<uint32_t> _vertexShaderHashes;
         std::unordered_set<uint32_t> _pixelShaderHashes;
-        uint32_t _invocationLocation;
-        uint32_t _slotIndex = 0;
-        uint32_t _descIndex = 0;
-        uint32_t _srvSlotIndex = 0;
-        uint32_t _srvDescIndex = 0;
+        uint32_t _invocationLocation = 0;
+        uint32_t _rtIndex = 0;
+        uint32_t _cbSlotIndex = 0;
+        uint32_t _cbDescIndex = 0;
+        uint32_t _bindingInvocationLocation = 0;
+        uint32_t _bindingRTIndex = 0;
+        uint32_t _bindingSrvSlotIndex = 0;
+        uint32_t _bindingSrvDescIndex = 0;
         bool _isActive;				// true means the group is actively toggled (so the hashes have to be hidden.
         bool _isEditing;			// true means the group is actively edited (name, key)
         bool _allowAllTechniques;	// true means all techniques are allowed, regardless of preferred techniques.

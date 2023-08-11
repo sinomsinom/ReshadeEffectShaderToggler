@@ -14,7 +14,7 @@ PipelineStateTracker::~PipelineStateTracker()
 }
 
 void PipelineStateTracker::ApplyBoundDescriptorSets(command_list* cmd_list, shader_stage stage, pipeline_layout layout,
-    const vector<descriptor_set>& descriptors, const vector<bool>& mask)
+    const vector<descriptor_table>& descriptors, const vector<bool>& mask)
 {
     size_t count = min(descriptors.size(), mask.size());
     for (uint32_t i = 0; i < count; i++)
@@ -26,7 +26,7 @@ void PipelineStateTracker::ApplyBoundDescriptorSets(command_list* cmd_list, shad
         {
             if (j == count || descriptors[j] == 0 || (j < mask.size() && mask[j]))
             {
-                cmd_list->bind_descriptor_sets(stage, layout, i, j - i, &descriptors.data()[i]);
+                cmd_list->bind_descriptor_tables(stage, layout, i, j - i, &descriptors.data()[i]);
                 i = j;
 
                 break;
@@ -154,7 +154,7 @@ void PipelineStateTracker::OnBeginRenderPass(command_list* cmd_list, uint32_t co
     }
 }
 
-void PipelineStateTracker::OnBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_set* sets)
+void PipelineStateTracker::OnBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_table* sets)
 {
     if (cmd_list->get_device()->get_api() != device_api::d3d12)
         return;
@@ -179,7 +179,7 @@ void PipelineStateTracker::OnBindDescriptorSets(command_list* cmd_list, shader_s
     }
 }
 
-void PipelineStateTracker::OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update)
+void PipelineStateTracker::OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_table_update& update)
 {
     // only consider pixel and vertex shader CBs for now
     if ((update.type != descriptor_type::constant_buffer && update.type != descriptor_type::shader_resource_view) ||

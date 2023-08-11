@@ -136,7 +136,7 @@ namespace StateTracker
 
     struct __declspec(novtable) BindDescriptorSetsState final : PipelineBinding<PipelineBindingTypes::bind_descriptor_sets> {
         pipeline_layout current_layout[2];
-        vector<descriptor_set> current_sets[2];
+        vector<descriptor_table> current_sets[2];
         unordered_map<uint64_t, vector<bool>> transient_mask;
 
         void Reset()
@@ -208,8 +208,8 @@ namespace StateTracker
         void OnBindPipelineStates(command_list* cmd_list, uint32_t count, const dynamic_state* states, const uint32_t* values);
         void OnBindScissorRects(command_list* cmd_list, uint32_t first, uint32_t count, const rect* rects);
         void OnBindViewports(command_list* cmd_list, uint32_t first, uint32_t count, const viewport* viewports);
-        void OnBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_set* sets);
-        void OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_set_update& update);
+        void OnBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_table* sets);
+        void OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_table_update& update);
         void OnBindPipeline(command_list* commandList, pipeline_stage stages, pipeline pipelineHandle);
 
         const PushDescriptorsState* GetPushDescriptorState() { return &_pushDescriptorsState;  }
@@ -221,7 +221,7 @@ namespace StateTracker
 
     private:
         void ApplyBoundDescriptorSets(command_list* cmd_list, shader_stage stage, pipeline_layout layout,
-            const vector<descriptor_set>& descriptors, const vector<bool>& mask);
+            const vector<descriptor_table>& descriptors, const vector<bool>& mask);
 
         uint32_t _callIndex = 0;
         BindRenderTargetsState _renderTargetState;

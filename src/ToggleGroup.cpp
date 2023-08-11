@@ -180,6 +180,7 @@ namespace ShaderToggler
 
             firstElement = false;
         }
+        iniFile.SetUInt("RenderTargetIndex", _rtIndex, "", sectionRoot);
         iniFile.SetUInt("InvocationLocation", _invocationLocation, "", sectionRoot);
         iniFile.SetBool("MatchSwapchainResolutionOnly", _matchSwapchainResolution, "", sectionRoot);
         iniFile.SetBool("RequeueAfterRTMatchingFailure", _requeueAfterRTMatchingFailure, "", sectionRoot);
@@ -194,12 +195,14 @@ namespace ShaderToggler
         iniFile.SetBool("CopyTextureBinding", _copyTextureBinding, "", sectionRoot);
 
         iniFile.SetBool("ExtractConstants", _extractConstants, "", sectionRoot);
-        iniFile.SetUInt("ConstantPipelineSlot", _slotIndex, "", sectionRoot);
-        iniFile.SetUInt("ConstantDescriptorIndex", _descIndex, "", sectionRoot);
+        iniFile.SetUInt("ConstantPipelineSlot", _cbSlotIndex, "", sectionRoot);
+        iniFile.SetUInt("ConstantDescriptorIndex", _cbDescIndex, "", sectionRoot);
 
         iniFile.SetBool("ExtractSRVs", _extractResourceViews, "", sectionRoot);
-        iniFile.SetUInt("SRVPipelineSlot", _srvSlotIndex, "", sectionRoot);
-        iniFile.SetUInt("SRVDescriptorIndex", _srvDescIndex, "", sectionRoot);
+        iniFile.SetUInt("SRVPipelineSlot", _bindingSrvSlotIndex, "", sectionRoot);
+        iniFile.SetUInt("SRVDescriptorIndex", _bindingSrvDescIndex, "", sectionRoot);
+        iniFile.SetUInt("BindingRenderTargetIndex", _bindingRTIndex, "", sectionRoot);
+        iniFile.SetUInt("BindingInvocationLocation", _bindingInvocationLocation, "", sectionRoot);
     }
 
 
@@ -322,21 +325,21 @@ namespace ShaderToggler
         uint32_t slotIndex = iniFile.GetUInt("ConstantPipelineSlot", sectionRoot);
         if (slotIndex != UINT_MAX)
         {
-            _slotIndex = slotIndex;
+            _cbSlotIndex = slotIndex;
         }
         else
         {
-            _slotIndex = 2;
+            _cbSlotIndex = 2;
         }
 
         uint32_t descIndex = iniFile.GetUInt("ConstantDescriptorIndex", sectionRoot);
         if (descIndex != UINT_MAX)
         {
-            _descIndex = descIndex;
+            _cbDescIndex = descIndex;
         }
         else
         {
-            _descIndex = 0;
+            _cbDescIndex = 0;
         }
 
         _extractResourceViews = iniFile.GetBool("ExtractSRVs", sectionRoot);
@@ -344,21 +347,51 @@ namespace ShaderToggler
         uint32_t srvSlotIndex = iniFile.GetUInt("SRVPipelineSlot", sectionRoot);
         if (srvSlotIndex != UINT_MAX)
         {
-            _srvSlotIndex = srvSlotIndex;
+            _bindingSrvSlotIndex = srvSlotIndex;
         }
         else
         {
-            _srvSlotIndex = 1;
+            _bindingSrvSlotIndex = 1;
         }
 
         uint32_t srvDescIndex = iniFile.GetUInt("SRVDescriptorIndex", sectionRoot);
         if (srvDescIndex != UINT_MAX)
         {
-            _srvDescIndex = srvDescIndex;
+            _bindingSrvDescIndex = srvDescIndex;
         }
         else
         {
-            _srvDescIndex = 0;
+            _bindingSrvDescIndex = 0;
+        }
+
+        uint32_t rtvIndex = iniFile.GetUInt("RenderTargetIndex", sectionRoot);
+        if (rtvIndex != UINT_MAX)
+        {
+            _rtIndex = rtvIndex;
+        }
+        else
+        {
+            _rtIndex = _cbDescIndex; //rt index and cb descriptor index were previously shared. Fallback for older configs
+        }
+
+        uint32_t bindingRTIndex = iniFile.GetUInt("BindingRenderTargetIndex", sectionRoot);
+        if (bindingRTIndex != UINT_MAX)
+        {
+            _bindingRTIndex = bindingRTIndex;
+        }
+        else
+        {
+            _bindingRTIndex = _cbDescIndex; //rt index and cb descriptor index were previously shared. Fallback for older configs
+        }
+
+        uint32_t bindingInvocationLocation = iniFile.GetUInt("BindingInvocationLocation", sectionRoot);
+        if (bindingInvocationLocation != UINT_MAX)
+        {
+            _bindingInvocationLocation = bindingInvocationLocation;
+        }
+        else
+        {
+            _bindingInvocationLocation = _invocationLocation; //fallback to effect invocation location when loading old configs
         }
     }
 }

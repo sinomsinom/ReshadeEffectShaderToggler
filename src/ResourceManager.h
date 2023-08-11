@@ -47,6 +47,10 @@ namespace Rendering
         void SetShaderResourceViewHandles(uint64_t handle, reshade::api::resource_view* non_srgb_view, reshade::api::resource_view* srgb_view);
         void SetResourceShim(const std::string& shim) { _shimType = ResolveResourceShimType(shim); }
         void Init();
+
+        void DisposePreview(reshade::api::effect_runtime* runtime);
+        void CreatePreview(reshade::api::effect_runtime* runtime, reshade::api::resource originalRes);
+        void SetPreviewViewHandles(reshade::api::resource* res, reshade::api::resource_view* rtv, reshade::api::resource_view* srv);
     private:
         static ResourceShimType ResolveResourceShimType(const std::string&);
 
@@ -61,5 +65,9 @@ namespace Rendering
 
         std::shared_mutex resource_mutex;
         std::shared_mutex view_mutex;
+
+        reshade::api::resource preview_res;
+        reshade::api::resource_view preview_rtv;
+        reshade::api::resource_view preview_srv;
     };
 }

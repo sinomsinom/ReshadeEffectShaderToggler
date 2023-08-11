@@ -79,6 +79,14 @@ namespace AddonImGui
         "DESCRIPTOR_UP"
     };
 
+    enum TabType : uint32_t
+    {
+        TAB_NONE = 0,
+        TAB_RENDER_TARGET,
+        TAB_TEXTURE_BINDING,
+        TAB_CONSTANT_BUFFER,
+    };
+
     class AddonUIData
     {
     private:
@@ -102,6 +110,7 @@ namespace AddonImGui
         std::string _constHookCopyType = "singular";
         std::string _resourceShim = "none";
         std::filesystem::path _basePath;
+        TabType _currentTab = TabType::TAB_NONE;
     public:
         AddonUIData(ShaderToggler::ShaderManager* pixelShaderManager, ShaderToggler::ShaderManager* vertexShaderManager, Shim::Constants::ConstantHandlerBase* constants, std::atomic_uint32_t* activeCollectorFrameCounter,
             std::vector<std::string>* techniques);
@@ -128,6 +137,8 @@ namespace AddonImGui
         std::atomic_int& GetToggleGroupIdConstantEditing() { return _toggleGroupIdConstantEditing; }
         std::atomic_uint& GetInvocationLocation() { return _invocationLocation; }
         std::atomic_uint& GetDescriptorIndex() { return _descriptorIndex; }
+        void SetCurrentTabType(TabType type) { _currentTab = type; }
+        TabType GetCurrentTabType() const { return _currentTab; }
         const std::vector<std::string>* GetAllTechniques() const;
         int* StartValueFramecountCollectionPhase() { return &_startValueFramecountCollectionPhase; }
         float* OverlayOpacity() { return &_overlayOpacity; }

@@ -27,7 +27,7 @@ void RenderingManager::EnumerateTechniques(effect_runtime* runtime, std::functio
         });
 }
 
-void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDataContainer& commandListData, const DeviceDataContainer& deviceData) const
+void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDataContainer& commandListData, DeviceDataContainer& deviceData) const
 {
     // Masks which checks to perform. Note that we will always schedule a draw call check for binding and effect updates,
     // this serves the purpose of assigning the resource_view to perform the update later on if needed.
@@ -37,6 +37,7 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
     const uint32_t match_effect = MATCH_EFFECT_PS * sData.id;
     const uint32_t match_binding = MATCH_BINDING_PS * sData.id;
     const uint32_t match_const = MATCH_CONST_PS * sData.id;
+    const uint32_t match_preview = MATCH_PREVIEW_PS * sData.id;
 
     if (sData.blockedShaderGroups != nullptr)
     {
@@ -53,12 +54,39 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
                     }
                 }
 
+                if (group->getId() == uiData.GetToggleGroupIdShaderEditing() && !deviceData.huntPreview.matched)
+                {
+                    /*if (group->isProvidingTextureBinding() && group->getExtractResourceViews() && uiData.GetCurrentTabType() == AddonImGui::TAB_TEXTURE_BINDING)
+                    {
+                        queue_mask |= (match_preview << CALL_DRAW * MATCH_DELIMITER);
+                        deviceData.huntPreview.target_invocation_location = CALL_DRAW;
+                    }
+                    else if (group->isProvidingTextureBinding() && !group->getExtractResourceViews() && uiData.GetCurrentTabType() == AddonImGui::TAB_TEXTURE_BINDING)
+                    {
+                        queue_mask |= (match_preview << (group->getBindingInvocationLocation() * MATCH_DELIMITER)) | (match_preview << CALL_DRAW * MATCH_DELIMITER);
+                        deviceData.huntPreview.target_invocation_location = group->getBindingInvocationLocation();
+                    }
+                    else */if(uiData.GetCurrentTabType() == AddonImGui::TAB_RENDER_TARGET)
+                    {
+                        queue_mask |= (match_preview << (group->getInvocationLocation() * MATCH_DELIMITER)) | (match_preview << CALL_DRAW * MATCH_DELIMITER);
+                        deviceData.huntPreview.target_invocation_location = group->getInvocationLocation();
+                    }
+                }
+
                 if (group->isProvidingTextureBinding() && !deviceData.bindingsUpdated.contains(group->getTextureBindingName()))
                 {
                     if (!sData.bindingsToUpdate.contains(group->getTextureBindingName()))
                     {
-                        sData.bindingsToUpdate.emplace(group->getTextureBindingName(), std::make_tuple(group, group->getInvocationLocation(), resource_view{ 0 }));
-                        queue_mask |= (match_binding << (group->getInvocationLocation() * MATCH_DELIMITER)) | (match_binding << CALL_DRAW * MATCH_DELIMITER);
+                        if (group->getCopyTextureBinding() && !group->getExtractResourceViews())
+                        {
+                            sData.bindingsToUpdate.emplace(group->getTextureBindingName(), std::make_tuple(group, CALL_DRAW, resource_view{ 0 }));
+                            queue_mask |= (match_binding << CALL_DRAW * MATCH_DELIMITER);
+                        }
+                        else
+                        {
+                            sData.bindingsToUpdate.emplace(group->getTextureBindingName(), std::make_tuple(group, group->getBindingInvocationLocation(), resource_view{ 0 }));
+                            queue_mask |= (match_binding << (group->getBindingInvocationLocation() * MATCH_DELIMITER)) | (match_binding << CALL_DRAW * MATCH_DELIMITER);
+                        }
                     }
                 }
 
@@ -157,28 +185,36 @@ static inline bool IsColorBuffer(reshade::api::format value)
     }
 }
 
-const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* runtime, const pair<string, tuple<const ToggleGroup*, bool, resource_view>>& matchObject, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action)
+const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_list, DeviceDataContainer& deviceData, const ToggleGroup* group, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action)
 {
     resource_view active_rtv = { 0 };
-    device* device = runtime->get_device();
-    const ToggleGroup* group = get<0>(matchObject.second);
+
+    if (deviceData.current_runtime == nullptr)
+    {
+        return active_rtv;
+    }
+
+    device* device = deviceData.current_runtime->get_device();
 
     const vector<resource_view>& rtvs = commandListData.stateTracker.GetBoundRenderTargetViews();
 
-    size_t index = group->getDescriptorIndex();
+    size_t index = group->getRenderTargetIndex();
     index = std::min(index, rtvs.size() - 1);
+
+    size_t bindingRTindex = group->getBindingRenderTargetIndex();
+    bindingRTindex = std::min(bindingRTindex, rtvs.size() - 1);
 
     // Only return SRVs in case of bindings
     if(action & MATCH_BINDING && group->getExtractResourceViews())
     { 
         uint32_t slot_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex].size());
-        uint32_t slot = min(group->getSRVSlotIndex(), slot_size - 1);
+        uint32_t slot = min(group->getBindingSRVSlotIndex(), slot_size - 1);
 
         if (slot_size == 0)
             return active_rtv;
 
         uint32_t desc_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot].size());
-        uint32_t desc = min(group->getSRVDescriptorIndex(), desc_size - 1);
+        uint32_t desc = min(group->getBindingSRVDescriptorIndex(), desc_size - 1);
 
         if (desc_size == 0)
             return active_rtv;
@@ -187,7 +223,19 @@ const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* run
 
         active_rtv = buf;
     }
-    else if (rtvs.size() > 0 && runtime != nullptr && rtvs[index] != 0)
+    else if(action & MATCH_BINDING && !group->getExtractResourceViews() && rtvs.size() > 0 && rtvs[bindingRTindex] != 0)
+    {
+        resource rs = device->get_resource_from_view(rtvs[bindingRTindex]);
+
+        if (rs == 0)
+        {
+            // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
+            return active_rtv;
+        }
+
+        active_rtv = rtvs[bindingRTindex];
+    }
+    else if (action & MATCH_EFFECT && rtvs.size() > 0 && rtvs[index] != 0)
     {
         resource rs = device->get_resource_from_view(rtvs[index]);
 
@@ -199,16 +247,97 @@ const resource_view RenderingManager::GetCurrentResourceView(effect_runtime* run
 
         // Don't apply effects to non-RGB buffers
         resource_desc desc = device->get_resource_desc(rs);
-        if (action & MATCH_EFFECT && !IsColorBuffer(desc.texture.format))
+        if (!IsColorBuffer(desc.texture.format))
         {
             return active_rtv;
         }
 
         // Make sure our target matches swap buffer dimensions when applying effects or it's explicitly requested
-        if (group->getMatchSwapchainResolution() || action & MATCH_EFFECT)
+        if (group->getMatchSwapchainResolution())
         {
             uint32_t width, height;
-            runtime->get_screenshot_width_and_height(&width, &height);
+            deviceData.current_runtime->get_screenshot_width_and_height(&width, &height);
+
+            if (width != desc.texture.width || height != desc.texture.height)
+            {
+                return active_rtv;
+            }
+        }
+
+        active_rtv = rtvs[index];
+    }
+
+    return active_rtv;
+}
+
+const resource_view RenderingManager::GetCurrentPreviewResourceView(command_list* cmd_list, DeviceDataContainer& deviceData, const ToggleGroup* group, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action)
+{
+    resource_view active_rtv = { 0 };
+
+    if (deviceData.current_runtime == nullptr)
+    {
+        return active_rtv;
+    }
+
+    device* device = deviceData.current_runtime->get_device();
+
+    const vector<resource_view>& rtvs = commandListData.stateTracker.GetBoundRenderTargetViews();
+
+    size_t index = group->getRenderTargetIndex();
+    index = std::min(index, rtvs.size() - 1);
+
+    size_t bindingRTindex = group->getBindingRenderTargetIndex();
+    bindingRTindex = std::min(bindingRTindex, rtvs.size() - 1);
+
+    // Only return SRVs in case of bindings
+    if (uiData.GetCurrentTabType() == AddonImGui::TAB_TEXTURE_BINDING && group->getExtractResourceViews())
+    {
+        uint32_t slot_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex].size());
+        uint32_t slot = min(group->getBindingSRVSlotIndex(), slot_size - 1);
+
+        if (slot_size == 0)
+            return active_rtv;
+
+        uint32_t desc_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot].size());
+        uint32_t desc = min(group->getBindingSRVDescriptorIndex(), desc_size - 1);
+
+        if (desc_size == 0)
+            return active_rtv;
+
+        resource_view buf = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot][desc];
+
+        active_rtv = buf;
+    }
+    else if (uiData.GetCurrentTabType() == AddonImGui::TAB_TEXTURE_BINDING && !group->getExtractResourceViews() && rtvs.size() > 0 && rtvs[bindingRTindex] != 0)
+    {
+        resource rs = device->get_resource_from_view(rtvs[bindingRTindex]);
+
+        if (rs == 0)
+        {
+            // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
+            return active_rtv;
+        }
+
+        active_rtv = rtvs[bindingRTindex];
+    }
+    else if (uiData.GetCurrentTabType() == AddonImGui::TAB_RENDER_TARGET && rtvs.size() > 0 && rtvs[index] != 0)
+    {
+        resource rs = device->get_resource_from_view(rtvs[index]);
+
+        if (rs == 0)
+        {
+            // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
+            return active_rtv;
+        }
+
+        // Don't apply effects to non-RGB buffers
+        resource_desc desc = device->get_resource_desc(rs);
+
+        // Make sure our target matches swap buffer dimensions when applying effects or it's explicitly requested
+        if (group->getMatchSwapchainResolution())
+        {
+            uint32_t width, height;
+            deviceData.current_runtime->get_screenshot_width_and_height(&width, &height);
 
             if (width != desc.texture.width || height != desc.texture.height)
             {
@@ -314,7 +443,8 @@ bool RenderingManager::_RenderEffects(
 }
 
 void RenderingManager::_QueueOrDequeue(
-    effect_runtime* runtime,
+    command_list* cmd_list,
+    DeviceDataContainer& deviceData,
     CommandListDataContainer& commandListData,
     std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& queue,
     unordered_set<string>& immediateQueue,
@@ -327,7 +457,7 @@ void RenderingManager::_QueueOrDequeue(
         // Set views during draw call since we can be sure the correct ones are bound at that point
         if (!callLocation && std::get<2>(it->second) == 0)
         {
-            resource_view active_rtv = GetCurrentResourceView(runtime, *it, commandListData, layoutIndex, action);
+            resource_view active_rtv = GetCurrentResourceView(cmd_list, deviceData, std::get<0>(it->second), commandListData, layoutIndex, action);
 
             if (active_rtv != 0)
             {
@@ -381,12 +511,12 @@ void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocati
 
     if (invocation & MATCH_EFFECT_PS)
     {
-        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.ps.techniquesToRender, psToRenderNames, callLocation, 0, MATCH_EFFECT_PS);
+        _QueueOrDequeue(cmd_list, deviceData, commandListData, commandListData.ps.techniquesToRender, psToRenderNames, callLocation, 0, MATCH_EFFECT_PS);
     }
 
     if (invocation & MATCH_EFFECT_VS)
     {
-        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.vs.techniquesToRender, vsToRenderNames, callLocation, 1, MATCH_EFFECT_VS);
+        _QueueOrDequeue(cmd_list, deviceData, commandListData, commandListData.vs.techniquesToRender, vsToRenderNames, callLocation, 1, MATCH_EFFECT_VS);
     }
 
     bool rendered = false;
@@ -420,6 +550,90 @@ void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocati
         // TODO: ???
         //std::shared_lock<std::shared_mutex> dev_mutex(pipeline_layout_mutex);
         commandListData.stateTracker.ReApplyState(cmd_list, deviceData.transient_mask);
+    }
+}
+
+
+void RenderingManager::UpdatePreview(command_list* cmd_list, uint32_t callLocation, uint32_t invocation)
+{
+    if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
+    {
+        return;
+    }
+
+    device* device = cmd_list->get_device();
+    CommandListDataContainer& commandListData = cmd_list->get_private_data<CommandListDataContainer>();
+    DeviceDataContainer& deviceData = device->get_private_data<DeviceDataContainer>();
+
+    // Remove call location from queue
+    commandListData.commandQueue &= ~(invocation << (callLocation * MATCH_DELIMITER));
+
+    if (deviceData.current_runtime == nullptr || uiData.GetToggleGroupIdShaderEditing() < 0) {
+        return;
+    }
+
+    const ToggleGroup& group = uiData.GetToggleGroups().at(uiData.GetToggleGroupIdShaderEditing());
+
+    // Set views during draw call since we can be sure the correct ones are bound at that point
+    if (!callLocation && deviceData.huntPreview.target_rtv == 0)
+    {
+        resource_view active_rtv = resource_view{ 0 };
+
+        if (invocation & MATCH_PREVIEW_PS)
+        {
+            active_rtv = GetCurrentPreviewResourceView(cmd_list, deviceData, &group, commandListData, 0, invocation & MATCH_PREVIEW_PS);
+        }
+        else if(invocation & MATCH_PREVIEW_VS)
+        {
+            active_rtv = GetCurrentPreviewResourceView(cmd_list, deviceData, &group, commandListData, 1, invocation & MATCH_PREVIEW_VS);
+        }
+
+        if (active_rtv != 0)
+        {
+            resource res = device->get_resource_from_view(active_rtv);
+            resource_desc desc = device->get_resource_desc(res);
+
+            deviceData.huntPreview.target_rtv = active_rtv;
+            deviceData.huntPreview.format = desc.texture.format;
+            deviceData.huntPreview.width = desc.texture.width;
+            deviceData.huntPreview.height = desc.texture.height;
+        }
+        else if (group.getRequeueAfterRTMatchingFailure())
+        {
+            // Re-issue draw call queue command
+            commandListData.commandQueue |= (invocation << (callLocation * MATCH_DELIMITER));
+            return;
+        }
+        else
+        {
+            return;
+        }
+    }
+
+    if (deviceData.huntPreview.target_rtv == 0 || !(!callLocation && !deviceData.huntPreview.target_invocation_location || callLocation & deviceData.huntPreview.target_invocation_location))
+    {
+        return;
+    }
+    
+    if (group.getId() == uiData.GetToggleGroupIdShaderEditing() && !deviceData.huntPreview.matched)
+    {
+        resource rs = device->get_resource_from_view(deviceData.huntPreview.target_rtv);
+
+        if (rs == 0)
+        {
+            return;
+        }
+
+        resourceManager.CreatePreview(deviceData.current_runtime, rs);
+        resource previewRes = resource{ 0 };
+        resourceManager.SetPreviewViewHandles(&previewRes, nullptr, nullptr);
+
+        if (previewRes != 0)
+        {
+            cmd_list->copy_resource(rs, previewRes);
+        }
+    
+        deviceData.huntPreview.matched = true;
     }
 }
 
@@ -576,6 +790,9 @@ void RenderingManager::DestroyTextureBinding(effect_runtime* runtime, const stri
         it->second.res = { 0 };
         it->second.rtv = { 0 };
         it->second.srv = { 0 };
+        it->second.format = format::unknown;
+        it->second.width = 0;
+        it->second.height = 0;
     }
 }
 
@@ -608,6 +825,10 @@ uint32_t RenderingManager::UpdateTextureBinding(effect_runtime* runtime, const s
                 it->second.res = res;
                 it->second.srv = srv;
                 it->second.rtv = rtv;
+                it->second.width = desc.texture.width;
+                it->second.height = desc.texture.height;
+                it->second.format = desc.texture.format;
+
                 runtime->update_texture_bindings(binding.c_str(), srv);
             }
             else
@@ -680,10 +901,10 @@ void RenderingManager::_UpdateTextureBindings(command_list* cmd_list,
 
                         it->second.res = res;
                         it->second.format = resDesc.texture.format;
-                        it->second.srv = { 0 };
+                        it->second.srv = view_non_srgb;
                         it->second.rtv = { 0 };
-                        it->second.width = 0;
-                        it->second.height = 0;
+                        it->second.width = resDesc.texture.width;
+                        it->second.height = resDesc.texture.height;
                     }
 
                     it->second.reset = false;
@@ -733,12 +954,12 @@ void RenderingManager::UpdateTextureBindings(command_list* cmd_list, uint32_t ca
 
     if (invocation & MATCH_BINDING_PS)
     {
-        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.ps.bindingsToUpdate, psToUpdateBindings, callLocation, 0, MATCH_BINDING_PS);
+        _QueueOrDequeue(cmd_list, deviceData, commandListData, commandListData.ps.bindingsToUpdate, psToUpdateBindings, callLocation, 0, MATCH_BINDING_PS);
     }
 
     if (invocation & MATCH_BINDING_VS)
     {
-        _QueueOrDequeue(deviceData.current_runtime, commandListData, commandListData.vs.bindingsToUpdate, vsToUpdateBindings, callLocation, 1, MATCH_BINDING_VS);
+        _QueueOrDequeue(cmd_list, deviceData, commandListData, commandListData.vs.bindingsToUpdate, vsToUpdateBindings, callLocation, 1, MATCH_BINDING_VS);
     }
 
     if (psToUpdateBindings.size() == 0 && vsToUpdateBindings.size() == 0)
@@ -811,6 +1032,16 @@ void RenderingManager::ClearUnmatchedTextureBindings(reshade::api::command_list*
         }
 
         binding.second.reset = true;
+    }
+
+    if (!data.huntPreview.matched && uiData.GetToggleGroupIdShaderEditing() >= 0)
+    {
+        resource_view rtv = resource_view{ 0 };
+        resourceManager.SetPreviewViewHandles(nullptr, &rtv, nullptr);
+        if (rtv != 0)
+        {
+            cmd_list->clear_render_target_view(rtv, clearColor);
+        }
     }
 }
 

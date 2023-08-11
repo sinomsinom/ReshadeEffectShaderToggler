@@ -152,13 +152,13 @@ void ConstantHandlerBase::OnReshadeReloadedEffects(effect_runtime* runtime, int3
 bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, const ToggleGroup* group, uint32_t index)
 {
     uint32_t slot_size = static_cast<uint32_t>(cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index].size());
-    uint32_t slot = min(group->getSlotIndex(), slot_size - 1);
+    uint32_t slot = min(group->getCBSlotIndex(), slot_size - 1);
 
     if (slot_size == 0)
         return false;
 
     uint32_t desc_size = static_cast<uint32_t>(cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index][slot].size());
-    uint32_t desc = min(group->getDescriptorIndex(), desc_size - 1);
+    uint32_t desc = min(group->getCBDescriptorIndex(), desc_size - 1);
 
     if (desc_size == 0)
         return false;
