@@ -77,7 +77,7 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
                 {
                     if (!sData.bindingsToUpdate.contains(group->getTextureBindingName()))
                     {
-                        if (group->getCopyTextureBinding() && !group->getExtractResourceViews())
+                        if (!group->getCopyTextureBinding() || group->getExtractResourceViews())
                         {
                             sData.bindingsToUpdate.emplace(group->getTextureBindingName(), std::make_tuple(group, CALL_DRAW, resource_view{ 0 }));
                             queue_mask |= (match_binding << CALL_DRAW * MATCH_DELIMITER);
