@@ -109,6 +109,8 @@ LICENSE_SIGMATCH        RCDATA                  "..\\deps\\sigmatch\\LICENSE"
 
 LICENSE_REST            RCDATA                  "..\\LICENSE"
 
+LICENSE_IMGUI           RCDATA                  "..\\deps\\reshade\\deps\\imgui\\LICENSE.txt"
+
 #endif    // English (United Kingdom) resources
 /////////////////////////////////////////////////////////////////////////////
 

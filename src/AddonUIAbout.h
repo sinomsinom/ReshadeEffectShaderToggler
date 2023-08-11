@@ -73,6 +73,12 @@ static void DisplayAbout()
                     ImGui::TextWrapped("%s", lic_RobinMap.c_str());
                 }
 
+                if (ImGui::CollapsingHeader("ImGui"))
+                {
+                    auto lic_ImGui = GetResourceData(LICENSE_IMGUI);
+                    ImGui::TextWrapped("%s", lic_ImGui.c_str());
+                }
+
                 ImGui::EndChild();
             }
 
