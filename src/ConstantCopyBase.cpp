@@ -17,7 +17,7 @@ ConstantCopyBase::~ConstantCopyBase()
 
 }
 
-void ConstantCopyBase::GetHostConstantBuffer(vector<uint8_t>& dest, size_t size, uint64_t resourceHandle)
+void ConstantCopyBase::GetHostConstantBuffer(reshade::api::command_list* cmd_list, vector<uint8_t>& dest, size_t size, uint64_t resourceHandle)
 {
     shared_lock<shared_mutex> lock(deviceHostMutex);
     const auto& ret = deviceToHostConstantBuffer.find(resourceHandle);

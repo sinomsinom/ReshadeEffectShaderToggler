@@ -13,9 +13,9 @@ namespace Shim
             Copy_None,
             Copy_MemcpySingular,
             Copy_MemcpyNested,
-            Copy_FFXIV, //actually only works with ConstantHandlerType::FFXIV, but shhhhh
+            Copy_FFXIV,
             Copy_NierReplicant,
-            Copy_DXUpdateBuffer
+            Copy_GPUReadback,
         };
 
         enum ConstantHandlerType
