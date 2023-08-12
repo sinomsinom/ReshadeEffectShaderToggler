@@ -191,7 +191,7 @@
     <ClInclude Include="ConstantCopyBase.h" />
     <ClInclude Include="ConstantCopyDefinitions.h" />
     <ClInclude Include="ConstantCopyFFXIV.h" />
-    <ClInclude Include="ConstantCopyDXUpdateBuffer.h" />
+    <ClInclude Include="ConstantCopyGPUReadback.h" />
     <ClInclude Include="ConstantCopyMemcpyNested.h" />
     <ClInclude Include="ConstantCopyMemcpySingular.h" />
     <ClInclude Include="ConstantCopyNierReplicant.h" />
@@ -218,7 +218,7 @@
     <ClCompile Include="CDataFile.cpp" />
     <ClCompile Include="ConstantCopyBase.cpp" />
     <ClCompile Include="ConstantCopyFFXIV.cpp" />
-    <ClCompile Include="ConstantCopyDXUpdateBuffer.cpp" />
+    <ClCompile Include="ConstantCopyGPUReadback.cpp" />
     <ClCompile Include="ConstantCopyMemcpyNested.cpp" />
     <ClCompile Include="ConstantCopyMemcpySingular.cpp" />
     <ClCompile Include="ConstantCopyNierReplicant.cpp" />

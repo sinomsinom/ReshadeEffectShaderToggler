@@ -106,8 +106,8 @@ namespace AddonImGui
         int _startValueFramecountCollectionPhase = FRAMECOUNT_COLLECTION_PHASE_DEFAULT;
         float _overlayOpacity = 0.2f;
         uint32_t _keyBindings[ARRAYSIZE(KeybindNames)];
-        std::string _constHookType = "none";
-        std::string _constHookCopyType = "singular";
+        std::string _constHookType = "default";
+        std::string _constHookCopyType = "gpu_readback";
         std::string _resourceShim = "none";
         std::filesystem::path _basePath;
         TabType _currentTab = TabType::TAB_NONE;
@@ -151,6 +151,7 @@ namespace AddonImGui
         const std::string& GetConstHookType() { return _constHookType; }
         const std::string& GetConstHookCopyType()  { return _constHookCopyType; }
         const std::string& GetResourceShim() { return _resourceShim; }
+        void SetConstHookCopyType(std::string& copyType) { _constHookCopyType = copyType; }
         void SetResourceShim(std::string& shim) { _resourceShim = shim; }
         void SetKeybinding(Keybind keybind, uint32_t keys);
         const std::unordered_map<std::string, std::tuple<Shim::Constants::constant_type, std::vector<reshade::api::effect_uniform_variable>>>* GetRESTVariables() { return _constantHandler->GetRESTVariables(); };

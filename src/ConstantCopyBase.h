@@ -18,7 +18,7 @@ namespace Shim
             virtual bool Init() = 0;
             virtual bool UnInit() = 0;
 
-            virtual void GetHostConstantBuffer(std::vector<uint8_t>& dest, size_t size, uint64_t resourceHandle);
+            virtual void GetHostConstantBuffer(reshade::api::command_list* cmd_list, std::vector<uint8_t>& dest, size_t size, uint64_t resourceHandle);
             virtual void CreateHostConstantBuffer(reshade::api::device* dev, reshade::api::resource resource, size_t size);
             virtual void DeleteHostConstantBuffer(reshade::api::resource resource);
             virtual inline void SetHostConstantBuffer(const uint64_t handle, const void* buffer, size_t size, uintptr_t offset, uint64_t bufferSize);

@@ -317,7 +317,7 @@ void ConstantHandlerBase::CopyToScratchpad(const ToggleGroup* group, device* dev
     uint64_t size = targetBufferDesc.buffer.size;
 
     std::memcpy(prevBufferContent.data(), bufferContent.data(), size);
-    _constCopy->GetHostConstantBuffer(bufferContent, size, currentBufferRange.buffer.handle);
+    _constCopy->GetHostConstantBuffer(cmd_list, bufferContent, size, currentBufferRange.buffer.handle);
 }
 
 bool ConstantHandlerBase::CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& targetBufferDesc)

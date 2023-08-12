@@ -4,7 +4,7 @@
 #include "ConstantCopyMemcpyNested.h"
 #include "ConstantCopyFFXIV.h"
 #include "ConstantCopyNierReplicant.h"
-#include "ConstantCopyDXUpdateBuffer.h"
+#include "ConstantCopyGPUReadback.h"
 
 using namespace Shim::Constants;
 using namespace std;
@@ -21,8 +21,8 @@ ConstantCopyType ConstantManager::ResolveConstantCopyType(const string& ctype)
         return ConstantCopyType::Copy_FFXIV;
     else if (ctype == "nier_replicant")
         return ConstantCopyType::Copy_NierReplicant;
-    else if (ctype == "dx_update_buffer")
-        return ConstantCopyType::Copy_DXUpdateBuffer;
+    else if (ctype == "gpu_readback")
+        return ConstantCopyType::Copy_GPUReadback;
     
     return ConstantCopyType::Copy_None;
 }
@@ -40,7 +40,7 @@ bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantCopyBase** con
     const string& hookType = data.GetConstHookType();
     const string& hookCopyType = data.GetConstHookCopyType();
 
-    switch (ResolveConstantCopyType(hookType))
+    switch (ResolveConstantCopyType(hookCopyType))
     {
     case ConstantCopyType::Copy_None:
     {
@@ -71,10 +71,10 @@ bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantCopyBase** con
         *constantCopy = &constantTypeNierReplicant;
     }
         break;
-    case ConstantCopyType::Copy_DXUpdateBuffer:
+    case ConstantCopyType::Copy_GPUReadback:
     {
-        static ConstantCopyDXUpdateBuffer constantTypeDXUpdateBuffer;
-        *constantCopy = &constantTypeDXUpdateBuffer;
+        static ConstantCopyGPUReadback constantTypeGPUReadback;
+        *constantCopy = &constantTypeGPUReadback;
     }
         break;
     default:

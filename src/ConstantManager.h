@@ -13,9 +13,18 @@ namespace Shim
             Copy_None,
             Copy_MemcpySingular,
             Copy_MemcpyNested,
-            Copy_FFXIV, //actually only works with ConstantHandlerType::FFXIV, but shhhhh
+            Copy_FFXIV,
             Copy_NierReplicant,
-            Copy_DXUpdateBuffer
+            Copy_GPUReadback,
+        };
+
+        static const std::vector<std::string> ConstantCopyTypeNames = {
+            "none",
+            "gpu_readback",
+            "ffxiv",
+            "nier_replicant",
+            "memcpy_singular",
+            "memcpy_nested"
         };
 
         enum ConstantHandlerType

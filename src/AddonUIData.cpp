@@ -185,13 +185,13 @@ void AddonUIData::LoadShaderTogglerIniFile(const std::string& fileName)
     _constHookType = iniFile.GetValue("ConstantBufferHookType", "General");
     if (_constHookType.size() <= 0)
     {
-        _constHookType = "none";
+        _constHookType = "default";
     }
 
     _constHookCopyType = iniFile.GetValue("ConstantBufferHookCopyType", "General");
     if (_constHookCopyType.size() <= 0)
     {
-        _constHookCopyType = "singular";
+        _constHookCopyType = "gpu_readback";
     }
 
     for (uint32_t i = 0; i < ARRAYSIZE(KeybindNames); i++)

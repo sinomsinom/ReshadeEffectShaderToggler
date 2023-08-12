@@ -84,9 +84,6 @@
     <ClInclude Include="ConstantCopyMemcpyNested.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ConstantCopyDXUpdateBuffer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="GameHookT.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -100,6 +97,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="AddonUIAbout.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ConstantCopyGPUReadback.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -152,9 +152,6 @@
     <ClCompile Include="ConstantCopyMemcpyNested.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ConstantCopyDXUpdateBuffer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="GameHookT.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -162,6 +159,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ResourceShimSRGB.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ConstantCopyGPUReadback.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
