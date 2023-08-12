@@ -132,11 +132,11 @@ namespace ShaderToggler
         std::unordered_set<uint32_t> _pixelShaderHashes;
         uint32_t _invocationLocation = 0;
         uint32_t _rtIndex = 0;
-        uint32_t _cbSlotIndex = 0;
+        uint32_t _cbSlotIndex = 2;
         uint32_t _cbDescIndex = 0;
         uint32_t _bindingInvocationLocation = 0;
         uint32_t _bindingRTIndex = 0;
-        uint32_t _bindingSrvSlotIndex = 0;
+        uint32_t _bindingSrvSlotIndex = 1;
         uint32_t _bindingSrvDescIndex = 0;
         bool _isActive;				// true means the group is actively toggled (so the hashes have to be hidden.
         bool _isEditing;			// true means the group is actively edited (name, key)
