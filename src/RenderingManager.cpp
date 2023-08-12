@@ -177,6 +177,7 @@ static inline bool IsColorBuffer(reshade::api::format value)
     case reshade::api::format::r11g11b10_float:
     case reshade::api::format::r16g16b16a16_typeless:
     case reshade::api::format::r16g16b16a16_float:
+    case reshade::api::format::r16g16b16a16_unorm:
     case reshade::api::format::r32g32b32_typeless:
     case reshade::api::format::r32g32b32_float:
     case reshade::api::format::r32g32b32a32_typeless:
