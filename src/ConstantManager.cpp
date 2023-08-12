@@ -40,7 +40,7 @@ bool ConstantManager::Init(AddonImGui::AddonUIData& data, ConstantCopyBase** con
     const string& hookType = data.GetConstHookType();
     const string& hookCopyType = data.GetConstHookCopyType();
 
-    switch (ResolveConstantCopyType(hookType))
+    switch (ResolveConstantCopyType(hookCopyType))
     {
     case ConstantCopyType::Copy_None:
     {

@@ -18,6 +18,15 @@ namespace Shim
             Copy_GPUReadback,
         };
 
+        static const std::vector<std::string> ConstantCopyTypeNames = {
+            "none",
+            "gpu_readback",
+            "ffxiv",
+            "nier_replicant",
+            "memcpy_singular",
+            "memcpy_nested"
+        };
+
         enum ConstantHandlerType
         {
             Handler_Default,

@@ -39,6 +39,7 @@
 #include "AddonUIAbout.h"
 #include "KeyData.h"
 #include "ResourceManager.h"
+#include "ConstantManager.h"
 
 #define MAX_DESCRIPTOR_INDEX 10
 
@@ -1109,6 +1110,24 @@ static void DisplaySettings(AddonImGui::AddonUIData& instance, reshade::api::eff
             ImGui::EndCombo();
         }
         instance.SetResourceShim(varSelectedItem);
+
+        ImGui::AlignTextToFramePadding();
+        std::string varSelectedCopyMethod = instance.GetConstHookCopyType();
+        if (ImGui::BeginCombo("Constant buffer copy method", varSelectedCopyMethod.c_str(), ImGuiComboFlags_None))
+        {
+            for (auto& v : Shim::Constants::ConstantCopyTypeNames)
+            {
+                bool is_selected = (varSelectedCopyMethod == v);
+                if (ImGui::Selectable(v.c_str(), is_selected))
+                {
+                    varSelectedCopyMethod = v;
+                }
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        instance.SetConstHookCopyType(varSelectedCopyMethod);
     }
 
     if (ImGui::CollapsingHeader("Keybindings", ImGuiTreeNodeFlags_None))
