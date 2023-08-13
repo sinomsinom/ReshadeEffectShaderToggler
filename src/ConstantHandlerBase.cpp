@@ -149,7 +149,7 @@ void ConstantHandlerBase::OnReshadeReloadedEffects(effect_runtime* runtime, int3
     previousEnableCount = enabledCount;
 }
 
-bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, const ToggleGroup* group, uint32_t index)
+bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, ToggleGroup* group, uint32_t index)
 {
     uint32_t slot_size = static_cast<uint32_t>(cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index].size());
     uint32_t slot = min(group->getCBSlotIndex(), slot_size - 1);
@@ -164,6 +164,35 @@ bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandL
         return false;
 
     buffer_range buf = cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index][slot][desc];
+    DescriptorCycle cycle = group->consumeCBCycle();
+    if (cycle != CYCLE_NONE)
+    {
+        if (cycle == CYCLE_UP)
+        {
+            uint32_t newDescIndex = min(++desc, desc_size - 1);
+            buf = cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index][slot][newDescIndex];
+
+            while (buf.buffer == 0 && desc < desc_size - 2)
+            {
+                buf = cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index][slot][++desc];
+            }
+        }
+        else
+        {
+            uint32_t newDescIndex = desc > 0 ? --desc : 0;
+            buf = cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index][slot][newDescIndex];
+
+            while (buf.buffer == 0 && desc > 0)
+            {
+                buf = cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index][slot][--desc];
+            }
+        }
+
+        if (buf.buffer != 0)
+        {
+            group->setCBDescriptorIndex(desc);
+        }
+    }
 
     if (buf.buffer != 0)
     {
@@ -193,8 +222,8 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list)
         return;
     }
 
-    vector<const ToggleGroup*> psRemovalList;
-    vector<const ToggleGroup*> vsRemovalList;
+    vector<ToggleGroup*> psRemovalList;
+    vector<ToggleGroup*> vsRemovalList;
 
     for (const auto& cb : commandListData.ps.constantBuffersToUpdate)
     {

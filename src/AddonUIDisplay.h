@@ -604,7 +604,7 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
                 ImGui::PushID(2);
                 if (ImGui::SmallButton("+"))
                 {
-                    group->setBindingSRVDescriptorIndex(group->getBindingSRVDescriptorIndex() + 1);
+                    group->dispatchSRVCycle(ShaderToggler::CYCLE_UP);
                 }
                 ImGui::PopID();
 
@@ -615,7 +615,7 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
                     ImGui::PushID(1);
                     if (ImGui::SmallButton("-"))
                     {
-                        group->setBindingSRVDescriptorIndex(group->getBindingSRVDescriptorIndex() - 1);
+                        group->dispatchSRVCycle(ShaderToggler::CYCLE_DOWN);
                     }
                     ImGui::PopID();
                 }

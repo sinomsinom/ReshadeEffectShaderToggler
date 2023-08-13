@@ -186,7 +186,7 @@ static inline bool IsColorBuffer(reshade::api::format value)
     }
 }
 
-const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_list, DeviceDataContainer& deviceData, const ToggleGroup* group, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action)
+const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_list, DeviceDataContainer& deviceData, ToggleGroup* group, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action)
 {
     resource_view active_rtv = { 0 };
 
@@ -221,6 +221,36 @@ const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_l
             return active_rtv;
 
         resource_view buf = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot][desc];
+
+        DescriptorCycle cycle = group->consumeSRVCycle();
+        if (cycle != CYCLE_NONE)
+        {
+            if (cycle == CYCLE_UP)
+            {
+                uint32_t newDescIndex = min(++desc, desc_size - 1);
+                buf = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot][newDescIndex];
+
+                while (buf == 0 && desc < desc_size - 2)
+                {
+                    buf = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot][++desc];
+                }
+            }
+            else
+            {
+                uint32_t newDescIndex = desc > 0 ? --desc : 0;
+                buf = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot][newDescIndex];
+
+                while (buf == 0 && desc > 0)
+                {
+                    buf = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot][--desc];
+                }
+            }
+
+            if (buf != 0)
+            {
+                group->setBindingSRVDescriptorIndex(desc);
+            }
+        }
 
         active_rtv = buf;
     }
@@ -391,7 +421,7 @@ bool RenderingManager::RenderRemainingEffects(effect_runtime* runtime)
 bool RenderingManager::_RenderEffects(
     command_list* cmd_list,
     DeviceDataContainer& deviceData,
-    const unordered_map<string, tuple<const ToggleGroup*, uint32_t, resource_view>>& techniquesToRender,
+    const unordered_map<string, tuple<ToggleGroup*, uint32_t, resource_view>>& techniquesToRender,
     vector<string>& removalList,
     const unordered_set<string>& toRenderNames)
 {
@@ -447,7 +477,7 @@ void RenderingManager::_QueueOrDequeue(
     command_list* cmd_list,
     DeviceDataContainer& deviceData,
     CommandListDataContainer& commandListData,
-    std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& queue,
+    std::unordered_map<std::string, std::tuple<ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& queue,
     unordered_set<string>& immediateQueue,
     uint32_t callLocation,
     uint32_t layoutIndex,
@@ -851,7 +881,7 @@ uint32_t RenderingManager::UpdateTextureBinding(effect_runtime* runtime, const s
 
 void RenderingManager::_UpdateTextureBindings(command_list* cmd_list,
     DeviceDataContainer& deviceData,
-    const unordered_map<string, tuple<const ToggleGroup*, uint32_t, resource_view>>& bindingsToUpdate,
+    const unordered_map<string, tuple<ToggleGroup*, uint32_t, resource_view>>& bindingsToUpdate,
     vector<string>& removalList,
     const unordered_set<string>& toUpdateBindings)
 {

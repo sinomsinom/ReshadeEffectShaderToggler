@@ -111,7 +111,7 @@ namespace Shim
 
             bool CreateScratchpad(const ShaderToggler::ToggleGroup* group, reshade::api::device* dev, reshade::api::resource_desc& target);
             void CopyToScratchpad(const ShaderToggler::ToggleGroup* group, reshade::api::device* dev, reshade::api::command_list* cmd_list);
-            bool UpdateConstantEntries(reshade::api::command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, const ShaderToggler::ToggleGroup* group, uint32_t index);
+            bool UpdateConstantEntries(reshade::api::command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, ShaderToggler::ToggleGroup* group, uint32_t index);
         };
     }
 }

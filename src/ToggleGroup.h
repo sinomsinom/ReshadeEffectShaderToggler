@@ -39,6 +39,13 @@
 
 namespace ShaderToggler
 {
+    enum DescriptorCycle
+    {
+        CYCLE_NONE,
+        CYCLE_UP,
+        CYCLE_DOWN
+    };
+
     class ToggleGroup
     {
     public:
@@ -118,6 +125,27 @@ namespace ShaderToggler
         const std::unordered_map<std::string, std::tuple<uintptr_t, bool>>& GetVarOffsetMapping() const { return _varOffsetMapping; }
         bool SetVarMapping(uintptr_t, std::string&, bool);
         bool RemoveVarMapping(std::string&);
+        void dispatchCBCycle(DescriptorCycle cycle) { _cbCycle = cycle; }
+        DescriptorCycle consumeCBCycle() 
+        { 
+            DescriptorCycle ret = _cbCycle;
+            _cbCycle = CYCLE_NONE;
+            return ret; 
+        }
+        void dispatchSRVCycle(DescriptorCycle cycle) { _srvCycle = cycle; }
+        DescriptorCycle consumeSRVCycle()
+        {
+            DescriptorCycle ret = _srvCycle;
+            _srvCycle = CYCLE_NONE;
+            return ret;
+        }
+        void dispatchRTCycle(DescriptorCycle cycle) { _rtCycle = cycle; }
+        DescriptorCycle consumeRTCycle()
+        {
+            DescriptorCycle ret = _rtCycle;
+            _rtCycle = CYCLE_NONE;
+            return ret;
+        }
 
         bool operator==(const ToggleGroup& rhs)
         {
@@ -152,5 +180,8 @@ namespace ShaderToggler
         std::string _textureBindingName;
         std::unordered_set<std::string> _preferredTechniques;
         std::unordered_map<std::string, std::tuple<uintptr_t, bool>> _varOffsetMapping;
+        DescriptorCycle _cbCycle;
+        DescriptorCycle _srvCycle;
+        DescriptorCycle _rtCycle;
     };
 }

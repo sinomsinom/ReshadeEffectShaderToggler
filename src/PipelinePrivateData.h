@@ -9,10 +9,10 @@
 
 struct __declspec(novtable) ShaderData final {
     uint32_t activeShaderHash = -1;
-    std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>> bindingsToUpdate;
-    std::unordered_set<const ShaderToggler::ToggleGroup*> constantBuffersToUpdate;
-    std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>> techniquesToRender;
-    std::unordered_set<const ShaderToggler::ToggleGroup*> srvToUpdate;
+    std::unordered_map<std::string, std::tuple<ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>> bindingsToUpdate;
+    std::unordered_set<ShaderToggler::ToggleGroup*> constantBuffersToUpdate;
+    std::unordered_map<std::string, std::tuple<ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>> techniquesToRender;
+    std::unordered_set<ShaderToggler::ToggleGroup*> srvToUpdate;
     const std::vector<ShaderToggler::ToggleGroup*>* blockedShaderGroups = nullptr;
     uint32_t id = 0;
 
