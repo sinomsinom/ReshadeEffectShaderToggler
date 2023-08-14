@@ -203,6 +203,7 @@ namespace ShaderToggler
         iniFile.SetUInt("SRVDescriptorIndex", _bindingSrvDescIndex, "", sectionRoot);
         iniFile.SetUInt("BindingRenderTargetIndex", _bindingRTIndex, "", sectionRoot);
         iniFile.SetUInt("BindingInvocationLocation", _bindingInvocationLocation, "", sectionRoot);
+        iniFile.SetBool("BindingMatchSwapchainResolutionOnly", _bindingMatchSwapchainResolution, "", sectionRoot);
     }
 
 
@@ -393,5 +394,7 @@ namespace ShaderToggler
         {
             _bindingInvocationLocation = _invocationLocation; //fallback to effect invocation location when loading old configs
         }
+
+        _bindingMatchSwapchainResolution = iniFile.GetBoolOrDefault("BindingMatchSwapchainResolutionOnly", sectionRoot, _matchSwapchainResolution);
     }
 }

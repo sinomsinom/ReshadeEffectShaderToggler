@@ -483,7 +483,7 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
 
         bool copyBinding = group->getCopyTextureBinding();
         bool clearBinding = group->getClearBindings();
-
+        bool matchSwapchain = group->getBindingMatchSwapchainResolution();
 
         if (ImGui::BeginTable("Bindingsettings", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody))
         {
@@ -681,7 +681,13 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
                     ImGui::EndDisabled();
                 }
 
+                ImGui::TableNextColumn();
+                ImGui::Text("Match swapchain resolution");
+                ImGui::TableNextColumn();
+                ImGui::Checkbox("##BindingMatchswapchainresolution", &matchSwapchain);
+
                 group->setBindingInvocationLocation(rtSelectedIndex);
+                group->setBindingMatchSwapchainResolution(matchSwapchain);
             }
 
             ImGui::EndTable();
@@ -702,8 +708,6 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
     if (ImGui::IsItemActive())
         height += ImGui::GetIO().MouseDelta.y;
 
-    //DisplayPreview(instance, resManager, runtime, width / 2 - 8.0);
-    //ImGui::SameLine();
     DisplayBindingPreview(instance, resManager, runtime, group->getTextureBindingName());
 
     ImGui::PopStyleVar();
@@ -711,92 +715,6 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
 
 static void DisplayOverlay(AddonImGui::AddonUIData& instance, Rendering::ResourceManager& resManager, reshade::api::effect_runtime* runtime)
 {
-    //if (instance.GetToggleGroupIdConstantEditing() >= 0)
-    //{
-    //    ShaderToggler::ToggleGroup* tGroup = nullptr;
-    //    const int idx = instance.GetToggleGroupIdConstantEditing();
-    //    if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
-    //    {
-    //        tGroup = &instance.GetToggleGroups()[idx];
-    //    }
-    //
-    //    DisplayConstantViewer(instance, tGroup, runtime->get_device());
-    //}
-    //
-    //if (instance.GetToggleGroupIdEffectEditing() >= 0)
-    //{
-    //    ShaderToggler::ToggleGroup* tGroup = nullptr;
-    //    const int idx = instance.GetToggleGroupIdEffectEditing();
-    //    if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
-    //    {
-    //        tGroup = &instance.GetToggleGroups()[idx];
-    //    }
-    //
-    //    DisplayTechniqueSelection(instance, tGroup);
-    //}
-
-    //if (instance.GetToggleGroupIdShaderEditing() >= 0)
-    //{
-    //    std::string editingGroupName = "";
-    //    const int idx = instance.GetToggleGroupIdShaderEditing();
-    //    ShaderToggler::ToggleGroup* tGroup = nullptr;
-    //    if (instance.GetToggleGroups().find(idx) != instance.GetToggleGroups().end())
-    //    {
-    //        editingGroupName = instance.GetToggleGroups()[idx].getName();
-    //        tGroup = &instance.GetToggleGroups()[idx];
-    //    }
-    //
-    //    bool wndOpen = true;
-    //    ImGui::SetNextWindowBgAlpha(*instance.OverlayOpacity());
-    //    ImGui::SetNextWindowPos(ImVec2(10, 10));
-    //    if (!ImGui::Begin(std::format("Edit group {}", editingGroupName).c_str(), nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize |
-    //        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings))
-    //    {
-    //        ImGui::End();
-    //        return;
-    //    }
-    //
-    //    ImGui::Text("# of pipelines with vertex shaders: %d. # of different vertex shaders gathered: %d.", instance.GetVertexShaderManager()->getPipelineCount(), instance.GetVertexShaderManager()->getShaderCount());
-    //    ImGui::Text("# of pipelines with pixel shaders: %d. # of different pixel shaders gathered: %d.", instance.GetPixelShaderManager()->getPipelineCount(), instance.GetPixelShaderManager()->getShaderCount());
-    //    if (*instance.ActiveCollectorFrameCounter() > 0)
-    //    {
-    //        const uint32_t counterValue = *instance.ActiveCollectorFrameCounter();
-    //        ImGui::Text("Collecting active shaders... frames to go: %d", counterValue);
-    //    }
-    //    else
-    //    {
-    //        if (instance.GetVertexShaderManager()->isInHuntingMode() || instance.GetPixelShaderManager()->isInHuntingMode())
-    //        {
-    //            ImGui::Text("Editing the shaders for group: %s", editingGroupName.c_str());
-    //            if (tGroup != nullptr)
-    //            {
-    //                ImGui::Text("Invocation location: %s", invocationDescription[tGroup->getInvocationLocation()]);
-    //                ImGui::Text("Render target index: %d", tGroup->getDescriptorIndex());
-    //                ImGui::Text("Render target format %d: ", (uint32_t)instance.cFormat);
-    //            }
-    //        }
-    //        if (instance.GetVertexShaderManager()->isInHuntingMode())
-    //        {
-    //            ImGui::Text("# of vertex shaders active: %d. # of vertex shaders in group: %d", instance.GetVertexShaderManager()->getAmountShaderHashesCollected(), instance.GetVertexShaderManager()->getMarkedShaderCount());
-    //            ImGui::Text("Current selected vertex shader: %d / %d.", instance.GetVertexShaderManager()->getActiveHuntedShaderIndex(), instance.GetVertexShaderManager()->getAmountShaderHashesCollected());
-    //            if (instance.GetVertexShaderManager()->isHuntedShaderMarked())
-    //            {
-    //                DisplayIsPartOfToggleGroup();
-    //            }
-    //        }
-    //        if (instance.GetPixelShaderManager()->isInHuntingMode())
-    //        {
-    //            ImGui::Text("# of pixel shaders active: %d. # of pixel shaders in group: %d", instance.GetPixelShaderManager()->getAmountShaderHashesCollected(), instance.GetPixelShaderManager()->getMarkedShaderCount());
-    //            ImGui::Text("Current selected pixel shader: %d / %d", instance.GetPixelShaderManager()->getActiveHuntedShaderIndex(), instance.GetPixelShaderManager()->getAmountShaderHashesCollected());
-    //            if (instance.GetPixelShaderManager()->isHuntedShaderMarked())
-    //            {
-    //                DisplayIsPartOfToggleGroup();
-    //            }
-    //        }
-    //    }
-    //    ImGui::End();
-    //}
-
     if (instance.GetToggleGroupIdShaderEditing() >= 0)
     {
         std::string editingGroupName = "";
@@ -920,126 +838,6 @@ static void CheckHotkeys(AddonImGui::AddonUIData& instance, reshade::api::effect
     {
         --(*instance.ActiveCollectorFrameCounter());
     }
-
-    //if (instance.GetToggleGroupIdShaderEditing() == -1)
-    //{
-    //    return;
-    //}
-    //
-    //ShaderToggler::ToggleGroup* editGroup = nullptr;
-    //
-    //for (auto& group : instance.GetToggleGroups())
-    //{
-    //    if (group.second.getId() == instance.GetToggleGroupIdShaderEditing())
-    //    {
-    //        editGroup = &group.second;
-    //        break;
-    //    }
-    //
-    //    if (group.second.getToggleKey() > 0 && ShaderToggler::areKeysPressed(group.second.getToggleKey(), runtime))
-    //    {
-    //        group.second.toggleActive();
-    //        // if the group's shaders are being edited, it should toggle the ones currently marked.
-    //        if (group.second.getId() == instance.GetToggleGroupIdShaderEditing())
-    //        {
-    //            instance.GetVertexShaderManager()->toggleHideMarkedShaders();
-    //            instance.GetPixelShaderManager()->toggleHideMarkedShaders();
-    //        }
-    //    }
-    //}
-    //
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_DOWN), runtime))
-    //{
-    //    instance.GetPixelShaderManager()->huntPreviousShader(false);
-    //    instance.UpdateToggleGroupsForShaderHashes();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_UP), runtime))
-    //{
-    //    instance.GetPixelShaderManager()->huntNextShader(false);
-    //    instance.UpdateToggleGroupsForShaderHashes();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_DOWN), runtime))
-    //{
-    //    instance.GetPixelShaderManager()->huntPreviousShader(true);
-    //    instance.UpdateToggleGroupsForShaderHashes();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARKED_UP), runtime))
-    //{
-    //    instance.GetPixelShaderManager()->huntNextShader(true);
-    //    instance.UpdateToggleGroupsForShaderHashes();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::PIXEL_SHADER_MARK), runtime))
-    //{
-    //    instance.GetPixelShaderManager()->toggleMarkOnHuntedShader();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_DOWN), runtime))
-    //{
-    //    instance.GetVertexShaderManager()->huntPreviousShader(false);
-    //    instance.UpdateToggleGroupsForShaderHashes();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_UP), runtime))
-    //{
-    //    instance.GetVertexShaderManager()->huntNextShader(false);
-    //    instance.UpdateToggleGroupsForShaderHashes();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_DOWN), runtime))
-    //{
-    //    instance.GetVertexShaderManager()->huntPreviousShader(true);
-    //    instance.UpdateToggleGroupsForShaderHashes();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARKED_UP), runtime))
-    //{
-    //    instance.GetVertexShaderManager()->huntNextShader(true);
-    //    instance.UpdateToggleGroupsForShaderHashes();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::VERTEX_SHADER_MARK), runtime))
-    //{
-    //    instance.GetVertexShaderManager()->toggleMarkOnHuntedShader();
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::INVOCATION_DOWN), runtime))
-    //{
-    //    if (instance.GetInvocationLocation() > 0)
-    //    {
-    //        instance.GetInvocationLocation()--;
-    //        if (editGroup != nullptr)
-    //        {
-    //            editGroup->setInvocationLocation(instance.GetInvocationLocation());
-    //        }
-    //    }
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::INVOCATION_UP), runtime))
-    //{
-    //    if (instance.GetInvocationLocation() < 2)
-    //    {
-    //        instance.GetInvocationLocation()++;
-    //        if (editGroup != nullptr)
-    //        {
-    //            editGroup->setInvocationLocation(instance.GetInvocationLocation());
-    //        }
-    //    }
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::DESCRIPTOR_DOWN), runtime))
-    //{
-    //    if (instance.GetDescriptorIndex() > 0)
-    //    {
-    //        instance.GetDescriptorIndex()--;
-    //        if (editGroup != nullptr)
-    //        {
-    //            editGroup->setDescriptorIndex(instance.GetDescriptorIndex());
-    //        }
-    //    }
-    //}
-    //if (ShaderToggler::areKeysPressed(instance.GetKeybinding(AddonImGui::Keybind::DESCRIPTOR_UP), runtime))
-    //{
-    //    if (instance.GetDescriptorIndex() < MAX_DESCRIPTOR_INDEX)
-    //    {
-    //        instance.GetDescriptorIndex()++;
-    //        if (editGroup != nullptr)
-    //        {
-    //            editGroup->setDescriptorIndex(instance.GetDescriptorIndex());
-    //        }
-    //    }
-    //}
 }
 
 
