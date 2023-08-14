@@ -56,7 +56,7 @@ namespace Rendering
         RenderingManager(AddonImGui::AddonUIData& data, ResourceManager& rManager);
         ~RenderingManager();
 
-        const reshade::api::resource_view GetCurrentResourceView(reshade::api::command_list* cmd_list, DeviceDataContainer& deviceData, const ShaderToggler::ToggleGroup* group, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action);
+        const reshade::api::resource_view GetCurrentResourceView(reshade::api::command_list* cmd_list, DeviceDataContainer& deviceData, ShaderToggler::ToggleGroup* group, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action);
         const reshade::api::resource_view GetCurrentPreviewResourceView(reshade::api::command_list* cmd_list, DeviceDataContainer& deviceData, const ShaderToggler::ToggleGroup* group, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action);
         void UpdatePreview(reshade::api::command_list* cmd_list, uint32_t callLocation, uint32_t invocation);
         void RenderEffects(reshade::api::command_list* cmd_list, uint32_t callLocation = CALL_DRAW, uint32_t invocation = MATCH_NONE);
@@ -81,12 +81,12 @@ namespace Rendering
         bool _RenderEffects(
             reshade::api::command_list* cmd_list,
             DeviceDataContainer& deviceData,
-            const std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& techniquesToRender,
+            const std::unordered_map<std::string, std::tuple<ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& techniquesToRender,
             std::vector<std::string>& removalList,
             const std::unordered_set<std::string>& toRenderNames);
         void _UpdateTextureBindings(reshade::api::command_list* cmd_list,
             DeviceDataContainer& deviceData,
-            const unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& bindingsToUpdate,
+            const unordered_map<std::string, std::tuple<ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& bindingsToUpdate,
             std::vector<std::string>& removalList,
             const std::unordered_set<std::string>& toUpdateBindings);
         bool _CreateTextureBinding(reshade::api::effect_runtime* runtime,
@@ -100,7 +100,7 @@ namespace Rendering
             command_list* cmd_list,
             DeviceDataContainer& deviceData,
             CommandListDataContainer& commandListData,
-            std::unordered_map<std::string, std::tuple<const ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& queue,
+            std::unordered_map<std::string, std::tuple<ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& queue,
             unordered_set<string>& immediateQueue,
             uint32_t callLocation,
             uint32_t layoutIndex,

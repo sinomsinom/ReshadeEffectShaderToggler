@@ -65,7 +65,7 @@ static void DisplayConstantSettings(ShaderToggler::ToggleGroup* group)
     ImGui::PushID(2);
     if (ImGui::SmallButton("+"))
     {
-        group->setCBDescriptorIndex(group->getCBDescriptorIndex() + 1);
+        group->dispatchCBCycle(ShaderToggler::CYCLE_UP);
     }
     ImGui::PopID();
 
@@ -76,7 +76,7 @@ static void DisplayConstantSettings(ShaderToggler::ToggleGroup* group)
         ImGui::PushID(1);
         if (ImGui::SmallButton("-"))
         {
-            group->setCBDescriptorIndex(group->getCBDescriptorIndex() - 1);
+            group->dispatchCBCycle(ShaderToggler::CYCLE_DOWN);
         }
         ImGui::PopID();
     }
