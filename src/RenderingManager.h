@@ -112,9 +112,9 @@ namespace Rendering
         std::shared_mutex render_mutex;
         std::shared_mutex binding_mutex;
 
-        reshade::api::resource empty_res;
-        reshade::api::resource_view empty_rtv;
-        reshade::api::resource_view empty_srv;
+        reshade::api::resource empty_res = { 0 };
+        reshade::api::resource_view empty_rtv = { 0 };
+        reshade::api::resource_view empty_srv = { 0 };
 
         static constexpr size_t CHAR_BUFFER_SIZE = 256;
         static size_t g_charBufferSize;

@@ -56,17 +56,7 @@ void RenderingManager::_CheckCallForCommandList(ShaderData& sData, CommandListDa
 
                 if (group->getId() == uiData.GetToggleGroupIdShaderEditing() && !deviceData.huntPreview.matched)
                 {
-                    /*if (group->isProvidingTextureBinding() && group->getExtractResourceViews() && uiData.GetCurrentTabType() == AddonImGui::TAB_TEXTURE_BINDING)
-                    {
-                        queue_mask |= (match_preview << CALL_DRAW * MATCH_DELIMITER);
-                        deviceData.huntPreview.target_invocation_location = CALL_DRAW;
-                    }
-                    else if (group->isProvidingTextureBinding() && !group->getExtractResourceViews() && uiData.GetCurrentTabType() == AddonImGui::TAB_TEXTURE_BINDING)
-                    {
-                        queue_mask |= (match_preview << (group->getBindingInvocationLocation() * MATCH_DELIMITER)) | (match_preview << CALL_DRAW * MATCH_DELIMITER);
-                        deviceData.huntPreview.target_invocation_location = group->getBindingInvocationLocation();
-                    }
-                    else */if(uiData.GetCurrentTabType() == AddonImGui::TAB_RENDER_TARGET)
+                    if(uiData.GetCurrentTabType() == AddonImGui::TAB_RENDER_TARGET)
                     {
                         queue_mask |= (match_preview << (group->getInvocationLocation() * MATCH_DELIMITER)) | (match_preview << CALL_DRAW * MATCH_DELIMITER);
                         deviceData.huntPreview.target_invocation_location = group->getInvocationLocation();
@@ -264,6 +254,19 @@ const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_l
             return active_rtv;
         }
 
+        resource_desc desc = device->get_resource_desc(rs);
+
+        if (group->getBindingMatchSwapchainResolution())
+        {
+            uint32_t width, height;
+            deviceData.current_runtime->get_screenshot_width_and_height(&width, &height);
+
+            if (width != desc.texture.width || height != desc.texture.height)
+            {
+                return active_rtv;
+            }
+        }
+
         active_rtv = rtvs[bindingRTindex];
     }
     else if (action & MATCH_EFFECT && rtvs.size() > 0 && rtvs[index] != 0)
@@ -320,38 +323,7 @@ const resource_view RenderingManager::GetCurrentPreviewResourceView(command_list
     size_t bindingRTindex = group->getBindingRenderTargetIndex();
     bindingRTindex = std::min(bindingRTindex, rtvs.size() - 1);
 
-    // Only return SRVs in case of bindings
-    if (uiData.GetCurrentTabType() == AddonImGui::TAB_TEXTURE_BINDING && group->getExtractResourceViews())
-    {
-        uint32_t slot_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex].size());
-        uint32_t slot = min(group->getBindingSRVSlotIndex(), slot_size - 1);
-
-        if (slot_size == 0)
-            return active_rtv;
-
-        uint32_t desc_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot].size());
-        uint32_t desc = min(group->getBindingSRVDescriptorIndex(), desc_size - 1);
-
-        if (desc_size == 0)
-            return active_rtv;
-
-        resource_view buf = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot][desc];
-
-        active_rtv = buf;
-    }
-    else if (uiData.GetCurrentTabType() == AddonImGui::TAB_TEXTURE_BINDING && !group->getExtractResourceViews() && rtvs.size() > 0 && rtvs[bindingRTindex] != 0)
-    {
-        resource rs = device->get_resource_from_view(rtvs[bindingRTindex]);
-
-        if (rs == 0)
-        {
-            // Render targets may not have a resource bound in D3D12, in which case writes to them are discarded
-            return active_rtv;
-        }
-
-        active_rtv = rtvs[bindingRTindex];
-    }
-    else if (uiData.GetCurrentTabType() == AddonImGui::TAB_RENDER_TARGET && rtvs.size() > 0 && rtvs[index] != 0)
+    if (rtvs.size() > 0 && rtvs[index] != 0)
     {
         resource rs = device->get_resource_from_view(rtvs[index]);
 
