@@ -149,7 +149,7 @@ void ConstantHandlerBase::OnReshadeReloadedEffects(effect_runtime* runtime, int3
     previousEnableCount = enabledCount;
 }
 
-bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, ToggleGroup* group, uint32_t index)
+bool ConstantHandlerBase::UpdateConstantBufferEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, ToggleGroup* group, uint32_t index)
 {
     uint32_t slot_size = static_cast<uint32_t>(cmdData.stateTracker.GetPushDescriptorState()->current_descriptors[index].size());
     uint32_t slot = min(group->getCBSlotIndex(), slot_size - 1);
@@ -206,6 +206,29 @@ bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandL
     return false;
 }
 
+bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, ToggleGroup* group, uint32_t index)
+{
+    uint32_t slot_size = static_cast<uint32_t>(cmdData.stateTracker.GetPushConstantsState()->current_constants[index].size());
+    uint32_t slot = min(group->getCBSlotIndex(), slot_size - 1);
+
+    if (slot_size == 0)
+        return false;
+
+    const auto& blah = cmdData.stateTracker.GetPushConstantsState()->current_constants[index];
+    size_t const_buffer_size = static_cast<uint32_t>(cmdData.stateTracker.GetPushConstantsState()->current_constants[index].at(slot).size());
+
+    if (const_buffer_size == 0)
+        return false;
+
+    const vector<uint32_t>& buf = cmdData.stateTracker.GetPushConstantsState()->current_constants[index].at(slot);
+
+    SetConstants(group, buf, cmd_list->get_device(), cmd_list);
+    ApplyConstantValues(devData.current_runtime, group, restVariables);
+    devData.constantsUpdated.insert(group);
+
+    return true;
+}
+
 void ConstantHandlerBase::UpdateConstants(command_list* cmd_list)
 {
     if (cmd_list == nullptr || cmd_list->get_device() == nullptr)
@@ -229,7 +252,8 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list)
     {
         if (!deviceData.constantsUpdated.contains(cb))
         {
-            if (UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 0))
+            if (UpdateConstantBufferEntries(cmd_list, commandListData, deviceData, cb, 0) && !cb->getCBIsPushMode() ||
+                UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 0) && cb->getCBIsPushMode())
             {
                 psRemovalList.push_back(cb);
             }
@@ -240,7 +264,8 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list)
     {
         if (!deviceData.constantsUpdated.contains(cb))
         {
-            if (UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 1))
+            if (UpdateConstantBufferEntries(cmd_list, commandListData, deviceData, cb, 1) && !cb->getCBIsPushMode() ||
+                UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 1) && cb->getCBIsPushMode())
             {
                 vsRemovalList.push_back(cb);
             }
@@ -313,6 +338,23 @@ void ConstantHandlerBase::ApplyConstantValues(effect_runtime* runtime, const Tog
     }
 }
 
+
+void ConstantHandlerBase::SetConstants(const ToggleGroup* group, const vector<uint32_t>& buf, device* dev, command_list* cmd_list)
+{
+    if (dev == nullptr || cmd_list == nullptr || buf.size() == 0)
+    {
+        return;
+    }
+
+    InitBuffers(group, buf.size());
+
+    vector<uint8_t>& bufferContent = groupBufferContent.at(group);
+    vector<uint8_t>& prevBufferContent = groupPrevBufferContent.at(group);
+
+    std::memcpy(prevBufferContent.data(), bufferContent.data(), buf.size());
+    std::memcpy(bufferContent.data(), reinterpret_cast<const uint8_t*>(buf.data()), buf.size() * 4);
+}
+
 void ConstantHandlerBase::SetBufferRange(const ToggleGroup* group, buffer_range range, device* dev, command_list* cmd_list)
 {
     if (dev == nullptr || cmd_list == nullptr || range.buffer == 0)
@@ -320,51 +362,32 @@ void ConstantHandlerBase::SetBufferRange(const ToggleGroup* group, buffer_range 
         return;
     }
 
-    if (!groupBufferContent.contains(group))
-    {
-        groupBufferRanges.emplace(group, range);
-        groupBufferSize.emplace(group, 0);
-    }
-    else
-    {
-        groupBufferRanges[group] = range;
-    }
+    resource_desc targetBufferDesc = dev->get_resource_desc(range.buffer);
+    uint64_t size = targetBufferDesc.buffer.size;
 
-    CopyToScratchpad(group, dev, cmd_list);
-}
-
-void ConstantHandlerBase::CopyToScratchpad(const ToggleGroup* group, device* dev, command_list* cmd_list)
-{
-    buffer_range currentBufferRange = groupBufferRanges.at(group);
-    resource_desc targetBufferDesc = dev->get_resource_desc(currentBufferRange.buffer);
-
-    CreateScratchpad(group, dev, targetBufferDesc);
+    InitBuffers(group, size);
 
     vector<uint8_t>& bufferContent = groupBufferContent.at(group);
     vector<uint8_t>& prevBufferContent = groupPrevBufferContent.at(group);
 
-    uint64_t size = targetBufferDesc.buffer.size;
-
     std::memcpy(prevBufferContent.data(), bufferContent.data(), size);
-    _constCopy->GetHostConstantBuffer(cmd_list, bufferContent, size, currentBufferRange.buffer.handle);
+    _constCopy->GetHostConstantBuffer(cmd_list, bufferContent, size, range.buffer.handle);
 }
 
-bool ConstantHandlerBase::CreateScratchpad(const ToggleGroup* group, device* dev, resource_desc& targetBufferDesc)
+void ConstantHandlerBase::InitBuffers(const ToggleGroup* group, size_t size)
 {
-    groupBufferSize.at(group) = targetBufferDesc.buffer.size;
-
     if (groupBufferContent.contains(group))
     {
-        groupBufferContent.at(group).resize(targetBufferDesc.buffer.size, 0);
-        groupPrevBufferContent.at(group).resize(targetBufferDesc.buffer.size, 0);
+        groupBufferContent.at(group).resize(size, 0);
+        groupPrevBufferContent.at(group).resize(size, 0);
+        groupBufferSize.at(group) = size;
     }
     else
     {
-        groupBufferContent.emplace(group, vector<uint8_t>(targetBufferDesc.buffer.size, 0));
-        groupPrevBufferContent.emplace(group, vector<uint8_t>(targetBufferDesc.buffer.size, 0));
+        groupBufferContent.emplace(group, vector<uint8_t>(size, 0));
+        groupPrevBufferContent.emplace(group, vector<uint8_t>(size, 0));
+        groupBufferSize.emplace(group, size);
     }
-
-    return true;
 }
 
 void ConstantHandlerBase::RemoveGroup(const ToggleGroup* group, device* dev)
@@ -374,7 +397,7 @@ void ConstantHandlerBase::RemoveGroup(const ToggleGroup* group, device* dev)
         return;
     }
 
-    groupBufferRanges.erase(group);
     groupBufferContent.erase(group);
     groupPrevBufferContent.erase(group);
+    groupBufferSize.erase(group);
 }

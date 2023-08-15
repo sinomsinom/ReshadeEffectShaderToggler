@@ -94,9 +94,12 @@ static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ShaderToggler:
 
     const uint32_t columns = 4;
     const char* typeItems[] = { "byte", "float", "int", "uint" };
+    const char* cbModeItems[] = { "BUFFER", "PUSH" };
     const uint32_t typeSizes[] = { 1, 4, 4, 4 };
     static int typeSelectionIndex = 1;
     static const char* typeSelectedItem = typeItems[1];
+    static int cbModeSelectionIndex = group->getCBIsPushMode() ? 1 : 0;
+    const char* cbModeSelection = cbModeItems[cbModeSelectionIndex];
     const uint8_t* bufferContent = instance.GetConstantHandler()->GetConstantBuffer(group);
     const size_t bufferSize = instance.GetConstantHandler()->GetConstantBufferSize(group);
     auto& varMap = group->GetVarOffsetMapping();
@@ -141,11 +144,33 @@ static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ShaderToggler:
 
             ImGui::TableNextRow();
 
+            ImGui::TableNextColumn();
+            ImGui::Text("Constant mode");
+            ImGui::TableNextColumn();
+            if (ImGui::BeginCombo("##CBmode", cbModeSelection, ImGuiComboFlags_None))
+            {
+                for (int n = 0; n < IM_ARRAYSIZE(cbModeItems); n++)
+                {
+                    bool is_selected = (cbModeSelection == cbModeItems[n]);
+                    if (ImGui::Selectable(cbModeItems[n], is_selected))
+                    {
+                        cbModeSelectionIndex = n;
+                        cbModeSelection = cbModeItems[n];
+                    }
+                    if (is_selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::TableNextRow();
+
             DisplayConstantSettings(group);
 
             ImGui::EndTable();
         }
         group->setExtractConstant(extractionEnabled);
+        group->setCBIsPushMode(cbModeSelectionIndex == 1);
 
         if (!extractionEnabled)
         {

@@ -179,6 +179,33 @@ void PipelineStateTracker::OnBindDescriptorSets(command_list* cmd_list, shader_s
     }
 }
 
+void PipelineStateTracker::OnPushConstants(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, uint32_t first, uint32_t count, const void* values)
+{
+    const int stage_index = (static_cast<uint32_t>(stages) & static_cast<uint32_t>(shader_stage::pixel)) ? 0 : 1;
+
+    _pushConstantsState.callIndex = _callIndex;
+    _callIndex++;
+
+    _pushConstantsState.cmd_list = cmd_list;
+
+    _pushConstantsState.current_layout[stage_index] = layout;
+
+    if (_pushConstantsState.current_constants[stage_index].size() < layout_param + 1)
+    {
+        _pushConstantsState.current_constants[stage_index].resize(layout_param + 1);
+    }
+
+    if (_pushConstantsState.current_constants[stage_index][layout_param].size() < first + count)
+    {
+        _pushConstantsState.current_constants[stage_index][layout_param].resize(first + count);
+    }
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+        _pushConstantsState.current_constants[stage_index][layout_param][first + i] = reinterpret_cast<const uint32_t*>(values)[i];
+    }
+}
+
 void PipelineStateTracker::OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_table_update& update)
 {
     // only consider pixel and vertex shader CBs for now
