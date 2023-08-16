@@ -373,6 +373,7 @@ void PipelineStateTracker::Reset()
     _renderTargetState.Reset();
     _descriptorSetsState.Reset();
     _pushDescriptorsState.Reset();
+    _pushConstantsState.Reset();
     _viewportsState.Reset();
     _scissorRectsState.Reset();
     _pipelineStatesState.Reset();

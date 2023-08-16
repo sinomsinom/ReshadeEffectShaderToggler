@@ -98,8 +98,9 @@ static void DisplayConstantTab(AddonImGui::AddonUIData& instance, ShaderToggler:
     const uint32_t typeSizes[] = { 1, 4, 4, 4 };
     static int typeSelectionIndex = 1;
     static const char* typeSelectedItem = typeItems[1];
-    static int cbModeSelectionIndex = group->getCBIsPushMode() ? 1 : 0;
+    int cbModeSelectionIndex = group->getCBIsPushMode() ? 1 : 0;
     const char* cbModeSelection = cbModeItems[cbModeSelectionIndex];
+
     const uint8_t* bufferContent = instance.GetConstantHandler()->GetConstantBuffer(group);
     const size_t bufferSize = instance.GetConstantHandler()->GetConstantBufferSize(group);
     auto& varMap = group->GetVarOffsetMapping();

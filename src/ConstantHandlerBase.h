@@ -83,7 +83,7 @@ namespace Shim
             void SetBufferRange(const ShaderToggler::ToggleGroup* group, reshade::api::buffer_range range, reshade::api::device * dev, reshade::api::command_list* cmd_list);
             void SetConstants(const ShaderToggler::ToggleGroup* group, const std::vector<uint32_t>& buf, reshade::api::device* dev, reshade::api::command_list* cmd_list);
             void RemoveGroup(const ShaderToggler::ToggleGroup*, reshade::api::device* dev);
-            uint8_t* GetConstantBuffer(const ShaderToggler::ToggleGroup* group);
+            const uint8_t* GetConstantBuffer(const ShaderToggler::ToggleGroup* group);
             size_t GetConstantBufferSize(const ShaderToggler::ToggleGroup* group);
             void ReloadConstantVariables(reshade::api::effect_runtime* runtime);
             void UpdateConstants(reshade::api::command_list* cmd_list);

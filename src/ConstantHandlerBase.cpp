@@ -35,7 +35,7 @@ size_t ConstantHandlerBase::GetConstantBufferSize(const ToggleGroup* group)
     return 0;
 }
 
-uint8_t* ConstantHandlerBase::GetConstantBuffer(const ToggleGroup* group)
+const uint8_t* ConstantHandlerBase::GetConstantBuffer(const ToggleGroup* group)
 {
     if (groupBufferContent.contains(group))
     {
@@ -252,8 +252,8 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list)
     {
         if (!deviceData.constantsUpdated.contains(cb))
         {
-            if (UpdateConstantBufferEntries(cmd_list, commandListData, deviceData, cb, 0) && !cb->getCBIsPushMode() ||
-                UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 0) && cb->getCBIsPushMode())
+            if (!cb->getCBIsPushMode() && UpdateConstantBufferEntries(cmd_list, commandListData, deviceData, cb, 0) ||
+                cb->getCBIsPushMode() && UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 0))
             {
                 psRemovalList.push_back(cb);
             }
@@ -264,8 +264,8 @@ void ConstantHandlerBase::UpdateConstants(command_list* cmd_list)
     {
         if (!deviceData.constantsUpdated.contains(cb))
         {
-            if (UpdateConstantBufferEntries(cmd_list, commandListData, deviceData, cb, 1) && !cb->getCBIsPushMode() ||
-                UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 1) && cb->getCBIsPushMode())
+            if (!cb->getCBIsPushMode() && UpdateConstantBufferEntries(cmd_list, commandListData, deviceData, cb, 1) ||
+                cb->getCBIsPushMode() && UpdateConstantEntries(cmd_list, commandListData, deviceData, cb, 1))
             {
                 vsRemovalList.push_back(cb);
             }
@@ -376,13 +376,15 @@ void ConstantHandlerBase::SetBufferRange(const ToggleGroup* group, buffer_range 
 
 void ConstantHandlerBase::InitBuffers(const ToggleGroup* group, size_t size)
 {
-    if (groupBufferContent.contains(group))
+    const auto& content = groupBufferContent.find(group);
+
+    if (content != groupBufferContent.end() && size != content->second.size())
     {
-        groupBufferContent.at(group).resize(size, 0);
-        groupPrevBufferContent.at(group).resize(size, 0);
-        groupBufferSize.at(group) = size;
+        groupBufferContent[group].resize(size, 0);
+        groupPrevBufferContent[group].resize(size, 0);
+        groupBufferSize[group] = size;
     }
-    else
+    else if(content == groupBufferContent.end())
     {
         groupBufferContent.emplace(group, vector<uint8_t>(size, 0));
         groupPrevBufferContent.emplace(group, vector<uint8_t>(size, 0));
