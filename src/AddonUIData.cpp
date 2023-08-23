@@ -100,32 +100,32 @@ void AddonUIData::UpdateToggleGroupsForShaderHashes()
     _pixelShaderHashToToggleGroups.clear();
     _vertexShaderHashToToggleGroups.clear();
 
-    for (auto& group : _toggleGroups)
+    for (auto& [_,group] : _toggleGroups)
     {
         // Only consider the currently hunted hash for the group being edited
-        if (group.second.getId() == _toggleGroupIdShaderEditing && (_pixelShaderManager->isInHuntingMode() || _vertexShaderManager->isInHuntingMode()))
+        if (group.getId() == _toggleGroupIdShaderEditing && (_pixelShaderManager->isInHuntingMode() || _vertexShaderManager->isInHuntingMode()))
         {
             if (_pixelShaderManager->isInHuntingMode())
             {
-                _pixelShaderHashToToggleGroups[_pixelShaderManager->getActiveHuntedShaderHash()].push_back(&group.second);
+                _pixelShaderHashToToggleGroups[_pixelShaderManager->getActiveHuntedShaderHash()].push_back(&group);
             }
 
             if (_vertexShaderManager->isInHuntingMode())
             {
-                _vertexShaderHashToToggleGroups[_vertexShaderManager->getActiveHuntedShaderHash()].push_back(&group.second);
+                _vertexShaderHashToToggleGroups[_vertexShaderManager->getActiveHuntedShaderHash()].push_back(&group);
             }
 
             continue;
         }
 
-        for (const auto& h : group.second.getPixelShaderHashes())
+        for (const auto& h : group.getPixelShaderHashes())
         {
-            _pixelShaderHashToToggleGroups[h].push_back(&group.second);
+            _pixelShaderHashToToggleGroups[h].push_back(&group);
         }
 
-        for (const auto& h : group.second.getVertexShaderHashes())
+        for (const auto& h : group.getVertexShaderHashes())
         {
-            _vertexShaderHashToToggleGroups[h].push_back(&group.second);
+            _vertexShaderHashToToggleGroups[h].push_back(&group);
         }
     }
 }
@@ -219,19 +219,19 @@ void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
             _toggleGroups.emplace(group.getId(), group);
         }
     }
-    for (auto& group : _toggleGroups)
+    for (auto& [_,group] : _toggleGroups)
     {
-        group.second.loadState(iniFile, groupCounter);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
+        group.loadState(iniFile, groupCounter);		// groupCounter is normally 0 or greater. For when the old format is detected, it's -1 (and there's 1 group).
         groupCounter++;
 
-        for (const auto& h : group.second.getPixelShaderHashes())
+        for (const auto& h : group.getPixelShaderHashes())
         {
-            _pixelShaderHashToToggleGroups[h].push_back(&group.second);
+            _pixelShaderHashToToggleGroups[h].push_back(&group);
         }
 
-        for (const auto& h : group.second.getVertexShaderHashes())
+        for (const auto& h : group.getVertexShaderHashes())
         {
-            _vertexShaderHashToToggleGroups[h].push_back(&group.second);
+            _vertexShaderHashToToggleGroups[h].push_back(&group);
         }
     }
 }
@@ -259,9 +259,9 @@ void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
     iniFile.SetInt("AmountGroups", static_cast<int>(_toggleGroups.size()), "", "General");
 
     int groupCounter = 0;
-    for (const auto& group : _toggleGroups)
+    for (const auto& [_,group] : _toggleGroups)
     {
-        group.second.saveState(iniFile, groupCounter);
+        group.saveState(iniFile, groupCounter);
         groupCounter++;
     }
     reshade::log_message(reshade::log_level::info, std::format("Creating config file at \"{}\"", (_basePath / fileName).string()).c_str());

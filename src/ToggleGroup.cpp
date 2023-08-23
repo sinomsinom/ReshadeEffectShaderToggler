@@ -154,11 +154,12 @@ namespace ShaderToggler
         iniFile.SetUInt("AmountHashes", counter, "", pixelHashesCategory);
 
         counter = 0;
-        for (const auto var : _varOffsetMapping)
+        for (const auto& [varName, varData] : _varOffsetMapping)
         {
-            iniFile.SetUInt("Offset" + std::to_string(counter), std::get<0>(var.second), "", constantsCategory);
-            iniFile.SetValue("Variable" + std::to_string(counter), var.first, "", constantsCategory);
-            iniFile.SetBool("UsePreviousValue" + std::to_string(counter), std::get<1>(var.second), "", constantsCategory);
+            const auto& [varOffset, varUsePref] = varData;
+            iniFile.SetUInt("Offset" + std::to_string(counter), varOffset, "", constantsCategory);
+            iniFile.SetValue("Variable" + std::to_string(counter), varName, "", constantsCategory);
+            iniFile.SetBool("UsePreviousValue" + std::to_string(counter), varUsePref, "", constantsCategory);
             counter++;
         }
         iniFile.SetUInt("AmountConstants", counter, "", constantsCategory);

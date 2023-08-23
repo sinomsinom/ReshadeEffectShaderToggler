@@ -43,11 +43,11 @@ void ConstantCopyMemcpyNested::OnMemcpy(void* volatile dest, void* src, size_t s
     shared_lock<shared_mutex> lock(_map_mutex);
     if (_resourceMemoryMapping.size() > 0)
     {
-        for (auto& mapping : _resourceMemoryMapping)
+        for (auto& [_,buffer] : _resourceMemoryMapping)
         {
-            if (dest >= mapping.second.destination && static_cast<uintptr_t>(reinterpret_cast<intptr_t>(dest)) <= reinterpret_cast<intptr_t>(mapping.second.destination) + mapping.second.bufferSize - mapping.second.offset)
+            if (dest >= buffer.destination && static_cast<uintptr_t>(reinterpret_cast<intptr_t>(dest)) <= reinterpret_cast<intptr_t>(buffer.destination) + buffer.bufferSize - buffer.offset)
             {
-                SetHostConstantBuffer(mapping.second.resource, src, size, reinterpret_cast<intptr_t>(dest) - reinterpret_cast<intptr_t>(mapping.second.destination), mapping.second.bufferSize);
+                SetHostConstantBuffer(buffer.resource, src, size, reinterpret_cast<intptr_t>(dest) - reinterpret_cast<intptr_t>(buffer.destination), buffer.bufferSize);
                 break;
             }
         }
