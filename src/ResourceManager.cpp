@@ -95,8 +95,7 @@ void ResourceManager::ClearBackbuffer(reshade::api::swapchain* runtime)
         // Back buffer resource got probably resized, clear old views and reinitialize
         if (entry != s_sRGBResourceViews.end())
         {
-            resource_view oldbackBufferView = entry->second.first;
-            resource_view oldbackBufferViewSRGB = entry->second.second;
+            const auto& [oldbackBufferView, oldbackBufferViewSRGB] = entry->second;
 
             if (oldbackBufferView != 0)
             {
@@ -154,12 +153,12 @@ void ResourceManager::DisposeView(device* device, uint64_t handle)
 
     if (it != s_sRGBResourceViews.end())
     {
-        auto& views = it->second;
+        auto& [view,srgbView] = it->second;
 
-        if (views.first != 0)
-            device->destroy_resource_view(views.first);
-        if (views.second != 0)
-            device->destroy_resource_view(views.second);
+        if (view != 0)
+            device->destroy_resource_view(view);
+        if (srgbView != 0)
+            device->destroy_resource_view(srgbView);
 
         s_sRGBResourceViews.erase(it);
     }
@@ -168,12 +167,12 @@ void ResourceManager::DisposeView(device* device, uint64_t handle)
 
     if (sit != s_SRVs.end())
     {
-        auto& views = sit->second;
+        auto& [srv1, srv2] = sit->second;
 
-        if (views.first != 0)
-            device->destroy_resource_view(views.first);
-        if (views.second != 0)
-            device->destroy_resource_view(views.second);
+        if (srv1 != 0)
+            device->destroy_resource_view(srv1);
+        if (srv2 != 0)
+            device->destroy_resource_view(srv2);
 
         s_SRVs.erase(sit);
     }
@@ -330,9 +329,7 @@ void ResourceManager::SetResourceViewHandles(uint64_t handle, reshade::api::reso
     const auto& it = s_sRGBResourceViews.find(handle);
     if (it != s_sRGBResourceViews.end())
     {
-        *non_srgb_view = it->second.first;
-        *srgb_view = it->second.second;
-        return;
+        std::tie(*non_srgb_view, *srgb_view) = it->second;
     }
 }
 
@@ -341,9 +338,7 @@ void ResourceManager::SetShaderResourceViewHandles(uint64_t handle, reshade::api
     const auto& it = s_SRVs.find(handle);
     if (it != s_SRVs.end())
     {
-        *non_srgb_view = it->second.first;
-        *srgb_view = it->second.second;
-        return;
+        std::tie(*non_srgb_view, *srgb_view) = it->second;
     }
 }
 

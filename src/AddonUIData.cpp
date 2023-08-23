@@ -352,7 +352,7 @@ void AddonUIData::EndConstantEditing()
     _toggleGroupIdConstantEditing = -1;
 }
 
-uint32_t AddonUIData::GetKeybinding(Keybind keybind)
+uint32_t AddonUIData::GetKeybinding(Keybind keybind) const
 {
     return _keyBindings[keybind];
 }

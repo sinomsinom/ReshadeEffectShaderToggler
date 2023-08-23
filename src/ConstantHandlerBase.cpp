@@ -111,14 +111,17 @@ void ConstantHandlerBase::ReloadConstantVariables(effect_runtime* runtime)
 
         string id(charBuffer);
         const auto& vars = restVariables.find(id);
-        
+
         if (vars == restVariables.end())
         {
             restVariables.emplace(id, make_tuple(type, vector<effect_uniform_variable>{variable}));
         }
-        else if(std::get<0>(vars->second) == type)
-        {
-            std::get<1>(vars->second).push_back(variable);
+        else {
+            auto& [varType, varVec] = vars->second;
+            if (varType == type)
+            {
+                varVec.push_back(variable);
+            }
         }
         });
 }
@@ -271,20 +274,18 @@ void ConstantHandlerBase::ApplyConstantValues(effect_runtime* runtime, const Tog
     const uint8_t* buffer = groupBufferContent.at(group).data();
     const uint8_t* prevBuffer = groupPrevBufferContent.at(group).data();
 
-    for (const auto& vars : group->GetVarOffsetMapping())
+    for (const auto& [varName,varData] : group->GetVarOffsetMapping())
     {
-        const string& var = std::get<0>(vars);
-        uintptr_t offset = std::get<0>(std::get<1>(vars));
-        bool prevValue = std::get<1>(std::get<1>(vars));
+        const auto& [offset, prevValue] = varData;
 
         const uint8_t* bufferInUse = prevValue ? prevBuffer : buffer;
 
-        if (!constants.contains(var))
+        if (!constants.contains(varName))
         {
             continue;
         }
 
-        constant_type type = std::get<0>(constants.at(var));
+        const auto& [type, effect_variables] = constants.at(varName);
         uint32_t typeIndex = static_cast<uint32_t>(type);
         size_t bufferSize = groupBufferSize.at(group);
 
@@ -293,7 +294,6 @@ void ConstantHandlerBase::ApplyConstantValues(effect_runtime* runtime, const Tog
             continue;
         }
 
-        const vector<effect_uniform_variable>& effect_variables = std::get<1>(constants.at(var));
 
         for (const auto& effect_var : effect_variables)
         {

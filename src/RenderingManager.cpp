@@ -409,8 +409,8 @@ bool RenderingManager::_RenderEffects(
 
             if (tech != techniquesToRender.end() && !deviceData.allEnabledTechniques.at(name))
             {
-                resource_view active_rtv = std::get<2>(tech->second);
-                const ToggleGroup* g = std::get<0>(tech->second);
+                auto& [techName, techData] = *tech;
+                const auto& [group, _, active_rtv] = techData;
 
                 if (active_rtv == 0)
                 {
@@ -458,16 +458,18 @@ void RenderingManager::_QueueOrDequeue(
 {
     for (auto it = queue.begin(); it != queue.end();)
     {
+        auto& [name, data] = *it;
+        auto& [group, loc, view] = data;
         // Set views during draw call since we can be sure the correct ones are bound at that point
-        if (!callLocation && std::get<2>(it->second) == 0)
+        if (!callLocation && view == 0)
         {
-            resource_view active_rtv = GetCurrentResourceView(cmd_list, deviceData, std::get<0>(it->second), commandListData, layoutIndex, action);
+            resource_view active_rtv = GetCurrentResourceView(cmd_list, deviceData, group, commandListData, layoutIndex, action);
 
             if (active_rtv != 0)
             {
-                std::get<2>(it->second) = active_rtv;
+                view = active_rtv;
             }
-            else if(std::get<0>(it->second)->getRequeueAfterRTMatchingFailure())
+            else if(group->getRequeueAfterRTMatchingFailure())
             {
                 // Re-issue draw call queue command
                 commandListData.commandQueue |= (action << (callLocation * MATCH_DELIMITER));
@@ -482,9 +484,9 @@ void RenderingManager::_QueueOrDequeue(
         }
 
         // Queue updates depending on the place their supposed to be called at
-        if (std::get<2>(it->second) != 0 && (!callLocation && !std::get<1>(it->second) || callLocation & std::get<1>(it->second)))
+        if (view != 0 && (!callLocation && !loc || callLocation & loc))
         {
-            immediateQueue.insert(it->first);
+            immediateQueue.insert(name);
         }
 
         it++;
@@ -761,8 +763,9 @@ void RenderingManager::DestroyTextureBinding(effect_runtime* runtime, const stri
 
     if (it != data.bindingMap.end())
     {
+        auto& [bindingName, bindingData] = *it;
         // Destroy copy resource if copy option is enabled, otherwise just reset the binding
-        if (it->second.copy)
+        if (bindingData.copy)
         {
             resource res = { 0 };
             resource_view srv = { 0 };
@@ -770,19 +773,19 @@ void RenderingManager::DestroyTextureBinding(effect_runtime* runtime, const stri
 
             runtime->get_command_queue()->wait_idle();
 
-            res = it->second.res;
+            res = bindingData.res;
             if (res != 0)
             {
                 runtime->get_device()->destroy_resource(res);
             }
 
-            srv = it->second.srv;
+            srv = bindingData.srv;
             if (srv != 0)
             {
                 runtime->get_device()->destroy_resource_view(srv);
             }
 
-            rtv = it->second.rtv;
+            rtv = bindingData.rtv;
             if (rtv != 0)
             {
                 runtime->get_device()->destroy_resource_view(rtv);
@@ -791,12 +794,12 @@ void RenderingManager::DestroyTextureBinding(effect_runtime* runtime, const stri
 
         runtime->update_texture_bindings(binding.c_str(), resource_view{ 0 }, resource_view{ 0 });
 
-        it->second.res = { 0 };
-        it->second.rtv = { 0 };
-        it->second.srv = { 0 };
-        it->second.format = format::unknown;
-        it->second.width = 0;
-        it->second.height = 0;
+        bindingData.res = { 0 };
+        bindingData.rtv = { 0 };
+        bindingData.srv = { 0 };
+        bindingData.format = format::unknown;
+        bindingData.width = 0;
+        bindingData.height = 0;
     }
 }
 
@@ -809,11 +812,12 @@ uint32_t RenderingManager::UpdateTextureBinding(effect_runtime* runtime, const s
 
     if (it != data.bindingMap.end())
     {
-        reshade::api::format oldFormat = it->second.format;
+        auto& [bindingName, bindingData] = *it;
+        reshade::api::format oldFormat = bindingData.format;
         reshade::api::format format = desc.texture.format;
-        uint32_t oldWidth = it->second.width;
+        uint32_t oldWidth = bindingData.width;
         uint32_t width = desc.texture.width;
-        uint32_t oldHeight = it->second.height;
+        uint32_t oldHeight = bindingData.height;
         uint32_t height = desc.texture.height;
 
         if (format != oldFormat || oldWidth != width || oldHeight != height)
@@ -826,12 +830,12 @@ uint32_t RenderingManager::UpdateTextureBinding(effect_runtime* runtime, const s
 
             if (CreateTextureBinding(runtime, &res, &srv, &rtv, desc))
             {
-                it->second.res = res;
-                it->second.srv = srv;
-                it->second.rtv = rtv;
-                it->second.width = desc.texture.width;
-                it->second.height = desc.texture.height;
-                it->second.format = desc.texture.format;
+                bindingData.res = res;
+                bindingData.srv = srv;
+                bindingData.rtv = rtv;
+                bindingData.width = desc.texture.width;
+                bindingData.height = desc.texture.height;
+                bindingData.format = desc.texture.format;
 
                 runtime->update_texture_bindings(binding.c_str(), srv);
             }
@@ -875,6 +879,7 @@ void RenderingManager::_UpdateTextureBindings(command_list* cmd_list,
 
             if (it != deviceData.bindingMap.end())
             {
+                auto& [bindingName, bindingData] = *it;
                 resource res = runtime->get_device()->get_resource_from_view(active_rtv);
 
                 if (res == 0)
@@ -882,7 +887,7 @@ void RenderingManager::_UpdateTextureBindings(command_list* cmd_list,
                     continue;
                 }
 
-                if (!it->second.copy)
+                if (!bindingData.copy)
                 {
                     resource_view view_non_srgb = { 0 };
                     resource_view view_srgb = { 0 };
@@ -896,21 +901,21 @@ void RenderingManager::_UpdateTextureBindings(command_list* cmd_list,
 
                     resource_desc resDesc = runtime->get_device()->get_resource_desc(res);
 
-                    resource target_res = it->second.res;
+                    resource target_res = bindingData.res;
 
                     if (target_res != res)
                     {
                         runtime->update_texture_bindings(bindingName.c_str(), view_non_srgb, view_srgb);
 
-                        it->second.res = res;
-                        it->second.format = resDesc.texture.format;
-                        it->second.srv = view_non_srgb;
-                        it->second.rtv = { 0 };
-                        it->second.width = resDesc.texture.width;
-                        it->second.height = resDesc.texture.height;
+                        bindingData.res = res;
+                        bindingData.format = resDesc.texture.format;
+                        bindingData.srv = view_non_srgb;
+                        bindingData.rtv = { 0 };
+                        bindingData.width = resDesc.texture.width;
+                        bindingData.height = resDesc.texture.height;
                     }
 
-                    it->second.reset = false;
+                    bindingData.reset = false;
                 }
                 else
                 {
@@ -918,12 +923,12 @@ void RenderingManager::_UpdateTextureBindings(command_list* cmd_list,
 
                     uint32_t retUpdate = UpdateTextureBinding(runtime, bindingName, resDesc);
 
-                    resource target_res = it->second.res;
+                    resource target_res = bindingData.res;
 
                     if (retUpdate && target_res != 0)
                     {
                         cmd_list->copy_resource(res, target_res);
-                        it->second.reset = false;
+                        bindingData.reset = false;
                     }
                 }
 

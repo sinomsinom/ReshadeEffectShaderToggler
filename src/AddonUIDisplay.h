@@ -282,20 +282,21 @@ static void DisplayBindingPreview(AddonImGui::AddonUIData& instance, Rendering::
         DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
         resource_view srv = resource_view{ 0 };
         resManager.SetPreviewViewHandles(nullptr, nullptr, &srv);
-        const auto& texData = deviceData.bindingMap.find(binding);
+        const auto& it = deviceData.bindingMap.find(binding);
 
-        if (texData != deviceData.bindingMap.end())
+        if (it != deviceData.bindingMap.end())
         {
-            ImGui::Text(std::format("Format: {} ", static_cast<uint32_t>(texData->second.format)).c_str());
+            auto& [_, texData] = *it;
+            ImGui::Text(std::format("Format: {} ", static_cast<uint32_t>(texData.format)).c_str());
             ImGui::SameLine();
-            ImGui::Text(std::format("Width: {} ", texData->second.width).c_str());
+            ImGui::Text(std::format("Width: {} ", texData.width).c_str());
             ImGui::SameLine();
-            ImGui::Text(std::format("Height: {} ", texData->second.height).c_str());
+            ImGui::Text(std::format("Height: {} ", texData.height).c_str());
             ImGui::Separator();
 
             if (ImGui::BeginChild("BindingPreview##preview", { 0, 0 }, false, ImGuiWindowFlags_None))
             {
-                DrawPreview(texData->second.srv.handle, texData->second.width, texData->second.height);
+                DrawPreview(texData.srv.handle, texData.width, texData.height);
                 ImGui::EndChild();
             }
         }
