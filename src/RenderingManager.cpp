@@ -4,6 +4,7 @@
 using namespace Rendering;
 using namespace ShaderToggler;
 using namespace reshade::api;
+using namespace std;
 
 size_t RenderingManager::g_charBufferSize = CHAR_BUFFER_SIZE;
 char RenderingManager::g_charBuffer[CHAR_BUFFER_SIZE];
@@ -17,7 +18,7 @@ RenderingManager::~RenderingManager()
 
 }
 
-void RenderingManager::EnumerateTechniques(effect_runtime* runtime, std::function<void(effect_runtime*, effect_technique, string&)> func)
+void RenderingManager::EnumerateTechniques(effect_runtime* runtime, function<void(effect_runtime*, effect_technique, string&)> func)
 {
     runtime->enumerate_techniques(nullptr, [func](effect_runtime* rt, effect_technique technique) {
         g_charBufferSize = CHAR_BUFFER_SIZE;
@@ -129,8 +130,8 @@ void RenderingManager::CheckCallForCommandList(reshade::api::command_list* comma
     CommandListDataContainer& commandListData = commandList->get_private_data<CommandListDataContainer>();
     DeviceDataContainer& deviceData = commandList->get_device()->get_private_data<DeviceDataContainer>();
 
-    std::shared_lock<std::shared_mutex> r_mutex(render_mutex);
-    std::shared_lock<std::shared_mutex> b_mutex(binding_mutex);
+    shared_lock<shared_mutex> r_mutex(render_mutex);
+    shared_lock<shared_mutex> b_mutex(binding_mutex);
 
     _CheckCallForCommandList(commandListData.ps, commandListData, deviceData);
     _CheckCallForCommandList(commandListData.vs, commandListData, deviceData);
@@ -199,13 +200,13 @@ const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_l
     if(action & MATCH_BINDING && group->getExtractResourceViews())
     { 
         uint32_t slot_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex].size());
-        uint32_t slot = min(group->getBindingSRVSlotIndex(), slot_size - 1);
+        uint32_t slot = std::min(group->getBindingSRVSlotIndex(), slot_size - 1);
 
         if (slot_size == 0)
             return active_rtv;
 
         uint32_t desc_size = static_cast<uint32_t>(commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot].size());
-        uint32_t desc = min(group->getBindingSRVDescriptorIndex(), desc_size - 1);
+        uint32_t desc = std::min(group->getBindingSRVDescriptorIndex(), desc_size - 1);
 
         if (desc_size == 0)
             return active_rtv;
@@ -217,7 +218,7 @@ const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_l
         {
             if (cycle == CYCLE_UP)
             {
-                uint32_t newDescIndex = min(++desc, desc_size - 1);
+                uint32_t newDescIndex = std::min(++desc, desc_size - 1);
                 buf = commandListData.stateTracker.GetPushDescriptorState()->current_srv[descIndex][slot][newDescIndex];
 
                 while (buf == 0 && desc < desc_size - 2)
@@ -449,7 +450,7 @@ void RenderingManager::_QueueOrDequeue(
     command_list* cmd_list,
     DeviceDataContainer& deviceData,
     CommandListDataContainer& commandListData,
-    std::unordered_map<std::string, std::tuple<ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& queue,
+    unordered_map<string, tuple<ShaderToggler::ToggleGroup*, uint32_t, reshade::api::resource_view>>& queue,
     unordered_set<string>& immediateQueue,
     uint32_t callLocation,
     uint32_t layoutIndex,
@@ -533,7 +534,7 @@ void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocati
 
     deviceData.current_runtime->render_effects(cmd_list, resource_view{ 0 }, resource_view{ 0 });
 
-    std::unique_lock<shared_mutex> dev_mutex(render_mutex);
+    unique_lock<shared_mutex> dev_mutex(render_mutex);
     rendered = (psToRenderNames.size() > 0) && _RenderEffects(cmd_list, deviceData, commandListData.ps.techniquesToRender, psRemovalList, psToRenderNames) ||
         (vsToRenderNames.size() > 0) && _RenderEffects(cmd_list, deviceData, commandListData.vs.techniquesToRender, vsRemovalList, vsToRenderNames);
     dev_mutex.unlock();
@@ -551,7 +552,7 @@ void RenderingManager::RenderEffects(command_list* cmd_list, uint32_t callLocati
     if (rendered)
     {
         // TODO: ???
-        //std::shared_lock<std::shared_mutex> dev_mutex(pipeline_layout_mutex);
+        //shared_lock<shared_mutex> dev_mutex(pipeline_layout_mutex);
         commandListData.stateTracker.ReApplyState(cmd_list, deviceData.transient_mask);
     }
 }
@@ -656,7 +657,7 @@ void RenderingManager::InitTextureBingings(effect_runtime* runtime)
             resource_view srv = { 0 };
             resource_view rtv = { 0 };
 
-            std::unique_lock<shared_mutex> lock(binding_mutex);
+            unique_lock<shared_mutex> lock(binding_mutex);
             if (group.second.getCopyTextureBinding() && CreateTextureBinding(runtime, &res, &srv, &rtv, reshade::api::format::r8g8b8a8_unorm))
             {
                 data.bindingMap[group.second.getTextureBindingName()] = TextureBindingData{ res, reshade::api::format::r8g8b8a8_unorm, rtv, srv, 0, 0, group.second.getClearBindings(), group.second.getCopyTextureBinding(), false };
@@ -675,7 +676,7 @@ void RenderingManager::DisposeTextureBindings(effect_runtime* runtime)
 {
     DeviceDataContainer& data = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
-    std::unique_lock<shared_mutex> lock(binding_mutex);
+    unique_lock<shared_mutex> lock(binding_mutex);
 
     if (empty_res != 0)
     {
@@ -973,7 +974,7 @@ void RenderingManager::UpdateTextureBindings(command_list* cmd_list, uint32_t ca
     vector<string> psRemovalList;
     vector<string> vsRemovalList;
 
-    std::unique_lock<shared_mutex> mtx(binding_mutex);
+    unique_lock<shared_mutex> mtx(binding_mutex);
     if (psToUpdateBindings.size() > 0)
     {
         _UpdateTextureBindings(cmd_list, deviceData, commandListData.ps.bindingsToUpdate, psRemovalList, psToUpdateBindings);
@@ -999,7 +1000,7 @@ void RenderingManager::ClearUnmatchedTextureBindings(reshade::api::command_list*
 {
     DeviceDataContainer& data = cmd_list->get_device()->get_private_data<DeviceDataContainer>();
 
-    std::shared_lock<shared_mutex> mtx(binding_mutex);
+    shared_lock<shared_mutex> mtx(binding_mutex);
     if (data.bindingMap.size() == 0)
     {
         return;

@@ -3,9 +3,9 @@
 #include "PipelinePrivateData.h"
 
 using namespace Shim::Constants;
-using namespace std;
 using namespace reshade::api;
 using namespace ShaderToggler;
+using namespace std;
 
 void ConstantCopyGPUReadback::GetHostConstantBuffer(reshade::api::command_list* cmd_list, vector<uint8_t>& dest, size_t size, uint64_t resourceHandle)
 {

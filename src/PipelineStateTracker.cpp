@@ -16,7 +16,7 @@ PipelineStateTracker::~PipelineStateTracker()
 void PipelineStateTracker::ApplyBoundDescriptorSets(command_list* cmd_list, shader_stage stage, pipeline_layout layout,
     const vector<descriptor_table>& descriptors, const vector<bool>& mask)
 {
-    size_t count = min(descriptors.size(), mask.size());
+    size_t count = std::min(descriptors.size(), mask.size());
     for (uint32_t i = 0; i < count; i++)
     {
         if (descriptors[i] == 0 || (i < mask.size() && mask[i]))
@@ -317,7 +317,7 @@ void PipelineStateTracker::OnBindPipeline(command_list* cmd_list, pipeline_stage
     _pipelineState.cmd_list = cmd_list;
 }
 
-bool PipelineStateTracker::IsInRenderPass()
+bool PipelineStateTracker::IsInRenderPass() const
 {
     return _renderPassState.cmd_list != nullptr;
 }
@@ -335,7 +335,7 @@ void PipelineStateTracker::ClearPushDescriptorState(pipeline_stage stage = pipel
     }
 }
 
-const vector<resource_view>& PipelineStateTracker::GetBoundRenderTargetViews()
+const vector<resource_view>& PipelineStateTracker::GetBoundRenderTargetViews() const
 {
     return _renderTargetState.rtvs;
 }

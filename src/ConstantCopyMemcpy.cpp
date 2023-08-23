@@ -59,7 +59,7 @@ bool ConstantCopyMemcpy::HookDynamic(sig_memcpy** original, sig_memcpy* detour)
 {
     for (const auto& libFunc : memcpy_dynamic)
     {
-        *original = GameHookT<sig_memcpy>::InstallApiHook(get<0>(libFunc).c_str(), get<1>(libFunc).c_str(), detour);
+        *original = GameHookT<sig_memcpy>::InstallApiHook(std::get<0>(libFunc).c_str(), std::get<1>(libFunc).c_str(), detour);
 
         // Pick first hit and hope for the best
         if (*original != nullptr)

@@ -27,7 +27,7 @@ void ConstantCopyMemcpySingular::OnMapBufferRegion(device* device, resource reso
             _bufferCopy.size = size;
             _bufferCopy.offset = offset;
             _bufferCopy.bufferSize = desc.buffer.size;
-            _bufferCopy.hostDestination = get<1>(*buf).data();
+            _bufferCopy.hostDestination = std::get<1>(*buf).data();
         }
     }
 }

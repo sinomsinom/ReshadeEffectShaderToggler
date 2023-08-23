@@ -270,7 +270,7 @@ static void DisplayPreview(AddonImGui::AddonUIData& instance, Rendering::Resourc
     }
 }
 
-static void DisplayBindingPreview(AddonImGui::AddonUIData& instance, Rendering::ResourceManager& resManager, reshade::api::effect_runtime* runtime, const string& binding)
+static void DisplayBindingPreview(AddonImGui::AddonUIData& instance, Rendering::ResourceManager& resManager, reshade::api::effect_runtime* runtime, const std::string& binding)
 {
     if (ImGui::BeginChild("BindingPreview##child", { 0, 0 }, true, ImGuiWindowFlags_None))
     {

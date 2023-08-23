@@ -33,10 +33,10 @@ void ConstantCopyFFXIV::GetHostConstantBuffer(command_list* cmd_list, vector<uin
     for (uint32_t i = 0; i < _hostResourceBuffer.size(); i++)
     {
         auto& item = _hostResourceBuffer[i];
-        if (get<1>(item) == resourceHandle)
+        if (std::get<1>(item) == resourceHandle)
         {
-            size_t minSize = std::min(size, get<2>(item));
-            memcpy(dest.data(), get<0>(item), minSize);
+            size_t minSize = std::min(size, std::get<2>(item));
+            memcpy(dest.data(), std::get<0>(item), minSize);
         }
     }
 }
@@ -47,13 +47,13 @@ inline void ConstantCopyFFXIV::set_host_resource_data_location(void* origin, siz
         _hostResourceBuffer.resize(index + 1);
 
     auto& entry = _hostResourceBuffer[index];
-    if (get<1>(entry) != resource_handle)
-        get<1>(entry) = resource_handle;
+    if (std::get<1>(entry) != resource_handle)
+        std::get<1>(entry) = resource_handle;
 
-    if (get<2>(entry) != len)
-        get<2>(entry) = len;
+    if (std::get<2>(entry) != len)
+        std::get<2>(entry) = len;
 
-    get<0>(entry) = origin;
+    std::get<0>(entry) = origin;
 }
 
 static inline int64_t exit_cbload(param_2_struct* param_2, param_3_struct& param_3, ID3D11Resource* puVar11, uint64_t uVar10)

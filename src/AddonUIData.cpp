@@ -65,13 +65,13 @@ AddonUIData::AddonUIData(ShaderManager* pixelShaderManager, ShaderManager* verte
 }
 
 
-std::unordered_map<int, ToggleGroup>& AddonUIData::GetToggleGroups()
+unordered_map<int, ToggleGroup>& AddonUIData::GetToggleGroups()
 {
     return _toggleGroups;
 }
 
 
-const std::vector<ToggleGroup*>* AddonUIData::GetToggleGroupsForPixelShaderHash(uint32_t hash)
+const vector<ToggleGroup*>* AddonUIData::GetToggleGroupsForPixelShaderHash(uint32_t hash)
 {
     const auto& it = _pixelShaderHashToToggleGroups.find(hash);
 
@@ -83,7 +83,7 @@ const std::vector<ToggleGroup*>* AddonUIData::GetToggleGroupsForPixelShaderHash(
     return nullptr;
 }
 
-const std::vector<ToggleGroup*>* AddonUIData::GetToggleGroupsForVertexShaderHash(uint32_t hash)
+const vector<ToggleGroup*>* AddonUIData::GetToggleGroupsForVertexShaderHash(uint32_t hash)
 {
     const auto& it = _vertexShaderHashToToggleGroups.find(hash);
 
@@ -162,7 +162,7 @@ void AddonUIData::AddDefaultGroup()
 /// <summary>
 /// Loads the defined hashes and groups from the shaderToggler.ini file.
 /// </summary>
-void AddonUIData::LoadShaderTogglerIniFile(const std::string& fileName)
+void AddonUIData::LoadShaderTogglerIniFile(const string& fileName)
 {
     // Will assume it's started at the start of the application and therefore no groups are present.
 
@@ -240,7 +240,7 @@ void AddonUIData::LoadShaderTogglerIniFile(const std::string& fileName)
 /// <summary>
 /// Saves the currently known toggle groups with their shader hashes to the shadertoggler.ini file
 /// </summary>
-void AddonUIData::SaveShaderTogglerIniFile(const std::string& fileName)
+void AddonUIData::SaveShaderTogglerIniFile(const string& fileName)
 {
     // format: first section with # of groups, then per group a section with pixel and vertex shaders, as well as their name and key value.
     // groups are stored with "Group" + group counter, starting with 0.

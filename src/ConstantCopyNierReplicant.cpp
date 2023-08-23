@@ -36,7 +36,7 @@ void ConstantCopyNierReplicant::OnMapBufferRegion(device* device, resource resou
 
         if (buf != deviceToHostConstantBuffer.end())
         {
-            memmove(get<1>(*buf).data(), Origin, Size);
+            memmove(std::get<1>(*buf).data(), Origin, Size);
         }
     }
 }

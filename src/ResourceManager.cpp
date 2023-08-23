@@ -4,8 +4,9 @@
 using namespace Rendering;
 using namespace reshade::api;
 using namespace Shim::Resources;
+using namespace std;
 
-ResourceShimType ResourceManager::ResolveResourceShimType(const std::string& stype)
+ResourceShimType ResourceManager::ResolveResourceShimType(const string& stype)
 {
     if (stype == "none")
         return ResourceShimType::Resource_Shim_None;
@@ -205,7 +206,7 @@ void ResourceManager::OnDestroyResource(device* device, resource res)
 
 void ResourceManager::OnDestroyDevice(device* device)
 {
-    //std::unique_lock<shared_mutex> lock(resource_mutex);
+    //unique_lock<shared_mutex> lock(resource_mutex);
     //
     //for (auto it = s_sRGBResourceViews.begin(); it != s_sRGBResourceViews.end();)
     //{
@@ -219,7 +220,7 @@ void ResourceManager::OnDestroyDevice(device* device)
     //    it = s_sRGBResourceViews.erase(it);
     //}
     //
-    //std::unique_lock<shared_mutex> vlock(view_mutex);
+    //unique_lock<shared_mutex> vlock(view_mutex);
     //_resourceViewRefCount.clear();
     //_resourceViewRef.clear();
 }
@@ -241,7 +242,7 @@ void ResourceManager::OnInitResourceView(device* device, resource resource, reso
     
     if (static_cast<uint32_t>(rdesc.usage & resource_usage::render_target) && rdesc.type == resource_type::texture_2d)
     {
-        std::unique_lock<shared_mutex> vlock(view_mutex);
+        unique_lock<shared_mutex> vlock(view_mutex);
 
         const auto vRef = _resourceViewRef.find(view.handle);
         if (vRef != _resourceViewRef.end())
@@ -267,7 +268,7 @@ void ResourceManager::OnInitResourceView(device* device, resource resource, reso
         const auto& cRef = _resourceViewRefCount.find(resource.handle);
         if (cRef == _resourceViewRefCount.end())
         {
-            std::unique_lock<shared_mutex> lock(resource_mutex);
+            unique_lock<shared_mutex> lock(resource_mutex);
         
             resource_view view_non_srgb = { 0 };
             resource_view view_srgb = { 0 };
@@ -301,7 +302,7 @@ void ResourceManager::OnInitResourceView(device* device, resource resource, reso
 
 void ResourceManager::OnDestroyResourceView(device* device, resource_view view)
 {
-    std::unique_lock<shared_mutex> lock(view_mutex);
+    unique_lock<shared_mutex> lock(view_mutex);
 
     const auto& vRef = _resourceViewRef.find(view.handle);
     if (vRef != _resourceViewRef.end())

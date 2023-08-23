@@ -4,7 +4,7 @@ using namespace Shim::Constants;
 using namespace reshade::api;
 using namespace std;
 
-std::unordered_map<uint64_t, vector<uint8_t>> ConstantCopyBase::deviceToHostConstantBuffer;
+unordered_map<uint64_t, vector<uint8_t>> ConstantCopyBase::deviceToHostConstantBuffer;
 shared_mutex ConstantCopyBase::deviceHostMutex;
 
 ConstantCopyBase::ConstantCopyBase()
@@ -23,7 +23,7 @@ void ConstantCopyBase::GetHostConstantBuffer(reshade::api::command_list* cmd_lis
     const auto& ret = deviceToHostConstantBuffer.find(resourceHandle);
     if (ret != deviceToHostConstantBuffer.end())
     {
-        std::memcpy(dest.data(), get<1>(*ret).data(), size);
+        std::memcpy(dest.data(), std::get<1>(*ret).data(), size);
     }
 }
 
@@ -44,7 +44,7 @@ inline void ConstantCopyBase::SetHostConstantBuffer(const uint64_t handle, const
     unique_lock<shared_mutex> lock(deviceHostMutex);
     const auto& blah = deviceToHostConstantBuffer.find(handle);
     if (blah != deviceToHostConstantBuffer.end())
-        memcpy(get<1>(*blah).data() + offset, buffer, size);
+        memcpy(std::get<1>(*blah).data() + offset, buffer, size);
 }
 
 void ConstantCopyBase::OnInitResource(device* device, const resource_desc& desc, const subresource_data* initData, resource_usage usage, reshade::api::resource handle)

@@ -21,7 +21,7 @@ void ConstantCopyMemcpyNested::OnMapBufferRegion(device* device, resource resour
         resource_desc desc = device->get_resource_desc(resource);
         if (desc.heap == memory_heap::cpu_to_gpu && static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
         {
-            std::unique_lock<shared_mutex> lock(_map_mutex);
+            unique_lock<shared_mutex> lock(_map_mutex);
             _resourceMemoryMapping[resource.handle] = BufferCopy{ resource.handle, *data, nullptr, offset, size, desc.buffer.size };
         }
     }
@@ -33,14 +33,14 @@ void ConstantCopyMemcpyNested::OnUnmapBufferRegion(device* device, resource reso
     resource_desc desc = device->get_resource_desc(resource);
     if (desc.heap == memory_heap::cpu_to_gpu && static_cast<uint32_t>(desc.usage & resource_usage::constant_buffer))
     {
-        std::unique_lock<shared_mutex> lock(_map_mutex);
+        unique_lock<shared_mutex> lock(_map_mutex);
         _resourceMemoryMapping.erase(resource.handle);
     }
 }
 
 void ConstantCopyMemcpyNested::OnMemcpy(void* volatile dest, void* src, size_t size)
 {
-    std::shared_lock<shared_mutex> lock(_map_mutex);
+    shared_lock<shared_mutex> lock(_map_mutex);
     if (_resourceMemoryMapping.size() > 0)
     {
         for (auto& mapping : _resourceMemoryMapping)
