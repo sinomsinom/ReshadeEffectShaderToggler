@@ -311,7 +311,9 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance, Rendering::R
     uint32_t selectedIndex = group->getInvocationLocation();
 
     bool retry = group->getRequeueAfterRTMatchingFailure();
-    bool matchRes = group->getMatchSwapchainResolution();
+    static const char* swapchainMatchOptions[] = { "RESOLUTION", "ASPECT RATIO", "NONE"};
+    uint32_t selectedSwapchainMatchMode = group->getMatchSwapchainResolution();
+    const char* typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     if (ImGui::BeginChild("RenderTargets", { 0, height / 1.5f }, true, ImGuiWindowFlags_AlwaysAutoResize))
@@ -374,15 +376,29 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance, Rendering::R
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
 
-            ImGui::Text("Match swapchain resolution");
+            ImGui::Text("Match swapchain");
             ImGui::TableNextColumn();
-            ImGui::Checkbox("##Matchswapchainresolution", &matchRes);
+            if (ImGui::BeginCombo("##effSwapChainMatchMode", typesSelectedSwapchainMatchMode, ImGuiComboFlags_None))
+            {
+                for (int n = 0; n < IM_ARRAYSIZE(swapchainMatchOptions); n++)
+                {
+                    bool is_selected = (typesSelectedSwapchainMatchMode == swapchainMatchOptions[n]);
+                    if (ImGui::Selectable(swapchainMatchOptions[n], is_selected))
+                    {
+                        typesSelectedSwapchainMatchMode = swapchainMatchOptions[n];
+                        selectedSwapchainMatchMode = n;
+                    }
+                    if (is_selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
 
             ImGui::EndTable();
         }
 
         group->setRequeueAfterRTMatchingFailure(retry);
-        group->setMatchSwapchainResolution(matchRes);
+        group->setMatchSwapchainResolution(selectedSwapchainMatchMode);
         group->setInvocationLocation(selectedIndex);
 
         ImGui::Separator();
@@ -467,6 +483,10 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
     const char* typeSelectedItem = typeItems[selectedIndex];
     DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
+    static const char* swapchainMatchOptions[] = { "RESOLUTION", "ASPECT RATIO", "NONE" };
+    uint32_t selectedSwapchainMatchMode = group->getBindingMatchSwapchainResolution();
+    const char* typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
+
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     if (ImGui::BeginChild("Texture bindings viewer", { 0, height / 2.0f }, true, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -483,7 +503,6 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
 
         bool copyBinding = group->getCopyTextureBinding();
         bool clearBinding = group->getClearBindings();
-        bool matchSwapchain = group->getBindingMatchSwapchainResolution();
 
         if (ImGui::BeginTable("Bindingsettings", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody))
         {
@@ -682,12 +701,26 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
                 }
 
                 ImGui::TableNextColumn();
-                ImGui::Text("Match swapchain resolution");
+                ImGui::Text("Match swapchain");
                 ImGui::TableNextColumn();
-                ImGui::Checkbox("##BindingMatchswapchainresolution", &matchSwapchain);
+                if (ImGui::BeginCombo("##swapChainMatchMode", typesSelectedSwapchainMatchMode, ImGuiComboFlags_None))
+                {
+                    for (int n = 0; n < IM_ARRAYSIZE(swapchainMatchOptions); n++)
+                    {
+                        bool is_selected = (typesSelectedSwapchainMatchMode == swapchainMatchOptions[n]);
+                        if (ImGui::Selectable(swapchainMatchOptions[n], is_selected))
+                        {
+                            typesSelectedSwapchainMatchMode = swapchainMatchOptions[n];
+                            selectedSwapchainMatchMode = n;
+                        }
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
 
                 group->setBindingInvocationLocation(rtSelectedIndex);
-                group->setBindingMatchSwapchainResolution(matchSwapchain);
+                group->setBindingMatchSwapchainResolution(selectedSwapchainMatchMode);
             }
 
             ImGui::EndTable();
