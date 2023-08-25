@@ -46,6 +46,13 @@ namespace ShaderToggler
         CYCLE_DOWN
     };
 
+    enum SwapChainMatchMode : uint32_t
+    {
+        SWAPCHAIN_MATCH_MODE_RESOLUTION = 0,
+        SWAPCHAIN_MATCH_MODE_ASPECT_RATIO = 1,
+        SWAPCHAIN_MATCH_MODE_NONE = 2
+    };
+
     class ToggleGroup
     {
     public:
@@ -116,10 +123,10 @@ namespace ShaderToggler
         uint32_t getBindingRenderTargetIndex() const { return _bindingRTIndex; }
         bool getHasTechniqueExceptions() const { return _hasTechniqueExceptions; }
         void setHasTechniqueExceptions(bool exceptions) { _hasTechniqueExceptions = exceptions; }
-        bool getMatchSwapchainResolution() const { return _matchSwapchainResolution; }
-        void setMatchSwapchainResolution(bool match) { _matchSwapchainResolution = match; }
-        bool getBindingMatchSwapchainResolution() const { return _bindingMatchSwapchainResolution; }
-        void setBindingMatchSwapchainResolution(bool match) { _bindingMatchSwapchainResolution = match; }
+        uint32_t getMatchSwapchainResolution() const { return _matchSwapchainResolution; }
+        void setMatchSwapchainResolution(uint32_t match) { _matchSwapchainResolution = match; }
+        uint32_t getBindingMatchSwapchainResolution() const { return _bindingMatchSwapchainResolution; }
+        void setBindingMatchSwapchainResolution(uint32_t match) { _bindingMatchSwapchainResolution = match; }
         bool getRequeueAfterRTMatchingFailure() const { return _requeueAfterRTMatchingFailure; }
         void setRequeueAfterRTMatchingFailure(bool requeue) { _requeueAfterRTMatchingFailure = requeue; }
         bool getCopyTextureBinding() const { return _copyTextureBinding; }
@@ -177,8 +184,8 @@ namespace ShaderToggler
         bool _extractResourceViews;
         bool _clearBindings;
         bool _hasTechniqueExceptions; // _preferredTechniques are handled as exception to _allowAllTechniques
-        bool _matchSwapchainResolution = true;
-        bool _bindingMatchSwapchainResolution = true;
+        uint32_t _matchSwapchainResolution = SWAPCHAIN_MATCH_MODE_RESOLUTION;
+        uint32_t _bindingMatchSwapchainResolution = SWAPCHAIN_MATCH_MODE_RESOLUTION;
         bool _requeueAfterRTMatchingFailure;
         std::string _textureBindingName;
         std::unordered_set<std::string> _preferredTechniques;
