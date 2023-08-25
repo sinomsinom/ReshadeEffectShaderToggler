@@ -507,6 +507,13 @@ static void onPushDescriptors(command_list* cmd_list, shader_stage stages, pipel
 }
 
 
+static void onPushConstants(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, uint32_t first, uint32_t count, const void* values)
+{
+    auto& data = cmd_list->get_private_data<CommandListDataContainer>();
+    data.stateTracker.OnPushConstants(cmd_list, stages, layout, layout_param, first, count, values);
+}
+
+
 static void onBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const reshade::api::descriptor_table* tables)
 {
     auto& data = cmd_list->get_private_data<CommandListDataContainer>();
@@ -778,6 +785,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::register_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
         reshade::register_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
         reshade::register_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
+        reshade::register_event<reshade::addon_event::push_constants>(onPushConstants);
         reshade::register_event<reshade::addon_event::present>(onPresent);
 
         reshade::register_event<reshade::addon_event::draw>(onDraw);
@@ -816,6 +824,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
         reshade::unregister_event<reshade::addon_event::init_effect_runtime>(onInitEffectRuntime);
         reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(onDestroyEffectRuntime);
         reshade::unregister_event<reshade::addon_event::push_descriptors>(onPushDescriptors);
+        reshade::unregister_event<reshade::addon_event::push_constants>(onPushConstants);
         reshade::unregister_event<reshade::addon_event::create_resource>(onCreateResource);
         reshade::unregister_event<reshade::addon_event::init_resource>(onInitResource);
         reshade::unregister_event<reshade::addon_event::destroy_resource>(onDestroyResource);
