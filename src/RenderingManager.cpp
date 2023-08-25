@@ -256,12 +256,13 @@ const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_l
 
         resource_desc desc = device->get_resource_desc(rs);
 
-        if (group->getBindingMatchSwapchainResolution())
+        if (group->getBindingMatchSwapchainResolution() < ShaderToggler::SWAPCHAIN_MATCH_MODE_NONE)
         {
             uint32_t width, height;
             deviceData.current_runtime->get_screenshot_width_and_height(&width, &height);
 
-            if (width != desc.texture.width || height != desc.texture.height)
+            if ((group->getBindingMatchSwapchainResolution() == ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO && static_cast<float>(width) / height != static_cast<float>(desc.texture.width) / desc.texture.height) ||
+                (group->getBindingMatchSwapchainResolution() == ShaderToggler::SWAPCHAIN_MATCH_MODE_RESOLUTION && (width != desc.texture.width || height != desc.texture.height)))
             {
                 return active_rtv;
             }
@@ -287,12 +288,13 @@ const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_l
         }
 
         // Make sure our target matches swap buffer dimensions when applying effects or it's explicitly requested
-        if (group->getMatchSwapchainResolution())
+        if (group->getMatchSwapchainResolution() < ShaderToggler::SWAPCHAIN_MATCH_MODE_NONE)
         {
             uint32_t width, height;
             deviceData.current_runtime->get_screenshot_width_and_height(&width, &height);
 
-            if (width != desc.texture.width || height != desc.texture.height)
+            if ((group->getMatchSwapchainResolution() == ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO && static_cast<float>(width) / height != static_cast<float>(desc.texture.width) / desc.texture.height) ||
+                (group->getMatchSwapchainResolution() == ShaderToggler::SWAPCHAIN_MATCH_MODE_RESOLUTION && (width != desc.texture.width || height != desc.texture.height)))
             {
                 return active_rtv;
             }
@@ -337,12 +339,13 @@ const resource_view RenderingManager::GetCurrentPreviewResourceView(command_list
         resource_desc desc = device->get_resource_desc(rs);
 
         // Make sure our target matches swap buffer dimensions when applying effects or it's explicitly requested
-        if (group->getMatchSwapchainResolution())
+        if (group->getMatchSwapchainResolution() < ShaderToggler::SWAPCHAIN_MATCH_MODE_NONE)
         {
             uint32_t width, height;
             deviceData.current_runtime->get_screenshot_width_and_height(&width, &height);
 
-            if (width != desc.texture.width || height != desc.texture.height)
+            if ((group->getMatchSwapchainResolution() == ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO && static_cast<float>(width) / height != static_cast<float>(desc.texture.width) / desc.texture.height) ||
+                (group->getMatchSwapchainResolution() == ShaderToggler::SWAPCHAIN_MATCH_MODE_RESOLUTION && (width != desc.texture.width || height != desc.texture.height)))
             {
                 return active_rtv;
             }

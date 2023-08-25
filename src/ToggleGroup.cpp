@@ -182,7 +182,7 @@ namespace ShaderToggler
         }
         iniFile.SetUInt("RenderTargetIndex", _rtIndex, "", sectionRoot);
         iniFile.SetUInt("InvocationLocation", _invocationLocation, "", sectionRoot);
-        iniFile.SetBool("MatchSwapchainResolutionOnly", _matchSwapchainResolution, "", sectionRoot);
+        iniFile.SetUInt("MatchSwapchainResolutionOnly", _matchSwapchainResolution, "", sectionRoot);
         iniFile.SetBool("RequeueAfterRTMatchingFailure", _requeueAfterRTMatchingFailure, "", sectionRoot);
 
         iniFile.SetValue("Techniques", ss.str(), "", sectionRoot);
@@ -204,7 +204,7 @@ namespace ShaderToggler
         iniFile.SetUInt("SRVDescriptorIndex", _bindingSrvDescIndex, "", sectionRoot);
         iniFile.SetUInt("BindingRenderTargetIndex", _bindingRTIndex, "", sectionRoot);
         iniFile.SetUInt("BindingInvocationLocation", _bindingInvocationLocation, "", sectionRoot);
-        iniFile.SetBool("BindingMatchSwapchainResolutionOnly", _bindingMatchSwapchainResolution, "", sectionRoot);
+        iniFile.SetUInt("BindingMatchSwapchainResolutionOnly", _bindingMatchSwapchainResolution, "", sectionRoot);
     }
 
 
@@ -299,7 +299,12 @@ namespace ShaderToggler
             _invocationLocation = 0;
         }
 
-        _matchSwapchainResolution = iniFile.GetBoolOrDefault("MatchSwapchainResolutionOnly", sectionRoot, true);
+        _matchSwapchainResolution = iniFile.GetUInt("MatchSwapchainResolutionOnly", sectionRoot);
+        if (_matchSwapchainResolution == UINT_MAX)
+        {
+            _matchSwapchainResolution = SWAPCHAIN_MATCH_MODE_RESOLUTION; //fallback to effect invocation location when loading old configs
+        }
+
         _requeueAfterRTMatchingFailure = iniFile.GetBoolOrDefault("RequeueAfterRTMatchingFailure", sectionRoot, false);
 
         std::string techniques = iniFile.GetString("Techniques", sectionRoot);
@@ -398,6 +403,10 @@ namespace ShaderToggler
             _bindingInvocationLocation = _invocationLocation; //fallback to effect invocation location when loading old configs
         }
 
-        _bindingMatchSwapchainResolution = iniFile.GetBoolOrDefault("BindingMatchSwapchainResolutionOnly", sectionRoot, _matchSwapchainResolution);
+        _bindingMatchSwapchainResolution = iniFile.GetUInt("BindingMatchSwapchainResolutionOnly", sectionRoot);
+        if(_bindingMatchSwapchainResolution == UINT_MAX)
+        {
+            _bindingMatchSwapchainResolution = _matchSwapchainResolution; //fallback to effect invocation location when loading old configs
+        }
     }
 }
