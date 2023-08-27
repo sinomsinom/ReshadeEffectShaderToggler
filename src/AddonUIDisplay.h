@@ -311,7 +311,7 @@ static void DisplayRenderTargets(AddonImGui::AddonUIData& instance, Rendering::R
     uint32_t selectedIndex = group->getInvocationLocation();
 
     bool retry = group->getRequeueAfterRTMatchingFailure();
-    static const char* swapchainMatchOptions[] = { "RESOLUTION", "ASPECT RATIO", "NONE"};
+    static const char* swapchainMatchOptions[] = { "RESOLUTION", "ASPECT RATIO", "EXTENDED ASPECT RATIO", "NONE"};
     uint32_t selectedSwapchainMatchMode = group->getMatchSwapchainResolution();
     const char* typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
 
@@ -483,7 +483,7 @@ static void DisplayTextureBindings(AddonImGui::AddonUIData& instance, ShaderTogg
     const char* typeSelectedItem = typeItems[selectedIndex];
     DeviceDataContainer& deviceData = runtime->get_device()->get_private_data<DeviceDataContainer>();
 
-    static const char* swapchainMatchOptions[] = { "RESOLUTION", "ASPECT RATIO", "NONE" };
+    static const char* swapchainMatchOptions[] = { "RESOLUTION", "ASPECT RATIO", "EXTENDED ASPECT RATIO", "NONE" };
     uint32_t selectedSwapchainMatchMode = group->getBindingMatchSwapchainResolution();
     const char* typesSelectedSwapchainMatchMode = swapchainMatchOptions[selectedSwapchainMatchMode];
 
