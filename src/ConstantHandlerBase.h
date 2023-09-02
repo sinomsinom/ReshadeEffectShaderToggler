@@ -81,8 +81,9 @@ namespace Shim
             ~ConstantHandlerBase();
 
             void SetBufferRange(const ShaderToggler::ToggleGroup* group, reshade::api::buffer_range range, reshade::api::device * dev, reshade::api::command_list* cmd_list);
+            void SetConstants(const ShaderToggler::ToggleGroup* group, const std::vector<uint32_t>& buf, reshade::api::device* dev, reshade::api::command_list* cmd_list);
             void RemoveGroup(const ShaderToggler::ToggleGroup*, reshade::api::device* dev);
-            uint8_t* GetConstantBuffer(const ShaderToggler::ToggleGroup* group);
+            const uint8_t* GetConstantBuffer(const ShaderToggler::ToggleGroup* group);
             size_t GetConstantBufferSize(const ShaderToggler::ToggleGroup* group);
             void ReloadConstantVariables(reshade::api::effect_runtime* runtime);
             void UpdateConstants(reshade::api::command_list* cmd_list);
@@ -105,13 +106,11 @@ namespace Shim
             static std::unordered_map<std::string, std::tuple<constant_type, std::vector<reshade::api::effect_uniform_variable>>> restVariables;
             static char charBuffer[CHAR_BUFFER_SIZE];
 
-            std::unordered_map<const ShaderToggler::ToggleGroup*, reshade::api::buffer_range> groupBufferRanges;
-
             static ConstantCopyBase* _constCopy;
 
-            bool CreateScratchpad(const ShaderToggler::ToggleGroup* group, reshade::api::device* dev, reshade::api::resource_desc& target);
-            void CopyToScratchpad(const ShaderToggler::ToggleGroup* group, reshade::api::device* dev, reshade::api::command_list* cmd_list);
+            void InitBuffers(const ShaderToggler::ToggleGroup* group, size_t size);
             bool UpdateConstantEntries(reshade::api::command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, ShaderToggler::ToggleGroup* group, uint32_t index);
+            bool UpdateConstantBufferEntries(reshade::api::command_list* cmd_list, CommandListDataContainer& cmdData, DeviceDataContainer& devData, ShaderToggler::ToggleGroup* group, uint32_t index);
         };
     }
 }

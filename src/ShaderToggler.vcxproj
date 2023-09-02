@@ -95,7 +95,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;SHADERTOGGLER_EXPORTS;_WINDOWS;_USRDLL;BUILTIN_ADDON;IMGUI_DISABLE_INCLUDE_IMCONFIG_H;ImTextureID=unsigned long long;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;WIN32_LEAN_AND_MEAN;NOMINMAX;SHADERTOGGLER_EXPORTS;_WINDOWS;_USRDLL;BUILTIN_ADDON;IMGUI_DISABLE_INCLUDE_IMCONFIG_H;ImTextureID=unsigned long long;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>

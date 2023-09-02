@@ -46,6 +46,14 @@ namespace ShaderToggler
         CYCLE_DOWN
     };
 
+    enum SwapChainMatchMode : uint32_t
+    {
+        SWAPCHAIN_MATCH_MODE_RESOLUTION = 0,
+        SWAPCHAIN_MATCH_MODE_ASPECT_RATIO = 1,
+        SWAPCHAIN_MATCH_MODE_EXTENDED_ASPECT_RATIO = 2,
+        SWAPCHAIN_MATCH_MODE_NONE = 3
+    };
+
     class ToggleGroup
     {
     public:
@@ -94,6 +102,8 @@ namespace ShaderToggler
         uint32_t getCBSlotIndex() const { return _cbSlotIndex; }
         void setCBDescriptorIndex(uint32_t index) { _cbDescIndex = index; }
         uint32_t getCBDescriptorIndex() const { return _cbDescIndex; }
+        bool getCBIsPushMode() const { return _cbModePush; }
+        void setCBIsPushMode(bool isPushMode) { _cbModePush = isPushMode; }
         void setRenderTargetIndex(uint32_t index) { _rtIndex = index; }
         uint32_t getRenderTargetIndex() const { return _rtIndex; }
         bool isProvidingTextureBinding() const { return _isProvidingTextureBinding; }
@@ -116,10 +126,10 @@ namespace ShaderToggler
         uint32_t getBindingRenderTargetIndex() const { return _bindingRTIndex; }
         bool getHasTechniqueExceptions() const { return _hasTechniqueExceptions; }
         void setHasTechniqueExceptions(bool exceptions) { _hasTechniqueExceptions = exceptions; }
-        bool getMatchSwapchainResolution() const { return _matchSwapchainResolution; }
-        void setMatchSwapchainResolution(bool match) { _matchSwapchainResolution = match; }
-        bool getBindingMatchSwapchainResolution() const { return _bindingMatchSwapchainResolution; }
-        void setBindingMatchSwapchainResolution(bool match) { _bindingMatchSwapchainResolution = match; }
+        uint32_t getMatchSwapchainResolution() const { return _matchSwapchainResolution; }
+        void setMatchSwapchainResolution(uint32_t match) { _matchSwapchainResolution = match; }
+        uint32_t getBindingMatchSwapchainResolution() const { return _bindingMatchSwapchainResolution; }
+        void setBindingMatchSwapchainResolution(uint32_t match) { _bindingMatchSwapchainResolution = match; }
         bool getRequeueAfterRTMatchingFailure() const { return _requeueAfterRTMatchingFailure; }
         void setRequeueAfterRTMatchingFailure(bool requeue) { _requeueAfterRTMatchingFailure = requeue; }
         bool getCopyTextureBinding() const { return _copyTextureBinding; }
@@ -177,9 +187,10 @@ namespace ShaderToggler
         bool _extractResourceViews;
         bool _clearBindings;
         bool _hasTechniqueExceptions; // _preferredTechniques are handled as exception to _allowAllTechniques
-        bool _matchSwapchainResolution = true;
-        bool _bindingMatchSwapchainResolution = true;
+        uint32_t _matchSwapchainResolution = SWAPCHAIN_MATCH_MODE_RESOLUTION;
+        uint32_t _bindingMatchSwapchainResolution = SWAPCHAIN_MATCH_MODE_RESOLUTION;
         bool _requeueAfterRTMatchingFailure;
+        bool _cbModePush = false;
         std::string _textureBindingName;
         std::unordered_set<std::string> _preferredTechniques;
         std::unordered_map<std::string, std::tuple<uintptr_t, bool>> _varOffsetMapping;

@@ -177,6 +177,22 @@ static inline bool IsColorBuffer(reshade::api::format value)
     }
 }
 
+// Checks whether the aspect ratio of the two sets of dimensions is similar or not, stolen from ReShade's generic_depth addon
+static bool check_aspect_ratio(float width_to_check, float height_to_check, uint32_t width, uint32_t height, uint32_t matchingMode)
+{
+    if (width_to_check == 0.0f || height_to_check == 0.0f)
+        return true;
+
+    const float w = static_cast<float>(width);
+    float w_ratio = w / width_to_check;
+    const float h = static_cast<float>(height);
+    float h_ratio = h / height_to_check;
+    const float aspect_ratio = (w / h) - (width_to_check / height_to_check);
+
+    // Accept if dimensions are similar in value or almost exact multiples
+    return std::fabs(aspect_ratio) <= 0.1f && ((w_ratio <= 1.85f && w_ratio >= 0.5f && h_ratio <= 1.85f && h_ratio >= 0.5f) || (matchingMode == ShaderToggler::SWAPCHAIN_MATCH_MODE_EXTENDED_ASPECT_RATIO && std::modf(w_ratio, &w_ratio) <= 0.02f && std::modf(h_ratio, &h_ratio) <= 0.02f));
+}
+
 const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_list, DeviceDataContainer& deviceData, ToggleGroup* group, CommandListDataContainer& commandListData, uint32_t descIndex, uint32_t action)
 {
     resource_view active_rtv = { 0 };
@@ -257,12 +273,15 @@ const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_l
 
         resource_desc desc = device->get_resource_desc(rs);
 
-        if (group->getBindingMatchSwapchainResolution())
+        if (group->getBindingMatchSwapchainResolution() < ShaderToggler::SWAPCHAIN_MATCH_MODE_NONE)
         {
             uint32_t width, height;
             deviceData.current_runtime->get_screenshot_width_and_height(&width, &height);
 
-            if (width != desc.texture.width || height != desc.texture.height)
+            if ((group->getBindingMatchSwapchainResolution() >= ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO &&
+                !check_aspect_ratio(static_cast<float>(desc.texture.width), static_cast<float>(desc.texture.height), width, height, group->getBindingMatchSwapchainResolution())) ||
+                (group->getBindingMatchSwapchainResolution() == ShaderToggler::SWAPCHAIN_MATCH_MODE_RESOLUTION &&
+                    (width != desc.texture.width || height != desc.texture.height)))
             {
                 return active_rtv;
             }
@@ -288,12 +307,15 @@ const resource_view RenderingManager::GetCurrentResourceView(command_list* cmd_l
         }
 
         // Make sure our target matches swap buffer dimensions when applying effects or it's explicitly requested
-        if (group->getMatchSwapchainResolution())
+        if (group->getMatchSwapchainResolution() < ShaderToggler::SWAPCHAIN_MATCH_MODE_NONE)
         {
             uint32_t width, height;
             deviceData.current_runtime->get_screenshot_width_and_height(&width, &height);
 
-            if (width != desc.texture.width || height != desc.texture.height)
+            if ((group->getMatchSwapchainResolution() >= ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO &&
+                !check_aspect_ratio(static_cast<float>(desc.texture.width), static_cast<float>(desc.texture.height), width, height, group->getMatchSwapchainResolution())) ||
+                (group->getMatchSwapchainResolution() == ShaderToggler::SWAPCHAIN_MATCH_MODE_RESOLUTION &&
+                    (width != desc.texture.width || height != desc.texture.height)))
             {
                 return active_rtv;
             }
@@ -338,12 +360,14 @@ const resource_view RenderingManager::GetCurrentPreviewResourceView(command_list
         resource_desc desc = device->get_resource_desc(rs);
 
         // Make sure our target matches swap buffer dimensions when applying effects or it's explicitly requested
-        if (group->getMatchSwapchainResolution())
+        if (group->getMatchSwapchainResolution() < ShaderToggler::SWAPCHAIN_MATCH_MODE_NONE)
         {
             uint32_t width, height;
             deviceData.current_runtime->get_screenshot_width_and_height(&width, &height);
 
-            if (width != desc.texture.width || height != desc.texture.height)
+            if ((group->getMatchSwapchainResolution() >= ShaderToggler::SWAPCHAIN_MATCH_MODE_ASPECT_RATIO &&
+                !check_aspect_ratio(static_cast<float>(desc.texture.width), static_cast<float>(desc.texture.height), width, height, group->getMatchSwapchainResolution())) ||
+                (group->getMatchSwapchainResolution() == ShaderToggler::SWAPCHAIN_MATCH_MODE_RESOLUTION && (width != desc.texture.width || height != desc.texture.height)))
             {
                 return active_rtv;
             }

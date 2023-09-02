@@ -99,19 +99,21 @@ namespace StateTracker
     };
 
     struct __declspec(novtable) PushConstantsState final : PipelineBinding<PipelineBindingTypes::push_constants> {
-        uint32_t layout_param;
+        pipeline_layout current_layout[2];
         uint32_t first;
         uint32_t count;
-        std::vector<uint32_t> values;
+        vector<vector<uint32_t>> current_constants[2]; // consider only CBs for now
 
         void Reset()
         {
             callIndex = 0;
             cmd_list = nullptr;
-            layout_param = 0;
+            current_layout[0] = { 0 };
+            current_layout[1] = { 0 };
             first = 0;
             count = 0;
-            values.clear();
+            current_constants[0].clear();
+            current_constants[1].clear();
         }
     };
 
@@ -210,9 +212,11 @@ namespace StateTracker
         void OnBindDescriptorSets(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t first, uint32_t count, const descriptor_table* sets);
         void OnPushDescriptors(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, const descriptor_table_update& update);
         void OnBindPipeline(command_list* commandList, pipeline_stage stages, pipeline pipelineHandle);
+        void OnPushConstants(command_list* cmd_list, shader_stage stages, pipeline_layout layout, uint32_t layout_param, uint32_t first, uint32_t count, const void* values);
 
-        const PushDescriptorsState* GetPushDescriptorState() { return &_pushDescriptorsState;  }
-        const std::vector<resource_view>& GetBoundRenderTargetViews() const;
+        const PushDescriptorsState* GetPushDescriptorState() { return &_pushDescriptorsState; }
+        const PushConstantsState* GetPushConstantsState() { return &_pushConstantsState; }
+        const vector<resource_view>& GetBoundRenderTargetViews();
 
         void ClearPushDescriptorState(pipeline_stage);
 
@@ -225,6 +229,7 @@ namespace StateTracker
         uint32_t _callIndex = 0;
         BindRenderTargetsState _renderTargetState;
         BindDescriptorSetsState _descriptorSetsState;
+        PushConstantsState _pushConstantsState;
         PushDescriptorsState _pushDescriptorsState;
         BindViewportsState _viewportsState;
         BindScissorRectsState _scissorRectsState;
