@@ -217,7 +217,6 @@ bool ConstantHandlerBase::UpdateConstantEntries(command_list* cmd_list, CommandL
     if (slot_size == 0)
         return false;
 
-    const auto& blah = cmdData.stateTracker.GetPushConstantsState()->current_constants[index];
     size_t const_buffer_size = static_cast<uint32_t>(cmdData.stateTracker.GetPushConstantsState()->current_constants[index].at(slot).size());
 
     if (const_buffer_size == 0)
