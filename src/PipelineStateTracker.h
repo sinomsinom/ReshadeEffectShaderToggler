@@ -102,7 +102,7 @@ namespace StateTracker
         pipeline_layout current_layout[2];
         uint32_t first;
         uint32_t count;
-        vector<vector<uint32_t>> current_constants[2]; // consider only CBs for now
+        std::vector<std::vector<uint32_t>> current_constants[2]; // consider only CBs for now
 
         void Reset()
         {
@@ -216,7 +216,7 @@ namespace StateTracker
 
         const PushDescriptorsState* GetPushDescriptorState() { return &_pushDescriptorsState; }
         const PushConstantsState* GetPushConstantsState() { return &_pushConstantsState; }
-        const vector<resource_view>& GetBoundRenderTargetViews();
+        const std::vector<resource_view>& GetBoundRenderTargetViews() const;
 
         void ClearPushDescriptorState(pipeline_stage);
 
